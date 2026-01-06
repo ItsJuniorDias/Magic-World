@@ -33,7 +33,7 @@ export const GradientImage = styled(LinearGradient)`
 
 export const Content = styled.View`
   gap: 12px;
-  padding: 24px 24px;
+  padding: 0px 24px;
 `;
 
 export const Button = styled.TouchableOpacity`

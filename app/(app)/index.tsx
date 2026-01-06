@@ -8,12 +8,15 @@ import { StatusBar } from "expo-status-bar";
 import background_header from "../../assets/images/background-header.png";
 
 import { Button, Container, Content, Gradient, GradientImage } from "./styles";
+import { useRouter } from "expo-router";
 
 const { height } = Dimensions.get("window");
 
 export default function OnboardingScreen() {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const translateYAnim = useRef(new Animated.Value(0)).current;
+
+  const router = useRouter();
 
   useEffect(() => {
     Animated.loop(
@@ -60,7 +63,7 @@ export default function OnboardingScreen() {
           resizeMode="cover"
           style={{
             width: "100%",
-            height: "110%", // evita borda branca ao mover
+            height: "80%", // evita borda branca ao mover
             transform: [{ scale: scaleAnim }, { translateY: translateYAnim }],
           }}
         />
@@ -68,11 +71,19 @@ export default function OnboardingScreen() {
         {/* Gradient no topo */}
         <GradientImage
           start={{ x: 0.3, y: 0.3 }}
-          colors={["rgba(0,0,0,0.85)", "rgba(0,0,0,0.4)", "transparent"]}
+          colors={["rgba(0,0,0,0.4)", "transparent"]}
         />
       </Container>
 
-      <Gradient colors={["transparent", "rgba(0,0,0,0.9)", "rgba(0,0,0,0.9)"]}>
+      <Gradient
+        colors={[
+          "transparent",
+          "rgba(0,0,0,0.9)",
+          "rgba(0,0,0,0.9)",
+          "rgba(0,0,0,0.9)",
+          "rgba(0,0,0,0.9)",
+        ]}
+      >
         <Content>
           <Text
             fontFamily="bold"
@@ -88,7 +99,7 @@ export default function OnboardingScreen() {
             title={`Turn the page, or rather, press play, and let the adventure begin.`}
           />
 
-          <Button activeOpacity={0.85}>
+          <Button onPress={() => router.push("/(tabs)")} activeOpacity={0.85}>
             <Text
               fontFamily="bold"
               fontSize={18}

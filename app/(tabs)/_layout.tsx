@@ -16,7 +16,7 @@ export default function TabLayout() {
       <NativeTabs.Trigger name="index">
         <Label
           selectedStyle={{
-            color: "blue",
+            color: Colors.light.tint,
           }}
         >
           Home
@@ -24,14 +24,14 @@ export default function TabLayout() {
         <Icon
           sf={"house.fill"}
           drawable="ic_menu_home"
-          selectedColor={"blue"}
+          selectedColor={Colors.light.tint}
         />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="explore">
         <Label
           selectedStyle={{
-            color: "blue",
+            color: Colors.light.tint,
           }}
         >
           Explore
@@ -40,7 +40,7 @@ export default function TabLayout() {
         <Icon
           sf={"person.fill"}
           drawable="ic_menu_preferences"
-          selectedColor={"blue"}
+          selectedColor={Colors.light.tint}
         />
       </NativeTabs.Trigger>
     </NativeTabs>

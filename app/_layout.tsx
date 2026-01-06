@@ -18,8 +18,8 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   const [loaded] = useFonts({
-    ComicNeueRegular: require("../assets/fonts/ComicNeue-Regular.ttf"),
-    ComicNeueBold: require("../assets/fonts/ComicNeue-Bold.ttf"),
+    ComicReliefRegular: require("../assets/fonts/ComicRelief-Regular.ttf"),
+    ComicReliefBold: require("../assets/fonts/ComicRelief-Bold.ttf"),
   });
 
   if (!loaded) {

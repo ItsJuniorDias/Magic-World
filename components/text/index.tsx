@@ -23,8 +23,8 @@ export default function Text({
   ...props
 }: TextPropsCustom) {
   const objectFont = {
-    regular: "ComicNeueRegular",
-    bold: "ComicNeueBold",
+    regular: "ComicReliefRegular",
+    bold: "ComicReliefBold",
   } as const;
 
   // Garante que temos sempre uma string segura
