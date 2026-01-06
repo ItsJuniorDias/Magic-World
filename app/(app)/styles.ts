@@ -24,10 +24,10 @@ export const Gradient = styled(LinearGradient)`
 `;
 
 export const GradientImage = styled(LinearGradient)`
-   width: ${width}px;
-   height: ${height * 0.5}px;
-   position: absolute;
-   top: 0;
+  width: ${width}px;
+  height: ${height * 0.5}px;
+  position: absolute;
+  top: 0;
   margin-bottom: 32px;
 `;
 
@@ -42,5 +42,4 @@ export const Button = styled.TouchableOpacity`
   padding: 16px;
   border-radius: 14px;
   align-items: center;
-
 `;
