@@ -10,12 +10,15 @@ import { FontAwesome6 } from "@expo/vector-icons";
 
 import { Container, ContainerStorie } from "./styles";
 import { useLocalSearchParams } from "expo-router/build/hooks";
+import { NextChapterButton } from "@/components/(next-chapter-button)";
+import { useStoriesStore } from "@/store/useStoriesStore";
 
 const HEADER_HEIGHT = 420;
 const MIN_HEADER_HEIGHT = 160;
 
 export default function StorieScreen() {
-  const { storie, title, thumbnail } = useLocalSearchParams();
+  const { storie, title, thumbnail, currentIndex, storyId } =
+    useLocalSearchParams();
 
   const router = useRouter();
 
@@ -55,83 +58,93 @@ export default function StorieScreen() {
   });
 
   return (
-    <Container>
-      {/* BOTÃO VOLTAR */}
-      <Pressable style={styles.backButtonWrapper} onPress={() => router.back()}>
-        <GlassView
-          style={styles.buttonBack}
-          isInteractive
-          glassEffectStyle="clear"
+    <>
+      <Container>
+        {/* BOTÃO VOLTAR */}
+        <Pressable
+          style={styles.backButtonWrapper}
+          onPress={() => router.back()}
         >
-          <FontAwesome6
-            name="chevron-left"
-            size={22}
-            color={Colors.dark.text}
-          />
-        </GlassView>
-      </Pressable>
+          <GlassView
+            style={styles.buttonBack}
+            isInteractive
+            glassEffectStyle="clear"
+          >
+            <FontAwesome6
+              name="chevron-left"
+              size={22}
+              color={Colors.dark.text}
+            />
+          </GlassView>
+        </Pressable>
 
-      {/* TÍTULO ANIMADO */}
-      <Animated.View
-        style={[
-          styles.animatedTitle,
-          {
-            transform: [
-              { translateY: titleTranslateY },
-              { translateX: titleTranslateX },
-              { scale: titleScale },
-            ],
-          },
-        ]}
-      >
-        <Text
-          fontFamily="bold"
-          fontSize={28}
-          color={Colors.dark.text}
-          title={title}
-          numberOfLines={2}
-        />
-      </Animated.View>
-
-      {/* IMAGEM DE FUNDO */}
-      <Animated.Image
-        source={{
-          uri: thumbnail,
-        }}
-        style={[styles.headerImage, { height: headerHeight }]}
-      />
-
-      {/* GRADIENT */}
-      <Animated.View
-        style={[
-          styles.gradient,
-          { height: headerHeight, opacity: gradientOpacity },
-        ]}
-      />
-
-      {/* SCROLL */}
-      <Animated.ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingTop: HEADER_HEIGHT,
-          paddingBottom: 32,
-        }}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: false }
-        )}
-        scrollEventThrottle={16}
-      >
-        <ContainerStorie>
+        {/* TÍTULO ANIMADO */}
+        <Animated.View
+          style={[
+            styles.animatedTitle,
+            {
+              transform: [
+                { translateY: titleTranslateY },
+                { translateX: titleTranslateX },
+                { scale: titleScale },
+              ],
+            },
+          ]}
+        >
           <Text
-            fontFamily="regular"
-            fontSize={14}
+            fontFamily="bold"
+            fontSize={28}
             color={Colors.dark.text}
-            title={storie}
+            title={title}
+            numberOfLines={2}
           />
-        </ContainerStorie>
-      </Animated.ScrollView>
-    </Container>
+        </Animated.View>
+
+        {/* IMAGEM DE FUNDO */}
+        <Animated.Image
+          source={{
+            uri: thumbnail,
+          }}
+          style={[styles.headerImage, { height: headerHeight }]}
+        />
+
+        {/* GRADIENT */}
+        <Animated.View
+          style={[
+            styles.gradient,
+            { height: headerHeight, opacity: gradientOpacity },
+          ]}
+        />
+
+        {/* SCROLL */}
+        <Animated.ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            paddingTop: HEADER_HEIGHT,
+            paddingBottom: 32,
+          }}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: false }
+          )}
+          scrollEventThrottle={16}
+        >
+          <ContainerStorie>
+            <Text
+              fontFamily="regular"
+              fontSize={14}
+              color={Colors.dark.text}
+              title={storie}
+            />
+          </ContainerStorie>
+        </Animated.ScrollView>
+      </Container>
+
+      <NextChapterButton
+        storyId={String(storyId)}
+        currentIndex={Number(currentIndex)}
+      />
+    </>
   );
 }
 
@@ -152,7 +165,7 @@ const styles = StyleSheet.create({
   animatedTitle: {
     position: "absolute",
     zIndex: 30,
-    paddingRight: 24,
+    paddingRight: 32,
   },
   headerImage: {
     position: "absolute",
