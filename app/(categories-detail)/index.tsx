@@ -6,14 +6,10 @@ import { FontAwesome6 } from "@expo/vector-icons";
 
 import Text from "@/components/text";
 import { Colors } from "@/constants/theme";
-import {
-  Container,
-  Gradient,
-  ImageCard,
-  ModernCategoryCard,
-  Overlay,
-} from "./styles";
+import { Container, Gradient, ImageCard, ModernCategoryCard } from "./styles";
 import { useStoriesStore } from "@/store/useStoriesStore";
+import { doc, increment, updateDoc } from "firebase/firestore";
+import { db } from "@/firebaseConfig";
 
 // Exemplo de dados de stories por categoria
 
@@ -21,25 +17,40 @@ export default function CategoryDetailsScreen() {
   const params = useLocalSearchParams<{ category: string }>();
   const categoryName = params.category;
 
-  console.log("Categoria selecionada:", categoryName);
-
   const [stories, setStories] = useState<typeof allStories>([]);
 
   const allStories = useStoriesStore((state) => state.stories);
 
-  console.log(allStories, "ALL STORIES");
-
   useEffect(() => {
     // Filtra os stories da categoria selecionada
     const filtered = allStories.filter((s) => s.category === categoryName);
+
     setStories(filtered);
   }, [categoryName]);
 
-  console.log(stories, "STORIES");
+  const incrementStoryViews = async (storyId: string) => {
+    const storyRef = doc(db, "stories", storyId);
+
+    // Atualiza no Firestore
+    await updateDoc(storyRef, {
+      views: increment(1),
+    });
+
+    // Atualiza localmente no Zustand (UX instantânea)
+    useStoriesStore.setState((state) => ({
+      stories: state.stories.map((story) =>
+        story.id === storyId
+          ? { ...story, views: (story.views ?? 0) + 1 }
+          : story
+      ),
+    }));
+  };
 
   const renderStory = ({ item }: { item: (typeof allStories)[0] }) => (
     <ModernCategoryCard
-      onPress={() =>
+      onPress={async () => {
+        await incrementStoryViews(item.id);
+
         router.push({
           pathname: `/(storie)`,
           params: {
@@ -49,8 +60,8 @@ export default function CategoryDetailsScreen() {
             storyId: item.id,
             currentIndex: 0,
           },
-        })
-      }
+        });
+      }}
     >
       <ImageCard source={{ uri: item.thumbnail }}>
         <Gradient

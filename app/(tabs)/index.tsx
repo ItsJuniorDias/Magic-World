@@ -16,7 +16,7 @@ import {
 import { useStoriesStore } from "@/store/useStoriesStore";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI("");
+const genAI = new GoogleGenerativeAI("AIzaSyA-SlcdTnS_wGV82PteVJ_4K3PBdNE553M");
 
 export const geminiModel = genAI.getGenerativeModel({
   model: "gemini-2.5-flash",
@@ -86,7 +86,9 @@ export default function HomeScreen() {
       title={item.title}
       views={item.views}
       onPress={async () => {
-        await incrementStoryViews(item.id);
+        if (variant !== "category") {
+          await incrementStoryViews(item.id);
+        }
 
         router.push({
           pathname: item.chapter[0].navigate,
