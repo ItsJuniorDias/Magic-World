@@ -6,7 +6,13 @@ import { FlatList, Platform, ScrollView, StyleSheet, View } from "react-native";
 import { db } from "../../firebaseConfig";
 import { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
-import { collection, getDocs } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDocs,
+  increment,
+  updateDoc,
+} from "firebase/firestore";
 import { useStoriesStore } from "@/store/useStoriesStore";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
@@ -35,14 +41,32 @@ export default function HomeScreen() {
     return stories;
   };
 
+  const incrementStoryViews = async (storyId: string) => {
+    const storyRef = doc(db, "stories", storyId);
+
+    // Atualiza no Firestore
+    await updateDoc(storyRef, {
+      views: increment(1),
+    });
+
+    // Atualiza localmente no Zustand (UX instantânea)
+    useStoriesStore.setState((state) => ({
+      stories: state.stories.map((story) =>
+        story.id === storyId
+          ? { ...story, views: (story.views ?? 0) + 1 }
+          : story
+      ),
+    }));
+  };
+
   useEffect(() => {
-    const generateImage = async (prompt: string) => {
+    const generateText = async (prompt: string) => {
       const result = await geminiModel.generateContent(prompt);
       return result.response.text();
     };
 
     const askGemini = async () => {
-      const text = await generateImage(
+      const text = await generateText(
         'Generate the story "Fairy Tale Story", chapter 3 and final in a maximum of 2000 words.'
       );
       setResponse(text);
@@ -61,7 +85,9 @@ export default function HomeScreen() {
       thumbnail={item.thumbnail}
       title={item.title}
       views={item.views}
-      onPress={() =>
+      onPress={async () => {
+        await incrementStoryViews(item.id);
+
         router.push({
           pathname: item.chapter[0].navigate,
           params: {
@@ -71,8 +97,8 @@ export default function HomeScreen() {
             storyId: item.id,
             currentIndex: 0,
           },
-        })
-      }
+        });
+      }}
     />
   );
 

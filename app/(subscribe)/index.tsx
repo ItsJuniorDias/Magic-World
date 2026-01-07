@@ -185,9 +185,12 @@ export default function SubscribeScreen() {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity style={{ marginTop: 12 }}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={{ marginTop: 12 }}
+          >
             <Text
-              title="Restore Purchase"
+              title="Maybe Later"
               fontSize={14}
               color="#8E8E93"
               style={{ textAlign: "center" }}
