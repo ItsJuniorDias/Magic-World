@@ -28,17 +28,17 @@ export default function TabLayout() {
         />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="profile">
+      <NativeTabs.Trigger name="favorite">
         <Label
           selectedStyle={{
             color: Colors.light.tint,
           }}
         >
-          Explore
+          Favorite
         </Label>
 
         <Icon
-          sf={"person.fill"}
+          sf={"heart.fill"}
           drawable="ic_menu_preferences"
           selectedColor={Colors.light.tint}
         />

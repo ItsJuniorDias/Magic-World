@@ -84,7 +84,6 @@ export default function HomeScreen() {
     {
       id: "1",
       title: "Children's Comic",
-      views: 100,
       chapter: [
         {
           navigate: "/(categories)",
