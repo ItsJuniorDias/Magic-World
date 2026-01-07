@@ -40,6 +40,10 @@ export default function RootLayout() {
             name="(categories)/index"
             options={{ headerShown: false }}
           />
+          <Stack.Screen
+            name="(categories-detail)/index"
+            options={{ headerShown: false }}
+          />
 
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         </Stack>

@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Animated } from "react-native";
 import { useRouter } from "expo-router";
-import { useRef } from "react";
+import { useRef, useState } from "react"; // Adicionado useState
 
 import { Colors } from "@/constants/theme";
 import Text from "@/components/text";
@@ -12,32 +12,26 @@ import { Container, ContainerStorie } from "./styles";
 import { useLocalSearchParams } from "expo-router/build/hooks";
 import { NextChapterButton } from "@/components/(next-chapter-button)";
 
+import * as Speech from "expo-speech";
+
 const HEADER_HEIGHT = 420;
 const MIN_HEADER_HEIGHT = 160;
 
 export default function StorieScreen() {
   const { storie, title, thumbnail, currentIndex, storyId } =
     useLocalSearchParams();
+  const [isSpeaking, setIsSpeaking] = useState(false); // Estado para o ícone
 
   const router = useRouter();
-
   const scrollY = useRef(new Animated.Value(0)).current;
 
-  /* HEADER IMAGE */
+  /* HEADER IMAGE ANIMATIONS */
   const headerHeight = scrollY.interpolate({
     inputRange: [0, HEADER_HEIGHT - MIN_HEADER_HEIGHT],
     outputRange: [HEADER_HEIGHT, MIN_HEADER_HEIGHT],
     extrapolate: "clamp",
   });
 
-  /* GRADIENT */
-  const gradientOpacity = scrollY.interpolate({
-    inputRange: [0, 200],
-    outputRange: [1, 0.85],
-    extrapolate: "clamp",
-  });
-
-  /* TITLE ANIMATION */
   const titleTranslateY = scrollY.interpolate({
     inputRange: [0, 140],
     outputRange: [320, 72],
@@ -56,16 +50,39 @@ export default function StorieScreen() {
     extrapolate: "clamp",
   });
 
+  // Função de áudio
+  const toggleSpeak = async () => {
+    const speaking = await Speech.isSpeakingAsync();
+
+    if (speaking) {
+      Speech.stop();
+      setIsSpeaking(false);
+    } else {
+      setIsSpeaking(true);
+
+      Speech.speak(String(storie), {
+        onDone: () => setIsSpeaking(false),
+        onStopped: () => setIsSpeaking(false),
+        onError: () => setIsSpeaking(false),
+        language: "en-US",
+      });
+    }
+  };
+
   return (
     <>
       <Container>
         {/* BOTÃO VOLTAR */}
         <Pressable
           style={styles.backButtonWrapper}
-          onPress={() => router.back()}
+          onPress={() => {
+            Speech.stop();
+
+            router.back();
+          }}
         >
           <GlassView
-            style={styles.buttonBack}
+            style={styles.glassButton}
             isInteractive
             glassEffectStyle="clear"
           >
@@ -77,7 +94,21 @@ export default function StorieScreen() {
           </GlassView>
         </Pressable>
 
-        {/* TÍTULO ANIMADO */}
+        {/* BOTÃO PLAY (MESMO ESTILO) */}
+        <Pressable style={styles.playButtonWrapper} onPress={toggleSpeak}>
+          <GlassView
+            style={styles.glassButton}
+            isInteractive
+            glassEffectStyle="clear"
+          >
+            <FontAwesome6
+              name={isSpeaking ? "stop" : "play"}
+              size={20}
+              color={Colors.dark.text}
+            />
+          </GlassView>
+        </Pressable>
+
         <Animated.View
           style={[
             styles.animatedTitle,
@@ -99,23 +130,13 @@ export default function StorieScreen() {
           />
         </Animated.View>
 
-        {/* IMAGEM DE FUNDO */}
         <Animated.Image
-          source={{
-            uri: thumbnail,
-          }}
+          source={{ uri: String(thumbnail) }}
           style={[styles.headerImage, { height: headerHeight }]}
         />
 
-        {/* GRADIENT */}
-        <Animated.View
-          style={[
-            styles.gradient,
-            { height: headerHeight, opacity: gradientOpacity },
-          ]}
-        />
+        <Animated.View style={[styles.gradient, { height: headerHeight }]} />
 
-        {/* SCROLL */}
         <Animated.ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
@@ -131,7 +152,7 @@ export default function StorieScreen() {
           <ContainerStorie>
             <Text
               fontFamily="regular"
-              fontSize={14}
+              fontSize={16}
               color={Colors.dark.text}
               title={storie}
             />
@@ -152,9 +173,15 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 64,
     left: 24,
-    zIndex: 30,
+    zIndex: 40,
   },
-  buttonBack: {
+  playButtonWrapper: {
+    position: "absolute",
+    top: 64,
+    right: 24, // Posicionado na direita
+    zIndex: 40,
+  },
+  glassButton: {
     height: 48,
     width: 48,
     justifyContent: "center",

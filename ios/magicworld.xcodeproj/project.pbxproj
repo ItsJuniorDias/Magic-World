@@ -18,12 +18,12 @@
 
 /* Begin PBXFileReference section */
 		0945D2822FF754AD7B85E543 /* Pods-magicworld.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-magicworld.debug.xcconfig"; path = "Target Support Files/Pods-magicworld/Pods-magicworld.debug.xcconfig"; sourceTree = "<group>"; };
-		13B07F961A680F5B00A75B9A /* magicworld.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = magicworld.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		13B07F961A680F5B00A75B9A /* MagicWorld.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MagicWorld.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = magicworld/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = magicworld/Info.plist; sourceTree = "<group>"; };
 		19082737F8860D4E5C50C31A /* libPods-magicworld.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-magicworld.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		1CC3FE0F5FDB25E07F2756AB /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-magicworld/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
-		3D5E2C262B2E5F6E9B09381A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = magicworld/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		3D5E2C262B2E5F6E9B09381A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = magicworld/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = magicworld/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
 		DAA7AE59293E074FA2005E7D /* Pods-magicworld.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-magicworld.release.xcconfig"; path = "Target Support Files/Pods-magicworld/Pods-magicworld.release.xcconfig"; sourceTree = "<group>"; };
@@ -50,7 +50,6 @@
 				0945D2822FF754AD7B85E543 /* Pods-magicworld.debug.xcconfig */,
 				DAA7AE59293E074FA2005E7D /* Pods-magicworld.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -118,7 +117,7 @@
 		83CBBA001A601CBA00E9B192 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				13B07F961A680F5B00A75B9A /* magicworld.app */,
+				13B07F961A680F5B00A75B9A /* MagicWorld.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -154,7 +153,7 @@
 			);
 			name = magicworld;
 			productName = magicworld;
-			productReference = 13B07F961A680F5B00A75B9A /* magicworld.app */;
+			productReference = 13B07F961A680F5B00A75B9A /* MagicWorld.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -341,12 +340,15 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = magicworld/magicworld.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 968FPR7Y35;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"FB_SONARKIT_ENABLED=1",
 				);
 				INFOPLIST_FILE = magicworld/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Magic World";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -360,7 +362,7 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = com.alexandre.juniort10.magicworld;
-				PRODUCT_NAME = "MagicWorld";
+				PRODUCT_NAME = MagicWorld;
 				SWIFT_OBJC_BRIDGING_HEADER = "magicworld/magicworld-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -377,7 +379,10 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = magicworld/magicworld.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 968FPR7Y35;
 				INFOPLIST_FILE = magicworld/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Magic World";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -391,7 +396,7 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = com.alexandre.juniort10.magicworld;
-				PRODUCT_NAME = "MagicWorld";
+				PRODUCT_NAME = MagicWorld;
 				SWIFT_OBJC_BRIDGING_HEADER = "magicworld/magicworld-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";

@@ -28,7 +28,7 @@ export default function TabLayout() {
         />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="explore">
+      <NativeTabs.Trigger name="profile">
         <Label
           selectedStyle={{
             color: Colors.light.tint,
