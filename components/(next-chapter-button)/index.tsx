@@ -3,6 +3,7 @@ import { FontAwesome6 } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { Colors } from "@/constants/theme";
 import { useStoriesStore } from "@/store/useStoriesStore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export function NextChapterButton({
   storyId,
@@ -19,18 +20,21 @@ export function NextChapterButton({
 
   if (!story) return null;
 
-  const nextChapter = story.chapter[currentIndex + 1];
-
-  console.log(nextChapter.locked, "NEXT CHAPTER");
+  const nextChapter = story?.chapter[currentIndex + 1];
 
   // Se não houver próximo capítulo, não mostra o botão
   if (!nextChapter) return null;
 
   // Verifica se o capítulo está bloqueado (exemplo: locked = true)
-  const isLocked = nextChapter.locked ?? false;
+  const isLocked = nextChapter?.locked ?? false;
 
-  const handlePress = () => {
-    if (isLocked) {
+  const checkProStatus = async () => {
+    const value = await AsyncStorage.getItem("@user_is_pro");
+    return value != null ? JSON.parse(value) : false;
+  };
+
+  const handlePress = async () => {
+    if (isLocked && !(await checkProStatus())) {
       // Redireciona para tela de assinatura
       router.push("/(subscribe)");
     } else {

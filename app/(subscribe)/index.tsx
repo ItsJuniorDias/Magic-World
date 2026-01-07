@@ -11,11 +11,14 @@ import {
 import { Colors } from "@/constants/theme";
 import { useEffect, useState } from "react";
 import Purchases from "react-native-purchases";
+import AsyncStorage from "@react-native-async-storage/async-storage"; // 1. Importar
+import { useRouter } from "expo-router";
 
 export default function SubscribeScreen() {
+  const router = useRouter();
+
   const [packages, setPackages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  // Novo estado para controlar a seleção
   const [selectedPackage, setSelectedPackage] = useState<any>(null);
 
   useEffect(() => {
@@ -24,13 +27,15 @@ export default function SubscribeScreen() {
         const offerings = await Purchases.getOfferings();
         if (offerings.current) {
           const availablePackages: any[] = [];
+
           if (offerings.current.monthly)
             availablePackages.push(offerings.current.monthly);
+
           if (offerings.current.annual)
             availablePackages.push(offerings.current.annual);
 
           setPackages(availablePackages);
-          // Seleciona o primeiro por padrão (opcional)
+
           if (availablePackages.length > 0)
             setSelectedPackage(availablePackages[0]);
         }
@@ -43,14 +48,29 @@ export default function SubscribeScreen() {
     fetchPackages();
   }, []);
 
+  // 2. Função para salvar o status
+  const saveProStatus = async (status: boolean) => {
+    try {
+      await AsyncStorage.setItem("@user_is_pro", JSON.stringify(status));
+    } catch (e) {
+      console.error("Erro ao salvar status Pro", e);
+    }
+  };
+
   const handlePurchase = async () => {
     if (!selectedPackage) return;
 
     try {
       setLoading(true);
       const purchase = await Purchases.purchasePackage(selectedPackage);
+
+      // Verificando se a assinatura está ativa
       if (purchase.customerInfo.entitlements.active["Magic World Pro"]) {
+        await saveProStatus(true); // 3. Salvar no storage
         Alert.alert("Success", "Subscription activated!");
+        // Aqui você pode redirecionar o usuário: navigation.goBack();
+
+        router.back();
       }
     } catch (error: any) {
       if (!error.userCancelled) {
@@ -67,7 +87,6 @@ export default function SubscribeScreen() {
 
     return (
       <TouchableOpacity
-        // Aplica a borda roxa se estiver selecionado
         style={[styles.card, isSelected && styles.selectedCard]}
         onPress={() => setSelectedPackage(item)}
         activeOpacity={0.8}
@@ -79,9 +98,6 @@ export default function SubscribeScreen() {
             fontSize={22}
             color={Colors.light.text}
           />
-
-          {/* Indicador visual de seleção (opcional) */}
-          {/* <View style={[styles.radio, isSelected && styles.radioSelected]} /> */}
         </View>
 
         <Text
@@ -96,33 +112,46 @@ export default function SubscribeScreen() {
           }
         />
 
-        <Text
-          fontFamily="bold"
-          fontSize={20}
-          color={isSelected ? "#5C81F5" : Colors.light.text}
-          style={{ marginTop: 12 }}
-          title={item.product.priceString}
-        />
+        <View style={styles.priceRow}>
+          <Text
+            fontFamily="bold"
+            fontSize={20}
+            color={isSelected ? "#5C81F5" : Colors.light.text}
+            title={item.product.priceString}
+          />
+          {isSelected && (
+            <View style={styles.selectedBadge}>
+              <Text
+                title="Selected"
+                fontSize={12}
+                color="#fff"
+                fontFamily="bold"
+              />
+            </View>
+          )}
+        </View>
       </TouchableOpacity>
     );
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: Colors.light.background }}>
-      <SubscribeContainer contentContainerStyle={{ marginHorizontal: 24 }}>
+    <View style={{ flex: 1, backgroundColor: Colors.dark.background }}>
+      <SubscribeContainer
+        contentContainerStyle={{ marginHorizontal: 24, paddingTop: 40 }}
+      >
         <Text
-          title="Choose Your Plan"
+          title="Magic World Pro"
           fontFamily="bold"
-          fontSize={28}
+          fontSize={32}
           color="#ffffff"
-          style={{ marginBottom: 10 }}
+          style={{ marginBottom: 8 }}
         />
         <Text
-          title="Get unlimited access to all chapters and exclusive stories."
+          title="Unlock all chapters and exclusive content."
           fontFamily="regular"
           fontSize={16}
-          color="#cccccc"
-          style={{ marginBottom: 20 }}
+          color="#8E8E93"
+          style={{ marginBottom: 24 }}
         />
 
         {loading && packages.length === 0 ? (
@@ -132,32 +161,38 @@ export default function SubscribeScreen() {
             data={packages}
             renderItem={renderPackage}
             keyExtractor={(item) => item.identifier}
-            contentContainerStyle={{ gap: 16, paddingBottom: 120 }} // Espaço para o footer
+            contentContainerStyle={{ gap: 16, paddingBottom: 150 }}
           />
         )}
       </SubscribeContainer>
 
-      {/* Footer Fixo com Botão */}
       {!loading && packages.length > 0 && (
         <View style={styles.footer}>
           <TouchableOpacity
             style={styles.subscribeButton}
             onPress={handlePurchase}
+            disabled={loading}
           >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text
+                title="Subscribe Now"
+                fontFamily="bold"
+                fontSize={18}
+                color="#fff"
+              />
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={{ marginTop: 12 }}>
             <Text
-              title="Subscribe Now"
-              fontFamily="bold"
-              fontSize={18}
-              color="#fff"
+              title="Restore Purchase"
+              fontSize={14}
+              color="#8E8E93"
+              style={{ textAlign: "center" }}
             />
           </TouchableOpacity>
-          <Text
-            title="Cancel anytime in your app store settings."
-            fontFamily="regular"
-            fontSize={12}
-            color="#999"
-            style={{ marginTop: 8, textAlign: "center" }}
-          />
         </View>
       )}
     </View>
@@ -169,49 +204,50 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 20,
     padding: 20,
-    borderWidth: 4,
-    borderColor: "transparent", // Borda invisível quando não selecionado
+    borderWidth: 3,
+    borderColor: "transparent",
   },
   selectedCard: {
-    borderColor: "#5C81F5", // Tom de roxo solicitado
-    backgroundColor: "#F8F9FF", // Leve destaque no fundo
+    borderColor: "#5C81F5",
+    backgroundColor: "#F8F9FF",
   },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  radio: {
-    height: 20,
-    width: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: "#DDD",
+  priceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 12,
   },
-  radioSelected: {
-    borderColor: "#5C81F5",
+  selectedBadge: {
     backgroundColor: "#5C81F5",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   footer: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: Colors.dark.background,
+    backgroundColor: "#1C1C1E", // Darker footer
     padding: 24,
+    paddingBottom: 40,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
   },
   subscribeButton: {
     backgroundColor: "#5C81F5",
     borderRadius: 16,
-    height: 56,
+    height: 58,
     justifyContent: "center",
     alignItems: "center",
+    shadowColor: "#5C81F5",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
   },
 });

@@ -11,6 +11,7 @@ import { Button, Container, Content, Gradient, GradientImage } from "./styles";
 import { useRouter } from "expo-router";
 
 import Purchases from "react-native-purchases";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const { height } = Dimensions.get("window");
 
@@ -54,7 +55,17 @@ export default function OnboardingScreen() {
     ).start();
   }, []);
 
+  const saveProStatus = async (status: boolean) => {
+    try {
+      await AsyncStorage.setItem("@user_is_pro", JSON.stringify(status));
+    } catch (e) {
+      console.error("Erro ao salvar status Pro", e);
+    }
+  };
+
   useEffect(() => {
+    saveProStatus(false);
+
     // Platform-specific API keys
     const iosApiKey = "appl_UcIhNLORZZgNuPFDjVUoqawwHfK";
 
