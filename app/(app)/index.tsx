@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { Animated, Dimensions } from "react-native";
+import { Animated, Dimensions, Platform } from "react-native";
 
 import Text from "@/components/text";
 import { Colors } from "@/constants/theme";
@@ -9,6 +9,8 @@ import background_header from "../../assets/images/background-header.png";
 
 import { Button, Container, Content, Gradient, GradientImage } from "./styles";
 import { useRouter } from "expo-router";
+
+import Purchases from "react-native-purchases";
 
 const { height } = Dimensions.get("window");
 
@@ -50,6 +52,13 @@ export default function OnboardingScreen() {
         ]),
       ])
     ).start();
+  }, []);
+
+  useEffect(() => {
+    // Platform-specific API keys
+    const iosApiKey = "appl_UcIhNLORZZgNuPFDjVUoqawwHfK";
+
+    Purchases.configure({ apiKey: iosApiKey });
   }, []);
 
   return (

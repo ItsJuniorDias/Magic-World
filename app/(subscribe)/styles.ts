@@ -1,9 +1,8 @@
-import styled from 'styled-components/native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Colors } from "@/constants/theme";
+import styled from "styled-components/native";  
 
-export const SubscribeContainer = styled.View`
+export const SubscribeContainer = styled.ScrollView`
   flex: 1;
-  justify-content: center;
-  align-items: center;
-  background-color: #121212;
+  background-color: ${Colors.dark.background};
+  padding-top: 64px
 `;

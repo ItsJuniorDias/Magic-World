@@ -10,22 +10,13 @@ export const CardContainer = styled.TouchableOpacity<CardContainerProps>`
   height: ${(props) => (props.variant === "category" ? "144px" : "295px")};
   border-radius: ${(props) => (props.variant === "category" ? "100px" : "24px")};
   overflow: hidden;
-  background-color: #222129;
   margin-bottom: 16px;
-
-  /* Sombra */
-  shadow-color: #000;
-  shadow-offset: 0px 6px;
-  shadow-opacity: 0.2;
-  shadow-radius: 12px;
-  elevation: 8;
+  margin-right: 16px;
 `;
 
 export const ImageCard = styled.ImageBackground`
   flex: 1;
   width: 100%;
- 
-  /* justify-content: flex-end; */
 `;
 
 export const Gradient = styled(LinearGradient)`

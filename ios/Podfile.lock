@@ -108,6 +108,11 @@ PODS:
   - libwebp/sharpyuv (1.5.0)
   - libwebp/webp (1.5.0):
     - libwebp/sharpyuv
+  - PurchasesHybridCommon (17.26.0):
+    - RevenueCat (= 5.52.0)
+  - PurchasesHybridCommonUI (17.26.0):
+    - PurchasesHybridCommon (= 17.26.0)
+    - RevenueCatUI (= 5.52.0)
   - RCTDeprecation (0.81.5)
   - RCTRequired (0.81.5)
   - RCTTypeSafety (0.81.5):
@@ -1806,6 +1811,9 @@ PODS:
     - React-utils (= 0.81.5)
     - ReactNativeDependencies
   - ReactNativeDependencies (0.81.5)
+  - RevenueCat (5.52.0)
+  - RevenueCatUI (5.52.0):
+    - RevenueCat (= 5.52.0)
   - RNGestureHandler (2.28.0):
     - hermes-engine
     - RCTRequired
@@ -1828,6 +1836,12 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - RNPaywalls (9.6.13):
+    - PurchasesHybridCommonUI (= 17.26.0)
+    - React-Core
+  - RNPurchases (9.6.13):
+    - PurchasesHybridCommon (= 17.26.0)
+    - React-Core
   - RNReanimated (4.1.6):
     - hermes-engine
     - RCTRequired
@@ -2020,9 +2034,9 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - SDWebImage (5.21.3):
-    - SDWebImage/Core (= 5.21.3)
-  - SDWebImage/Core (5.21.3)
+  - SDWebImage (5.21.5):
+    - SDWebImage/Core (= 5.21.5)
+  - SDWebImage/Core (5.21.5)
   - SDWebImageAVIFCoder (0.11.1):
     - libavif/core (>= 0.11.0)
     - SDWebImage (~> 5.10)
@@ -2122,6 +2136,8 @@ DEPENDENCIES:
   - ReactCommon/turbomodule/core (from `../node_modules/react-native/ReactCommon`)
   - ReactNativeDependencies (from `../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec`)
   - RNGestureHandler (from `../node_modules/react-native-gesture-handler`)
+  - RNPaywalls (from `../node_modules/react-native-purchases-ui`)
+  - RNPurchases (from `../node_modules/react-native-purchases`)
   - RNReanimated (from `../node_modules/react-native-reanimated`)
   - RNScreens (from `../node_modules/react-native-screens`)
   - RNWorklets (from `../node_modules/react-native-worklets`)
@@ -2132,6 +2148,10 @@ SPEC REPOS:
     - libavif
     - libdav1d
     - libwebp
+    - PurchasesHybridCommon
+    - PurchasesHybridCommonUI
+    - RevenueCat
+    - RevenueCatUI
     - SDWebImage
     - SDWebImageAVIFCoder
     - SDWebImageSVGCoder
@@ -2313,6 +2333,10 @@ EXTERNAL SOURCES:
     :podspec: "../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec"
   RNGestureHandler:
     :path: "../node_modules/react-native-gesture-handler"
+  RNPaywalls:
+    :path: "../node_modules/react-native-purchases-ui"
+  RNPurchases:
+    :path: "../node_modules/react-native-purchases"
   RNReanimated:
     :path: "../node_modules/react-native-reanimated"
   RNScreens:
@@ -2347,6 +2371,8 @@ SPEC CHECKSUMS:
   libavif: 84bbb62fb232c3018d6f1bab79beea87e35de7b7
   libdav1d: 23581a4d8ec811ff171ed5e2e05cd27bad64c39f
   libwebp: 02b23773aedb6ff1fd38cec7a77b81414c6842a8
+  PurchasesHybridCommon: 93399cb2ba29164dbab79d6398e79f7723b41653
+  PurchasesHybridCommonUI: ebbb750fc4592418a15a16c88061dd8734a509db
   RCTDeprecation: 943572d4be82d480a48f4884f670135ae30bf990
   RCTRequired: 8f3cfc90cc25cf6e420ddb3e7caaaabc57df6043
   RCTTypeSafety: 16a4144ca3f959583ab019b57d5633df10b5e97c
@@ -2412,11 +2438,15 @@ SPEC CHECKSUMS:
   ReactCodegen: 7d4593f7591f002d137fe40cef3f6c11f13c88cc
   ReactCommon: 08810150b1206cc44aecf5f6ae19af32f29151a8
   ReactNativeDependencies: 71ce9c28beb282aa720ea7b46980fff9669f428a
+  RevenueCat: 946aceaf97c1eee083dd7fad65a0e0d0c64c837e
+  RevenueCatUI: 9e4a7e2ccff6b4fc9becd72b7efc9476c458e936
   RNGestureHandler: 2914750df066d89bf9d8f48a10ad5f0051108ac3
+  RNPaywalls: 3d5665fe648b73c4d7d10d9d42eba56aaf840c37
+  RNPurchases: 049c027cded681054a37b4aea87d904626174c76
   RNReanimated: e5c702a3e24cc1c68b2de67671713f35461678f4
   RNScreens: d8d6f1792f6e7ac12b0190d33d8d390efc0c1845
   RNWorklets: 76fce72926e28e304afb44f0da23b2d24f2c1fa0
-  SDWebImage: 16309af6d214ba3f77a7c6f6fdda888cb313a50a
+  SDWebImage: e9c98383c7572d713c1a0d7dd2783b10599b9838
   SDWebImageAVIFCoder: afe194a084e851f70228e4be35ef651df0fc5c57
   SDWebImageSVGCoder: 15a300a97ec1c8ac958f009c02220ac0402e936c
   SDWebImageWebPCoder: e38c0a70396191361d60c092933e22c20d5b1380

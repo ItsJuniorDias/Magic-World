@@ -163,6 +163,13 @@ export default function StorieScreen() {
       <NextChapterButton
         storyId={String(storyId)}
         currentIndex={Number(currentIndex)}
+        onNextChapter={(nextIndex: number, hasAccess: boolean) => {
+          if (!hasAccess) {
+            router.push("/(subscribe)");
+          } else {
+            router.push(`/storie?storyId=${storyId}&currentIndex=${nextIndex}`);
+          }
+        }}
       />
     </>
   );

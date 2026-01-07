@@ -11,39 +11,45 @@ export function NextChapterButton({
   storyId: string;
   currentIndex: number;
 }) {
-  console.log("NextChapterButton props:", { storyId, currentIndex });
   const router = useRouter();
 
   const story = useStoriesStore((state) =>
     state.stories.find((item) => item.id === storyId)
   );
 
-  console.log(story, "STORY");
-
   if (!story) return null;
 
   const nextChapter = story.chapter[currentIndex + 1];
 
-  if (!nextChapter) {
-    return null;
-  }
+  console.log(nextChapter.locked, "NEXT CHAPTER");
+
+  // Se não houver próximo capítulo, não mostra o botão
+  if (!nextChapter) return null;
+
+  // Verifica se o capítulo está bloqueado (exemplo: locked = true)
+  const isLocked = nextChapter.locked ?? false;
+
+  const handlePress = () => {
+    if (isLocked) {
+      // Redireciona para tela de assinatura
+      router.push("/(subscribe)");
+    } else {
+      // Vai para o próximo capítulo
+      router.push({
+        pathname: "/(storie)",
+        params: {
+          storie: nextChapter.storie,
+          title: nextChapter.title,
+          thumbnail: nextChapter.thumbnail,
+          storyId: storyId,
+          currentIndex: currentIndex + 1,
+        },
+      });
+    }
+  };
 
   return (
-    <TouchableOpacity
-      style={styles.fab}
-      onPress={() =>
-        router.push({
-          pathname: "/(storie)",
-          params: {
-            storie: nextChapter.storie,
-            title: nextChapter.title,
-            thumbnail: nextChapter.thumbnail,
-            storyId: storyId,
-            currentIndex: currentIndex + 1,
-          },
-        })
-      }
-    >
+    <TouchableOpacity style={styles.fab} onPress={handlePress}>
       <FontAwesome6 name="arrow-right" size={20} color="#FFF" />
     </TouchableOpacity>
   );
