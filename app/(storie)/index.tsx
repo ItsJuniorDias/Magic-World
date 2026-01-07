@@ -11,7 +11,6 @@ import { FontAwesome6 } from "@expo/vector-icons";
 import { Container, ContainerStorie } from "./styles";
 import { useLocalSearchParams } from "expo-router/build/hooks";
 import { NextChapterButton } from "@/components/(next-chapter-button)";
-import { useStoriesStore } from "@/store/useStoriesStore";
 
 const HEADER_HEIGHT = 420;
 const MIN_HEADER_HEIGHT = 160;

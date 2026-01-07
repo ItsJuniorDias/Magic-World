@@ -10,7 +10,7 @@ export const CardContainer = styled.TouchableOpacity`
   background-color: #222129;
   margin-bottom: 16px;
   border-radius: 24px;
-  margin-top: 32px;
+  margin-top: 8px;
   margin-right: 24px;
 
 `;

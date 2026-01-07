@@ -1,17 +1,14 @@
 import Card from "@/components/card";
 import Text from "@/components/text";
 import { StatusBar } from "expo-status-bar";
-import { FlatList, Platform, StyleSheet, View } from "react-native";
+import { FlatList, Platform, ScrollView, StyleSheet, View } from "react-native";
 
 import { db } from "../../firebaseConfig";
-
-import image_card from "../../assets/images/image-card_one.png";
-
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
 import { collection, getDocs } from "firebase/firestore";
 import { useStoriesStore } from "@/store/useStoriesStore";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI("");
 
@@ -21,10 +18,8 @@ export const geminiModel = genAI.getGenerativeModel({
 
 export default function HomeScreen() {
   const [response, setResponse] = useState("");
-
   const router = useRouter();
-
-  const [data, setData] = useState([]);
+  const [data, setData] = useState<any[]>([]);
 
   const getStories = async () => {
     const querySnapshot = await getDocs(collection(db, "stories"));
@@ -35,10 +30,7 @@ export default function HomeScreen() {
     }));
 
     setData(stories);
-
-    useStoriesStore.setState({
-      stories: stories,
-    });
+    useStoriesStore.setState({ stories });
 
     return stories;
   };
@@ -63,52 +55,98 @@ export default function HomeScreen() {
 
   console.log(response, "RESPONSE FROM GEMINI");
 
-  const renderItem = ({ item }) => {
-    return (
-      <Card
-        thumbnail={item.thumbnail}
-        title={item.title}
-        views={item.views}
-        storie={item.storie}
-        onPress={() =>
-          router.push({
-            pathname: item.chapter[0].navigate,
-            params: {
-              storie: item.chapter[0].storie,
-              title: item.chapter[0].title,
-              thumbnail: item.chapter[0].thumbnail,
-              storyId: item.id,
-              currentIndex: 0,
-            },
-          })
-        }
+  const renderItem = ({ item, variant }: any) => (
+    <Card
+      variant={variant}
+      thumbnail={item.thumbnail}
+      title={item.title}
+      views={item.views}
+      onPress={() =>
+        router.push({
+          pathname: item.chapter[0].navigate,
+          params: {
+            storie: item.chapter[0].storie,
+            title: item.chapter[0].title,
+            thumbnail: item.chapter[0].thumbnail,
+            storyId: item.id,
+            currentIndex: 0,
+          },
+        })
+      }
+    />
+  );
+
+  // 🔥 Mais vistas
+  const mostWatched = [...data].sort((a, b) => (b.views ?? 0) - (a.views ?? 0));
+
+  // 🗂 Categoria (exemplo: Fairy Tale)
+  const categoryStories = [
+    {
+      id: "1",
+      title: "Children's Comic",
+      views: 100,
+      chapter: [
+        {
+          navigate: "/(categories)",
+        },
+      ],
+      thumbnail:
+        "https://res.cloudinary.com/dqvujibkn/image/upload/v1767753186/Gemini_Generated_Image_mijilhmijilhmiji_1_frh7nh.png", // substitua pela sua imagem
+    },
+  ];
+
+  // 🕒 Publicadas recentemente
+  const recentlyPublished = [...data].sort(
+    (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)
+  );
+
+  const Section = ({
+    title,
+    data,
+    variant,
+  }: {
+    title: string;
+    data: any[];
+    variant?: "default" | "category" | "recent";
+  }) => (
+    <View style={styles.section}>
+      <Text
+        title={title}
+        fontFamily="bold"
+        fontSize={24}
+        color="#FFFFFF"
+        style={{ marginBottom: 12, marginLeft: 24 }}
       />
-    );
-  };
+
+      <FlatList
+        data={data}
+        renderItem={(item) => renderItem({ ...item, variant })}
+        horizontal
+        keyExtractor={(item) => item.id}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingLeft: 24 }}
+      />
+    </View>
+  );
 
   return (
     <>
       <StatusBar style="light" translucent />
-      <View style={styles.container}>
-        <View style={styles.content}>
-          <Text
-            fontFamily="bold"
-            fontSize={28}
-            color="#FFFFFF"
-            style={{ marginTop: Platform.OS === "ios" ? 64 : 0 }}
-            title="Most Watched Stories"
-          />
-        </View>
-
-        <FlatList
-          data={data}
-          renderItem={renderItem}
-          contentContainerStyle={{ paddingLeft: 24 }}
-          keyExtractor={(item) => item.id}
-          horizontal
-          showsHorizontalScrollIndicator={false}
+      <ScrollView style={styles.container}>
+        <Section
+          title="Most Watched Stories"
+          data={mostWatched}
+          variant="default"
         />
-      </View>
+
+        <Section title="Categories" data={categoryStories} variant="category" />
+
+        <Section
+          title="Recently Published"
+          data={recentlyPublished}
+          variant="recent"
+        />
+      </ScrollView>
     </>
   );
 }
@@ -117,9 +155,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#15141A",
+    paddingTop: Platform.OS === "ios" ? 8 : 24,
   },
 
-  content: {
-    paddingHorizontal: 24,
+  section: {
+    marginBottom: 16,
   },
 });

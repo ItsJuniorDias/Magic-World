@@ -5,18 +5,18 @@ import Text from "../text";
 import { Colors } from "@/constants/theme";
 
 export type CardProps = {
+  variant?: "default" | "category" | "recent";
   thumbnail?: string;
   title?: string;
   views?: number;
-  storie: string;
   onPress?: () => void;
 };
 
 export default function Card({
+  variant = "default",
   thumbnail,
   title,
   views,
-  storie,
   onPress,
 }: CardProps) {
   return (
