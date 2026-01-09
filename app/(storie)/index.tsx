@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Animated, Alert, View } from "react-native";
+import { Pressable, StyleSheet, Animated, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import { useRef, useState, useEffect } from "react";
 
@@ -18,7 +18,6 @@ import { NextChapterButton } from "@/components/(next-chapter-button)";
 
 import * as Speech from "expo-speech";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { background } from "@expo/ui/swift-ui/modifiers";
 
 const HEADER_HEIGHT = 420;
 const MIN_HEADER_HEIGHT = 160;

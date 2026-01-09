@@ -12,6 +12,7 @@ import { useRouter } from "expo-router";
 
 import Purchases from "react-native-purchases";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useLikedStore } from "@/store/useLikedStore";
 
 const { height } = Dimensions.get("window");
 
@@ -63,7 +64,10 @@ export default function OnboardingScreen() {
     }
   };
 
+  const init = useLikedStore((s) => s.init);
+
   useEffect(() => {
+    init();
     // saveProStatus(true);
 
     // Platform-specific API keys

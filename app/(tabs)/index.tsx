@@ -15,8 +15,9 @@ import {
 } from "firebase/firestore";
 import { useStoriesStore } from "@/store/useStoriesStore";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { useLikedStore } from "@/store/useLikedStore";
 
-const genAI = new GoogleGenerativeAI("AIzaSyA-SlcdTnS_wGV82PteVJ_4K3PBdNE553M");
+const genAI = new GoogleGenerativeAI("");
 
 export const geminiModel = genAI.getGenerativeModel({
   model: "gemini-2.5-flash",
@@ -26,6 +27,11 @@ export default function HomeScreen() {
   const [response, setResponse] = useState("");
   const router = useRouter();
   const [data, setData] = useState<any[]>([]);
+
+  const likedIds = useLikedStore((s) => s.likedIds);
+  const toggleLike = useLikedStore((s) => s.toggleLike);
+
+  console.log(likedIds, "LIKED IDS");
 
   const getStories = async () => {
     const querySnapshot = await getDocs(collection(db, "stories"));
@@ -85,6 +91,14 @@ export default function HomeScreen() {
       thumbnail={item.thumbnail}
       title={item.title}
       views={item.views}
+      isFavorite={likedIds.includes(item.id)}
+      onToggleFavorite={() =>
+        toggleLike({
+          storyId: item.id,
+          title: item.title,
+          thumbnail: item.thumbnail,
+        })
+      }
       onPress={async () => {
         if (variant !== "category") {
           await incrementStoryViews(item.id);
