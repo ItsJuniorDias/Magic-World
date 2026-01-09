@@ -14,11 +14,13 @@ type LikedStore = {
     storyId: string;
     title: string;
     thumbnail: string;
+    chapter: [];
   }) => Promise<void>;
   likedStories: {
     storyId: string;
     title: string;
     thumbnail: string;
+    chapter: [];
     createdAt?: any;
   }[];
     loadLikedStories: () => Promise<void>;

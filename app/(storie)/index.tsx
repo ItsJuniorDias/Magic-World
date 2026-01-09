@@ -23,7 +23,9 @@ const HEADER_HEIGHT = 420;
 const MIN_HEADER_HEIGHT = 160;
 
 /* GEMINI */
-const genAI = new GoogleGenerativeAI("");
+const genAI = new GoogleGenerativeAI(
+  process.env.EXPO_PUBLIC_GOOGLE_API_KEY || ""
+);
 
 export const geminiModel = genAI.getGenerativeModel({
   model: "gemini-2.5-flash",

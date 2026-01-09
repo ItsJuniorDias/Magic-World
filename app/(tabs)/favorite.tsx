@@ -7,16 +7,14 @@ import { useStoriesStore } from "@/store/useStoriesStore";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { doc, increment, updateDoc } from "firebase/firestore";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useCallback } from "react";
 import { FlatList, ScrollView, StyleSheet, View } from "react-native";
 
 export default function FavoriteScreen() {
   const router = useRouter();
 
-  const likedIds = useLikedStore((s) => s.likedIds);
-  const likedStories = useLikedStore((s) => s.likedStories);
-  const loadLikedStories = useLikedStore((s) => s.loadLikedStories);
-  const toggleLike = useLikedStore((s) => s.toggleLike);
+  const { likedIds, likedStories, loadLikedStories, toggleLike } =
+    useLikedStore();
 
   const stories = useStoriesStore((s) => s.stories);
 
@@ -24,24 +22,65 @@ export default function FavoriteScreen() {
     loadLikedStories();
   }, []);
 
+  /* ---------------------------------------------------
+   * Helpers
+   * -------------------------------------------------- */
+
   const incrementStoryViews = async (storyId: string) => {
-    const storyRef = doc(db, "stories", storyId);
+    try {
+      const storyRef = doc(db, "stories", storyId);
 
-    await updateDoc(storyRef, {
-      views: increment(1),
-    });
+      await updateDoc(storyRef, {
+        views: increment(1),
+      });
 
-    useStoriesStore.setState((state) => ({
-      stories: state.stories.map((story) =>
-        story.id === storyId
-          ? { ...story, views: (story.views ?? 0) + 1 }
-          : story
-      ),
-    }));
+      useStoriesStore.setState((state) => ({
+        stories: state.stories.map((story) =>
+          story.storyId === storyId
+            ? { ...story, views: (story.views ?? 0) + 1 }
+            : story
+        ),
+      }));
+    } catch (err) {
+      console.warn("Erro ao incrementar views", err);
+    }
   };
 
+  const navigateToStory = useCallback(
+    async (storyId: string) => {
+      console.log("Navegando para a história:", storyId);
+
+      const fullStory = stories.find((s) => s.id === storyId);
+
+      if (!fullStory?.chapter?.length) {
+        console.warn("Story sem capítulos:", fullStory);
+        return;
+      }
+
+      const firstChapter = fullStory.chapter[0];
+
+      await incrementStoryViews(storyId);
+
+      router.push({
+        pathname: firstChapter.navigate,
+        params: {
+          storie: firstChapter.storie,
+          title: firstChapter.title,
+          thumbnail: firstChapter.thumbnail,
+          storyId: fullStory.id,
+          currentIndex: 0,
+        },
+      });
+    },
+    [stories]
+  );
+
+  /* ---------------------------------------------------
+   * Derived Data
+   * -------------------------------------------------- */
+
   const recommendedStories = useMemo(() => {
-    return stories.filter((story) => !likedIds.includes(story.storyId));
+    return stories.filter((story) => !likedIds.includes(story.id));
   }, [stories, likedIds]);
 
   const popularStories = useMemo(() => {
@@ -50,40 +89,36 @@ export default function FavoriteScreen() {
       .slice(0, 10);
   }, [stories]);
 
-  const renderItem = ({ item }: any) => (
-    <Card
-      thumbnail={item.thumbnail}
-      title={item.title}
-      views={item.views}
-      isFavorite={likedIds.includes(item.storyId)}
-      onToggleFavorite={() => {
-        toggleLike({
-          storyId: item.storyId,
-          title: item.title,
-          thumbnail: item.thumbnail,
-        });
+  /* ---------------------------------------------------
+   * Render
+   * -------------------------------------------------- */
 
-        loadLikedStories();
-      }}
-      onPress={async () => {
-        await incrementStoryViews(item.storyId);
+  const renderItem = ({ item }: any) => {
+    const isFavorite = likedIds.includes(item.storyId);
 
-        router.push({
-          pathname: item.chapter[0].navigate,
-          params: {
-            storie: item.chapter[0].storie,
-            title: item.chapter[0].title,
-            thumbnail: item.chapter[0].thumbnail,
+    return (
+      <Card
+        thumbnail={item.thumbnail}
+        title={item.title}
+        views={item.views}
+        isFavorite={isFavorite}
+        onToggleFavorite={() => {
+          toggleLike({
             storyId: item.storyId,
-            currentIndex: 0,
-          },
-        });
-      }}
-    />
-  );
+            title: item.title,
+            thumbnail: item.thumbnail,
+            chapter: item.chapter ?? [],
+          });
+
+          loadLikedStories();
+        }}
+        onPress={() => navigateToStory(item.storyId ?? item.id)}
+      />
+    );
+  };
 
   const Section = ({ title, data }: { title: string; data: any[] }) => {
-    if (!data.length) return null;
+    if (!data?.length) return null;
 
     return (
       <View style={styles.section}>
@@ -106,6 +141,7 @@ export default function FavoriteScreen() {
       <StatusBar style="light" translucent />
       <ScrollView showsVerticalScrollIndicator={false} style={styles.container}>
         <Section title="My Favorites" data={likedStories} />
+
         <Section title="Recommended for You" data={recommendedStories} />
         <Section title="Trending" data={popularStories} />
       </ScrollView>

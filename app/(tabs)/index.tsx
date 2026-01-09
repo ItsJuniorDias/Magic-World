@@ -19,6 +19,7 @@ import { useLikedStore } from "@/store/useLikedStore";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getStories } from "@/services/getStories";
+import CardSkeleton from "@/components/card-skeleton";
 
 const genAI = new GoogleGenerativeAI("AIzaSyBW5Kqpf2uY-X8W3mA_0_1ORPz2qyQBT8M");
 
@@ -87,6 +88,7 @@ export default function HomeScreen() {
           storyId: item.id,
           title: item.title,
           thumbnail: item.thumbnail,
+          chapter: item.chapter,
         });
 
         loadLikedStories();
@@ -153,14 +155,25 @@ export default function HomeScreen() {
         style={{ marginBottom: 12, marginLeft: 24 }}
       />
 
-      <FlatList
-        data={data}
-        renderItem={(item) => renderItem({ ...item, variant })}
-        horizontal
-        keyExtractor={(item) => item.id}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingLeft: 24 }}
-      />
+      {query.isLoading ? (
+        <FlatList
+          data={[{}, {}, {}, {}, {}]}
+          renderItem={() => <CardSkeleton variant={variant} />}
+          horizontal
+          keyExtractor={(item) => item.toString()}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingLeft: 24 }}
+        />
+      ) : (
+        <FlatList
+          data={data}
+          renderItem={(item) => renderItem({ ...item, variant })}
+          horizontal
+          keyExtractor={(item) => item.id}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingLeft: 24 }}
+        />
+      )}
     </View>
   );
 
