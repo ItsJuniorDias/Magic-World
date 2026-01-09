@@ -34,7 +34,7 @@ export default function CategoriesScreen() {
   );
 
   return (
-    <Container>
+    <Container showsVerticalScrollIndicator={false}>
       <View style={styles.contentHeader}>
         <Pressable
           style={styles.backButtonWrapper}

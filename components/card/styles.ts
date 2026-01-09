@@ -1,5 +1,6 @@
 import styled from "styled-components/native";
 import { LinearGradient } from "expo-linear-gradient";
+import { Image } from "expo-image"
 
 type CardContainerProps = {
   variant?: "default" | "category" | "recent";
@@ -14,7 +15,7 @@ export const CardContainer = styled.TouchableOpacity<CardContainerProps>`
   margin-right: 16px;
 `;
 
-export const ImageCard = styled.ImageBackground`
+export const ImageCard = styled(Image)`
   flex: 1;
   width: 100%;
 `;

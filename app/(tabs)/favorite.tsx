@@ -56,13 +56,15 @@ export default function FavoriteScreen() {
       title={item.title}
       views={item.views}
       isFavorite={likedIds.includes(item.storyId)}
-      onToggleFavorite={() =>
+      onToggleFavorite={() => {
         toggleLike({
           storyId: item.storyId,
           title: item.title,
           thumbnail: item.thumbnail,
-        })
-      }
+        });
+
+        loadLikedStories();
+      }}
       onPress={async () => {
         await incrementStoryViews(item.storyId);
 
@@ -102,7 +104,7 @@ export default function FavoriteScreen() {
   return (
     <>
       <StatusBar style="light" translucent />
-      <ScrollView style={styles.container}>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.container}>
         <Section title="My Favorites" data={likedStories} />
         <Section title="Recommended for You" data={recommendedStories} />
         <Section title="Trending" data={popularStories} />

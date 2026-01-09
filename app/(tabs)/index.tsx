@@ -17,7 +17,10 @@ import { useStoriesStore } from "@/store/useStoriesStore";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { useLikedStore } from "@/store/useLikedStore";
 
-const genAI = new GoogleGenerativeAI("");
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getStories } from "@/services/getStories";
+
+const genAI = new GoogleGenerativeAI("AIzaSyBW5Kqpf2uY-X8W3mA_0_1ORPz2qyQBT8M");
 
 export const geminiModel = genAI.getGenerativeModel({
   model: "gemini-2.5-flash",
@@ -26,26 +29,13 @@ export const geminiModel = genAI.getGenerativeModel({
 export default function HomeScreen() {
   const [response, setResponse] = useState("");
   const router = useRouter();
-  const [data, setData] = useState<any[]>([]);
 
   const likedIds = useLikedStore((s) => s.likedIds);
   const toggleLike = useLikedStore((s) => s.toggleLike);
 
-  console.log(likedIds, "LIKED IDS");
+  const loadLikedStories = useLikedStore((s) => s.loadLikedStories);
 
-  const getStories = async () => {
-    const querySnapshot = await getDocs(collection(db, "stories"));
-
-    const stories = querySnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-
-    setData(stories);
-    useStoriesStore.setState({ stories });
-
-    return stories;
-  };
+  const query = useQuery({ queryKey: ["stories"], queryFn: getStories });
 
   const incrementStoryViews = async (storyId: string) => {
     const storyRef = doc(db, "stories", storyId);
@@ -92,13 +82,15 @@ export default function HomeScreen() {
       title={item.title}
       views={item.views}
       isFavorite={likedIds.includes(item.id)}
-      onToggleFavorite={() =>
+      onToggleFavorite={() => {
         toggleLike({
           storyId: item.id,
           title: item.title,
           thumbnail: item.thumbnail,
-        })
-      }
+        });
+
+        loadLikedStories();
+      }}
       onPress={async () => {
         if (variant !== "category") {
           await incrementStoryViews(item.id);
@@ -119,7 +111,9 @@ export default function HomeScreen() {
   );
 
   // 🔥 Mais vistas
-  const mostWatched = [...data].sort((a, b) => (b.views ?? 0) - (a.views ?? 0));
+  const mostWatched = [...(query.data ?? [])].sort(
+    (a, b) => (b.views ?? 0) - (a.views ?? 0)
+  );
 
   // 🗂 Categoria (exemplo: Fairy Tale)
   const categoryStories = [
@@ -137,7 +131,7 @@ export default function HomeScreen() {
   ];
 
   // 🕒 Publicadas recentemente
-  const recentlyPublished = [...data].sort(
+  const recentlyPublished = [...(query.data ?? [])].sort(
     (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)
   );
 
@@ -173,7 +167,7 @@ export default function HomeScreen() {
   return (
     <>
       <StatusBar style="light" translucent />
-      <ScrollView style={styles.container}>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.container}>
         <Section
           title="Most Watched Stories"
           data={mostWatched}
