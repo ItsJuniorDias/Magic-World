@@ -25,6 +25,7 @@ export default function SubscribeScreen() {
     const fetchPackages = async () => {
       try {
         const offerings = await Purchases.getOfferings();
+
         if (offerings.current) {
           const availablePackages: any[] = [];
 
@@ -93,7 +94,7 @@ export default function SubscribeScreen() {
       >
         <View style={styles.cardHeader}>
           <Text
-            title={item.product.title}
+            title={item.packageType === "MONTHLY" ? "Monthly" : "Annual"}
             fontFamily="bold"
             fontSize={22}
             color={Colors.light.text}
