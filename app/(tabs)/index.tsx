@@ -16,7 +16,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { useStoriesStore } from "@/store/useStoriesStore";
-import OpenAI from "openai";
+
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 import { useLikedStore } from "@/store/useLikedStore";
@@ -24,6 +24,7 @@ import { useLikedStore } from "@/store/useLikedStore";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getStories } from "@/services/getStories";
 import CardSkeleton from "@/components/card-skeleton";
+import { uploadGeminiToCloudinary } from "@/services/generateURL";
 
 const genAI = new GoogleGenerativeAI(
   process.env.EXPO_PUBLIC_GOOGLE_API_KEY || ""
@@ -33,11 +34,9 @@ export const geminiModel = genAI.getGenerativeModel({
   model: "gemini-2.5-flash",
 });
 
-export function generateImage(prompt: string) {
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(
-    prompt
-  )}?width=1024&height=1024&seed=${Date.now()}`;
-}
+const geminiImage = genAI.getGenerativeModel({
+  model: "gemini-2.5-flash-image", // Note o sufixo "-image"
+});
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -69,26 +68,41 @@ export default function HomeScreen() {
     }));
   };
 
-  async function generateStoryWithImages() {
+  async function generateStory() {
     const textResult = await geminiModel.generateContent(`
-Generate a complete JSON object following EXACTLY the structure below.
+Write an original children’s saga-style story set in a magical adventure world.
 
-Choose a category: future.
-Language: English
-Tone: epic, immersive, mysterious
-Style: saga narrative
-Audience: children
+Important character rules:
+Each chapter must focus on different main characters (children, creatures, or heroes), with unique personalities, backgrounds, and motivations.
+Do not reuse the same protagonist across chapters.
+Characters may meet, influence events, or be connected by the same world or legend, but each chapter should feel like a new perspective.
 
-Rules:
-- Exactly 3 chapters
-- First chapter locked = false
-- Others locked = true
-- storie must be around 2000 words
-- Return ONLY valid JSON (no markdown, no text)
+
+Story guidelines:
+Genre: mystery
+Tone: Epic, immersive, mysterious
+Style: Saga narrative
+Audience: Children
+World-building should feel magical, safe, and wondrous
+Include discovery, courage, friendship, and mystery
+Avoid violence or dark themes unsuitable for children
+
+
+Narrative focus:
+Chapter 1: Introduce the world through the eyes of the first character
+Chapter 2: Expand the world with a new character from a different place or culture
+Chapter 3: Reveal a deeper secret of the world through a third, unexpected character
+
+
+Writing rules:
+Rich descriptions and sensory details
+Clear beginning, middle, and end for each chapter
+Maintain continuity of the world while changing protagonists
+Generate the story following a structured JSON format when requested.
 
 Structure:
 {
-  category: "",
+  category: "mystery",
   title: "",
   thumbnail: "",
   views: 0,
@@ -128,13 +142,62 @@ Structure:
 
     const story = JSON.parse(cleaned);
 
+    // Upload and set story thumbnail
+    const storyImagePrompt = `Cover illustration for a children's mystery saga titled "${story.title}". The scene should be magical, safe, and wondrous, capturing the essence of discovery, courage, friendship, and mystery. Style: vibrant colors, whimsical details, and a touch of fantasy.`;
+
+    const storyImageResult = await geminiImage.generateContent({
+      contents: [{ role: "user", parts: [{ text: storyImagePrompt }] }],
+      generationConfig: {
+        responseModalities: ["TEXT", "IMAGE"],
+      },
+    });
+
+    const storyImagePart =
+      storyImageResult.response.candidates[0].content.parts.find(
+        (p) => p.inlineData
+      );
+
+    if (storyImagePart) {
+      const permanentUrl = await uploadGeminiToCloudinary(
+        storyImagePart.inlineData.data
+      );
+
+      story.thumbnail = permanentUrl;
+    }
+
+    // Generate and upload thumbnails for each chapter
+    for (let i = 0; i < story.chapter.length; i++) {
+      const chapter = story.chapter[i];
+
+      const imagePrompt = `Illustration for the chapter titled "${chapter.title}" in a children's mystery saga. The scene should be magical, safe, and wondrous, capturing the essence of discovery, courage, friendship, and mystery. Style: vibrant colors, whimsical details, and a touch of fantasy.`;
+
+      const result = await geminiImage.generateContent({
+        contents: [{ role: "user", parts: [{ text: imagePrompt }] }],
+        generationConfig: {
+          responseModalities: ["TEXT", "IMAGE"],
+        },
+      });
+
+      const imagePart = result.response.candidates[0].content.parts.find(
+        (p) => p.inlineData
+      );
+
+      if (imagePart) {
+        const permanentUrl = await uploadGeminiToCloudinary(
+          imagePart.inlineData.data
+        );
+
+        story.chapter[i].thumbnail = permanentUrl;
+      }
+    }
+
     return story;
   }
 
   useEffect(() => {
     const load = async () => {
       try {
-        // const story = await generateStoryWithImages();
+        // const story = await generateStory();
         // console.log("GENERATED STORY:", story);
         // const result = await addDoc(collection(db, "stories"), {
         //   ...story,
@@ -244,6 +307,7 @@ Structure:
           data={data}
           renderItem={(item) => renderItem({ ...item, variant })}
           horizontal
+          initialNumToRender={10}
           keyExtractor={(item) => item.id}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingLeft: 24 }}

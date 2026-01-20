@@ -80,7 +80,7 @@ export default function FavoriteScreen() {
    * -------------------------------------------------- */
 
   const recommendedStories = useMemo(() => {
-    return stories.filter((story) => !likedIds.includes(story.id));
+    return stories.filter((story) => !likedIds.includes(story.id)).slice(0, 10);
   }, [stories, likedIds]);
 
   const popularStories = useMemo(() => {
