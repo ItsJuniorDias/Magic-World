@@ -7,6 +7,7 @@ import {
   FlatList,
   StyleSheet,
   View,
+  Linking,
 } from "react-native";
 import { Colors } from "@/constants/theme";
 import { useEffect, useState } from "react";
@@ -192,11 +193,61 @@ export default function SubscribeScreen() {
           >
             <Text
               title="Maybe Later"
+              fontFamily="regular"
               fontSize={14}
               color="#8E8E93"
               style={{ textAlign: "center" }}
             />
           </TouchableOpacity>
+
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "center",
+              alignItems: "center",
+              marginTop: 16,
+            }}
+          >
+            <TouchableOpacity
+              onPress={() =>
+                Linking.openURL(
+                  "https://www.notion.so/Privacy-Policy-Magic-World-2ef0df0a2e7980419154c247e66372c5?source=copy_link",
+                )
+              }
+            >
+              <Text
+                title="Privacy Policy"
+                fontSize={14}
+                fontFamily="regular"
+                color="#8E8E93"
+                style={{ textDecorationLine: "underline" }}
+              />
+            </TouchableOpacity>
+
+            <Text
+              title=" • "
+              fontFamily="regular"
+              fontSize={14}
+              color="#8E8E93"
+              style={{ marginHorizontal: 6 }}
+            />
+
+            <TouchableOpacity
+              onPress={() =>
+                Linking.openURL(
+                  "https://www.notion.so/Terms-of-Use-Magic-World-2e10df0a2e7980d7b48bdcf36fef33a5?source=copy_link",
+                )
+              }
+            >
+              <Text
+                title="Terms of Use"
+                fontFamily="regular"
+                fontSize={14}
+                color="#8E8E93"
+                style={{ textDecorationLine: "underline" }}
+              />
+            </TouchableOpacity>
+          </View>
         </View>
       )}
     </View>

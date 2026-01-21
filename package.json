@@ -1,7 +1,7 @@
 {
   "name": "magic-world",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "scripts": {
     "start": "expo start --dev-client --clear",
     "reset-project": "node ./scripts/reset-project.js",
@@ -33,6 +33,7 @@
     "expo-speech": "~14.0.8",
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
+    "expo-store-review": "^9.0.9",
     "expo-symbols": "~1.0.8",
     "expo-system-ui": "~6.0.9",
     "expo-web-browser": "~15.0.10",

@@ -9,6 +9,7 @@ export default {
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     ios: {
+      newArchEnabled: false,
       supportsTablet: true,
       bundleIdentifier: "com.alexandre.juniort10.magicworld",
       infoPlist: {

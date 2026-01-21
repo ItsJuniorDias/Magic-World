@@ -26,8 +26,12 @@ import { getStories } from "@/services/getStories";
 import CardSkeleton from "@/components/card-skeleton";
 import { uploadGeminiToCloudinary } from "@/services/generateURL";
 
+import * as StoreReview from "expo-store-review";
+import { useAppReview } from "@/hooks/useAppReview";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 const genAI = new GoogleGenerativeAI(
-  process.env.EXPO_PUBLIC_GOOGLE_API_KEY || ""
+  process.env.EXPO_PUBLIC_GOOGLE_API_KEY || "",
 );
 
 export const geminiModel = genAI.getGenerativeModel({
@@ -42,6 +46,8 @@ export default function HomeScreen() {
   const router = useRouter();
 
   const [generatedStory, setGeneratedStory] = useState<any>(null);
+
+  const { requestReviewOnce } = useAppReview();
 
   const likedIds = useLikedStore((s) => s.likedIds);
   const toggleLike = useLikedStore((s) => s.toggleLike);
@@ -63,7 +69,7 @@ export default function HomeScreen() {
       stories: state.stories.map((story) =>
         story.id === storyId
           ? { ...story, views: (story.views ?? 0) + 1 }
-          : story
+          : story,
       ),
     }));
   };
@@ -79,7 +85,7 @@ Characters may meet, influence events, or be connected by the same world or lege
 
 
 Story guidelines:
-Genre: mystery
+Genre: fantasy
 Tone: Epic, immersive, mysterious
 Style: Saga narrative
 Audience: Children
@@ -102,7 +108,7 @@ Generate the story following a structured JSON format when requested.
 
 Structure:
 {
-  category: "mystery",
+  category: "fantasy",
   title: "",
   thumbnail: "",
   views: 0,
@@ -154,12 +160,12 @@ Structure:
 
     const storyImagePart =
       storyImageResult.response.candidates[0].content.parts.find(
-        (p) => p.inlineData
+        (p) => p.inlineData,
       );
 
     if (storyImagePart) {
       const permanentUrl = await uploadGeminiToCloudinary(
-        storyImagePart.inlineData.data
+        storyImagePart.inlineData.data,
       );
 
       story.thumbnail = permanentUrl;
@@ -179,12 +185,12 @@ Structure:
       });
 
       const imagePart = result.response.candidates[0].content.parts.find(
-        (p) => p.inlineData
+        (p) => p.inlineData,
       );
 
       if (imagePart) {
         const permanentUrl = await uploadGeminiToCloudinary(
-          imagePart.inlineData.data
+          imagePart.inlineData.data,
         );
 
         story.chapter[i].thumbnail = permanentUrl;
@@ -197,8 +203,15 @@ Structure:
   useEffect(() => {
     const load = async () => {
       try {
+        setTimeout(() => {
+          requestReviewOnce();
+        }, 30000);
+
+        // await AsyncStorage.removeItem("@app_review_requested");
+
         // const story = await generateStory();
         // console.log("GENERATED STORY:", story);
+
         // const result = await addDoc(collection(db, "stories"), {
         //   ...story,
         //   createdAt: serverTimestamp(),
@@ -252,7 +265,7 @@ Structure:
 
   // 🔥 Mais vistas
   const mostWatched = [...(query.data ?? [])].sort(
-    (a, b) => (b.views ?? 0) - (a.views ?? 0)
+    (a, b) => (b.views ?? 0) - (a.views ?? 0),
   );
 
   // 🗂 Categoria (exemplo: Fairy Tale)
@@ -272,7 +285,7 @@ Structure:
 
   // 🕒 Publicadas recentemente
   const recentlyPublished = [...(query.data ?? [])].sort(
-    (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)
+    (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
   );
 
   const Section = ({
