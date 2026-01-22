@@ -85,7 +85,7 @@ Characters may meet, influence events, or be connected by the same world or lege
 
 
 Story guidelines:
-Genre: fantasy
+Genre: adventure
 Tone: Epic, immersive, mysterious
 Style: Saga narrative
 Audience: Children
@@ -108,7 +108,7 @@ Generate the story following a structured JSON format when requested.
 
 Structure:
 {
-  category: "fantasy",
+  category: "adventure",
   title: "",
   thumbnail: "",
   views: 0,

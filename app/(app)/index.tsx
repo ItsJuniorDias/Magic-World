@@ -68,7 +68,7 @@ export default function OnboardingScreen() {
 
   useEffect(() => {
     init();
-    // saveProStatus(false);
+    // saveProStatus(true);
 
     // Platform-specific API keys
     const iosApiKey = "appl_UcIhNLORZZgNuPFDjVUoqawwHfK";

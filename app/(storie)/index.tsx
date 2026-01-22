@@ -19,12 +19,14 @@ import { NextChapterButton } from "@/components/(next-chapter-button)";
 import * as Speech from "expo-speech";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+import { Audio } from "expo-av";
+
 const HEADER_HEIGHT = 420;
 const MIN_HEADER_HEIGHT = 160;
 
 /* GEMINI */
 const genAI = new GoogleGenerativeAI(
-  process.env.EXPO_PUBLIC_GOOGLE_API_KEY || ""
+  process.env.EXPO_PUBLIC_GOOGLE_API_KEY || "",
 );
 
 export const geminiModel = genAI.getGenerativeModel({
@@ -38,6 +40,8 @@ export default function StorieScreen() {
   const router = useRouter();
   const scrollY = useRef(new Animated.Value(0)).current;
 
+  const backgroundSound = useRef<Audio.Sound | null>(null);
+
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -48,6 +52,43 @@ export default function StorieScreen() {
     title,
     storie,
   });
+
+  async function playBackgroundMusic() {
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      staysActiveInBackground: false,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+    });
+
+    const { sound } = await Audio.Sound.createAsync(
+      require("@/assets/sounds/background.mp3"),
+      {
+        isLooping: true,
+        volume: 0.15, // bem baixo para não competir com a voz
+      },
+    );
+
+    backgroundSound.current = sound;
+
+    await sound.setVolumeAsync(0);
+    await sound.playAsync();
+
+    for (let v = 0; v <= 0.15; v += 0.03) {
+      await sound.setVolumeAsync(v);
+      await new Promise((r) => setTimeout(r, 100));
+    }
+
+    await sound.playAsync();
+  }
+
+  async function stopBackgroundMusic() {
+    if (backgroundSound.current) {
+      await backgroundSound.current.stopAsync();
+      await backgroundSound.current.unloadAsync();
+      backgroundSound.current = null;
+    }
+  }
 
   /* =========================
      SKELETON ANIMATION
@@ -68,7 +109,7 @@ export default function StorieScreen() {
             duration: 700,
             useNativeDriver: true,
           }),
-        ])
+        ]),
       ).start();
     } else {
       skeletonAnim.stopAnimation();
@@ -152,7 +193,7 @@ export default function StorieScreen() {
 
     Alert.alert(
       "Translation unavailable",
-      "The translation service is overloaded. Please try again later."
+      "The translation service is overloaded. Please try again later.",
     );
 
     return text;
@@ -220,8 +261,18 @@ export default function StorieScreen() {
   /* =========================
      SPEECH
   ========================== */
-  const handleSpeak = () => {
+  const handleSpeak = async () => {
     const text = translatedText.storie;
+
+    if (isPlay) {
+      Speech.stop();
+      stopBackgroundMusic();
+      setIsPlay(false);
+
+      return;
+    }
+
+    await playBackgroundMusic();
 
     if (!text) return;
 
@@ -243,11 +294,16 @@ export default function StorieScreen() {
 
       Speech.speak(text, {
         language,
+        rate: 0.9,
         pitch: 1.0,
-        rate: 1.0,
-        onDone: () => setIsPlay(false),
-        onStopped: () => setIsPlay(false),
-        onError: () => setIsPlay(false),
+        onDone: () => {
+          stopBackgroundMusic();
+          setIsPlay(false);
+        },
+        onStopped: () => {
+          stopBackgroundMusic();
+          setIsPlay(false);
+        },
       });
     } else {
       Speech.stop();
@@ -263,6 +319,8 @@ export default function StorieScreen() {
           style={styles.backButtonWrapper}
           onPress={() => {
             Speech.stop();
+            stopBackgroundMusic();
+
             router.back();
           }}
         >
@@ -334,7 +392,7 @@ export default function StorieScreen() {
           }}
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { useNativeDriver: false }
+            { useNativeDriver: false },
           )}
           scrollEventThrottle={16}
         >
