@@ -26,9 +26,17 @@ import { NextChapterButton } from "@/components/(next-chapter-button)";
 import * as Speech from "expo-speech";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-import { Audio } from "expo-av";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import GuidedReadingModal from "@/components/guided-reading-modal";
+
+import TrackPlayer, {
+  Capability,
+  Event,
+  State,
+  useTrackPlayerEvents,
+} from "react-native-track-player";
+
+import { useLockScreenPlayer } from "@/hooks/LockScreenPlayer";
 
 /* =========================
    CONSTANTS
@@ -63,62 +71,85 @@ export default function StorieScreen() {
   const scrollY = useRef(new Animated.Value(0)).current;
   const currentScrollY = useRef(0);
   const scrollRef = useRef<Animated.ScrollView>(null);
-  const backgroundSound = useRef<Audio.Sound | null>(null);
   const sentencePositions = useRef<number[]>([]);
-
-  const [isSpeaking, setIsSpeaking] = useState(false);
+  const speakSessionRef = useRef(0);
 
   /* =========================
      STATE
   ========================== */
   const [isTranslating, setIsTranslating] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
-
   const [isPlay, setIsPlay] = useState(false);
   const [activeSentenceIndex, setActiveSentenceIndex] = useState(-1);
-  const speakSessionRef = useRef(0);
-
   const [translatedText, setTranslatedText] = useState({
     title,
     storie,
   });
 
-  async function playBackgroundMusic() {
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      staysActiveInBackground: true,
-      shouldDuckAndroid: true,
-      playsInSilentModeIOS: true,
-      playThroughEarpieceAndroid: false,
-    });
+  const lockScreen = useLockScreenPlayer({
+    title: translatedText.title,
+    artist: "Magic World",
+    artwork: thumbnail,
+    url: require("@/assets/sounds/background.mp3"),
+    volume: 0.09,
+  });
 
-    const { sound } = await Audio.Sound.createAsync(
-      require("@/assets/sounds/background.mp3"),
-      {
-        isLooping: true,
-        volume: 0.15, // bem baixo para não competir com a voz
-      },
-    );
+  /* =========================
+     TRACKPLAYER INIT
+  ========================== */
+  useEffect(() => {
+    (async () => {
+      await TrackPlayer.setupPlayer();
 
-    backgroundSound.current = sound;
+      await TrackPlayer.updateOptions({
+        stopWithApp: false,
+        capabilities: [Capability.Play, Capability.Pause, Capability.Stop],
+        compactCapabilities: [Capability.Play, Capability.Pause],
+        notificationCapabilities: [
+          Capability.Play,
+          Capability.Pause,
+          Capability.Stop,
+        ],
+        alwaysShowNotification: true, // mantém na lock scree
+      });
 
-    await sound.setVolumeAsync(0);
+      await TrackPlayer.add([
+        {
+          id: "bg-music",
+          url: require("@/assets/sounds/background.mp3"),
+          title: "Background Music",
+          artist: "Magic World",
+        },
+      ]);
 
-    for (let v = 0; v <= 0.15; v += 0.03) {
-      await sound.setVolumeAsync(v);
-      await new Promise((r) => setTimeout(r, 100));
-    }
+      await TrackPlayer.setVolume(0.15);
+    })();
+  }, []);
 
-    await sound.playAsync();
-  }
+  /* =========================
+     TRACKPLAYER EVENTS
+  ========================== */
+  useTrackPlayerEvents(
+    [Event.PlaybackQueueEnded, Event.RemotePlay, Event.RemotePause],
+    async (event) => {
+      if (event.type === Event.PlaybackQueueEnded) {
+        await TrackPlayer.seekTo(0);
+        await TrackPlayer.play();
+      }
 
-  async function stopBackgroundMusic() {
-    if (backgroundSound.current) {
-      await backgroundSound.current.stopAsync();
-      await backgroundSound.current.unloadAsync();
-      backgroundSound.current = null;
-    }
-  }
+      if (event.type === Event.RemotePlay) {
+        await TrackPlayer.play();
+        handleSpeak(true); // resume speech if paused
+      }
+
+      if (event.type === Event.RemotePause) {
+        await TrackPlayer.pause();
+        Speech.stop();
+        setIsPlay(false);
+        setActiveSentenceIndex(-1);
+      }
+    },
+  );
 
   /* =========================
      SKELETON ANIMATION
@@ -167,8 +198,9 @@ export default function StorieScreen() {
       ]}
     />
   );
+
   /* =========================
-     SPLIT EM FRASES
+     SENTENCES
   ========================== */
   const sentences = useMemo(() => {
     if (!translatedText.storie) return [];
@@ -296,38 +328,31 @@ export default function StorieScreen() {
   };
 
   /* =========================
-     SPEECH + TIMELINE
+     SPEECH + TRACKPLAYER
   ========================== */
-  const handleSpeak = async () => {
-    // 🔴 Se estiver tocando → invalida sessão e para tudo
-    if (isPlay) {
-      speakSessionRef.current += 1; // ❌ invalida callbacks antigos
-
+  const handleSpeak = async (resume = false) => {
+    // Se já está tocando, pausa tudo
+    if (isPlay && !resume) {
+      speakSessionRef.current += 1;
       Speech.stop();
-      await stopBackgroundMusic();
-
+      await TrackPlayer.pause();
       setIsPlay(false);
       setActiveSentenceIndex(-1);
       return;
     }
 
-    // 🟢 Sempre começa do zero
+    // Inicia do zero
     if (!sentences.length) return;
 
-    // 🔄 Reset geral
     speakSessionRef.current += 1;
     const sessionId = speakSessionRef.current;
-
-    Speech.stop();
-    await stopBackgroundMusic();
 
     setIsPlay(true);
     setActiveSentenceIndex(0);
 
-    await playBackgroundMusic();
+    await TrackPlayer.play();
 
     const langCode = franc(translatedText.storie as string);
-
     const language =
       {
         eng: "en-US",
@@ -338,15 +363,12 @@ export default function StorieScreen() {
         hin: "hi-IN",
       }[langCode] ?? "en-US";
 
-    let index = 0;
+    let index = resume ? activeSentenceIndex : 0;
 
     const speakNext = () => {
-      // 🛑 Sessão inválida? aborta
       if (speakSessionRef.current !== sessionId) return;
-
-      // 🏁 Fim da história
       if (index >= sentences.length) {
-        stopBackgroundMusic();
+        TrackPlayer.pause();
         setIsPlay(false);
         setActiveSentenceIndex(-1);
         return;
@@ -360,15 +382,12 @@ export default function StorieScreen() {
         pitch: 1.0,
         onDone: () => {
           if (speakSessionRef.current !== sessionId) return;
-
           index += 1;
           speakNext();
         },
         onStopped: () => {
-          // só para se for a sessão atual
           if (speakSessionRef.current !== sessionId) return;
-
-          stopBackgroundMusic();
+          TrackPlayer.pause();
           setIsPlay(false);
           setActiveSentenceIndex(-1);
         },
@@ -383,12 +402,9 @@ export default function StorieScreen() {
   ========================== */
   useEffect(() => {
     if (!isPlay || activeSentenceIndex < 0) return;
-
-    // ⛔ só scrolla a cada 3 frases
     if (activeSentenceIndex % 3 !== 0) return;
 
     const sentenceY = sentencePositions.current[activeSentenceIndex];
-
     if (sentenceY == null) return;
 
     scrollRef.current?.scrollTo({
@@ -400,27 +416,22 @@ export default function StorieScreen() {
   const handlePlayPress = async () => {
     const hasSeen = await AsyncStorage.getItem("@guided_reading_seen");
 
+    await lockScreen.play();
+
     if (!hasSeen) {
       await AsyncStorage.setItem("@guided_reading_seen", "true");
       setShowGuidedModal(true);
       return;
     }
 
-    handleSpeak(); // sua função real de play
+    handleSpeak();
   };
 
   const stopAllAudio = async () => {
-    speakSessionRef.current += 1; // invalida callbacks antigos
+    speakSessionRef.current += 1;
 
     Speech.stop();
-
-    if (backgroundSound.current) {
-      try {
-        await backgroundSound.current.stopAsync();
-        await backgroundSound.current.unloadAsync();
-      } catch {}
-      backgroundSound.current = null;
-    }
+    await TrackPlayer.pause();
 
     setIsPlay(false);
     setActiveSentenceIndex(-1);
@@ -429,10 +440,10 @@ export default function StorieScreen() {
   useFocusEffect(
     useCallback(() => {
       return () => {
-        // 🚨 quando sai da tela (chapter change, back, push)
         stopAllAudio();
+        lockScreen.stop();
       };
-    }, []),
+    }, [lockScreen]),
   );
 
   /* =========================
@@ -446,9 +457,8 @@ export default function StorieScreen() {
           style={styles.backButtonWrapper}
           onPress={async () => {
             speakSessionRef.current += 1;
-
             Speech.stop();
-            await stopBackgroundMusic();
+            await TrackPlayer.pause();
 
             setIsPlay(false);
             setActiveSentenceIndex(-1);
@@ -540,7 +550,6 @@ export default function StorieScreen() {
                 <SkeletonBlock height={24} />
                 <SkeletonBlock height={24} />
                 <SkeletonBlock height={24} />
-
                 <SkeletonBlock height={24} />
                 <SkeletonBlock height={24} />
                 <SkeletonBlock height={24} />
@@ -640,7 +649,7 @@ const styles = StyleSheet.create({
   },
   skeleton: {
     borderRadius: 6,
-    backgroundColor: "rgba(255,255,255,0.35)", // mais visível no header
+    backgroundColor: "rgba(255,255,255,0.35)",
     marginBottom: 8,
   },
   sentence: {
