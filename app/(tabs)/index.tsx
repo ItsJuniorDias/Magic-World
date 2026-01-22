@@ -4,7 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { FlatList, Platform, ScrollView, StyleSheet, View } from "react-native";
 
 import { db } from "../../firebaseConfig";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "expo-router";
 import {
   addDoc,
@@ -264,9 +264,11 @@ Structure:
   );
 
   // 🔥 Mais vistas
-  const mostWatched = [...(query.data ?? [])].sort(
-    (a, b) => (b.views ?? 0) - (a.views ?? 0),
-  );
+  const mostWatched = useMemo(() => {
+    return [...(query.data ?? [])].sort(
+      (a, b) => (b.views ?? 0) - (a.views ?? 0),
+    );
+  }, [query.data]);
 
   // 🗂 Categoria (exemplo: Fairy Tale)
   const categoryStories = [
@@ -284,50 +286,62 @@ Structure:
   ];
 
   // 🕒 Publicadas recentemente
-  const recentlyPublished = [...(query.data ?? [])].sort(
-    (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
-  );
+  const recentlyPublished = useMemo(() => {
+    return [...(query.data ?? [])].sort(
+      (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
+    );
+  }, [query.data]);
 
-  const Section = ({
+  const SectionComponent = ({
     title,
     data,
     variant,
+    loading,
+    renderItem,
   }: {
     title: string;
     data: any[];
     variant?: "default" | "category" | "recent";
-  }) => (
-    <View style={styles.section}>
-      <Text
-        title={title}
-        fontFamily="bold"
-        fontSize={24}
-        color="#FFFFFF"
-        style={{ marginBottom: 12, marginLeft: 24 }}
-      />
+    loading: boolean;
+    renderItem: any;
+  }) => {
+    return (
+      <View style={styles.section}>
+        <Text
+          title={title}
+          fontFamily="bold"
+          fontSize={24}
+          color="#FFFFFF"
+          style={{ marginBottom: 12, marginLeft: 24 }}
+        />
 
-      {query.isLoading ? (
-        <FlatList
-          data={[{}, {}, {}, {}, {}]}
-          renderItem={() => <CardSkeleton variant={variant} />}
-          horizontal
-          keyExtractor={(item) => item.toString()}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingLeft: 24 }}
-        />
-      ) : (
-        <FlatList
-          data={data}
-          renderItem={(item) => renderItem({ ...item, variant })}
-          horizontal
-          initialNumToRender={10}
-          keyExtractor={(item) => item.id}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingLeft: 24 }}
-        />
-      )}
-    </View>
-  );
+        {loading ? (
+          <FlatList
+            data={[1, 2, 3, 4, 5]}
+            renderItem={() => <CardSkeleton variant={variant} />}
+            horizontal
+            keyExtractor={(item) => item.toString()}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingLeft: 24 }}
+          />
+        ) : (
+          <FlatList
+            data={data}
+            renderItem={(item) => renderItem({ ...item, variant })}
+            horizontal
+            initialNumToRender={10}
+            keyExtractor={(item) => item.id}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingLeft: 24 }}
+          />
+        )}
+      </View>
+    );
+  };
+
+  const Section = React.memo(SectionComponent);
+
+  Section.displayName = "Section";
 
   return (
     <>
@@ -337,14 +351,24 @@ Structure:
           title="Most Watched Stories"
           data={mostWatched}
           variant="default"
+          loading={query.isLoading}
+          renderItem={renderItem}
         />
 
-        <Section title="Categories" data={categoryStories} variant="category" />
+        <Section
+          title="Categories"
+          data={categoryStories}
+          variant="category"
+          loading={false}
+          renderItem={renderItem}
+        />
 
         <Section
           title="Recently Published"
           data={recentlyPublished}
           variant="recent"
+          loading={query.isLoading}
+          renderItem={renderItem}
         />
       </ScrollView>
     </>

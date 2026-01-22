@@ -1,6 +1,8 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { TouchableOpacity, View } from "react-native";
+import { TouchableOpacity, Animated } from "react-native";
 import { FontAwesome6 } from "@expo/vector-icons";
+
+import { useEffect, useRef, useState } from "react";
 
 import { CardContainer, ImageCard, Gradient } from "./styles";
 import Text from "../text";
@@ -25,6 +27,32 @@ export default function Card({
   onToggleFavorite,
   onPress,
 }: CardProps) {
+  const [localFavorite, setLocalFavorite] = useState(isFavorite);
+
+  useEffect(() => {
+    setLocalFavorite(isFavorite);
+  }, [isFavorite]);
+
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    scaleAnim.setValue(1);
+
+    if (localFavorite) {
+      Animated.sequence([
+        Animated.spring(scaleAnim, {
+          toValue: 1.4,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 3,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [localFavorite]);
+
   return (
     <CardContainer onPress={onPress} activeOpacity={0.85} variant={variant}>
       <ImageCard source={{ uri: thumbnail }} />
@@ -32,8 +60,12 @@ export default function Card({
       {/* FAVORITE BUTTON */}
       {onToggleFavorite && variant !== "category" && (
         <TouchableOpacity
-          onPress={onToggleFavorite}
+          onPressIn={() => {
+            setLocalFavorite((prev) => !prev);
+            onToggleFavorite?.();
+          }}
           activeOpacity={0.7}
+          hitSlop={10}
           style={{
             position: "absolute",
             top: 10,
@@ -41,12 +73,18 @@ export default function Card({
             zIndex: 10,
           }}
         >
-          <FontAwesome6
-            name={isFavorite ? "heart" : "heart"}
-            solid={isFavorite}
-            size={24}
-            color={isFavorite ? Colors.light.red : "#fff"}
-          />
+          <Animated.View
+            style={{
+              transform: [{ scale: scaleAnim }],
+            }}
+          >
+            <FontAwesome6
+              name="heart"
+              size={24}
+              solid={localFavorite}
+              color={localFavorite ? Colors.light.red : "#fff"}
+            />
+          </Animated.View>
         </TouchableOpacity>
       )}
 
