@@ -6,8 +6,8 @@ import {
   Dimensions,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { useRef, useState, useEffect, useMemo } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useRef, useState, useEffect, useMemo, useCallback } from "react";
 
 import { Colors } from "@/constants/theme";
 import Text from "@/components/text";
@@ -86,8 +86,9 @@ export default function StorieScreen() {
   async function playBackgroundMusic() {
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: false,
-      staysActiveInBackground: false,
+      staysActiveInBackground: true,
       shouldDuckAndroid: true,
+      playsInSilentModeIOS: true,
       playThroughEarpieceAndroid: false,
     });
 
@@ -102,7 +103,6 @@ export default function StorieScreen() {
     backgroundSound.current = sound;
 
     await sound.setVolumeAsync(0);
-    await sound.playAsync();
 
     for (let v = 0; v <= 0.15; v += 0.03) {
       await sound.setVolumeAsync(v);
@@ -409,6 +409,32 @@ export default function StorieScreen() {
     handleSpeak(); // sua função real de play
   };
 
+  const stopAllAudio = async () => {
+    speakSessionRef.current += 1; // invalida callbacks antigos
+
+    Speech.stop();
+
+    if (backgroundSound.current) {
+      try {
+        await backgroundSound.current.stopAsync();
+        await backgroundSound.current.unloadAsync();
+      } catch {}
+      backgroundSound.current = null;
+    }
+
+    setIsPlay(false);
+    setActiveSentenceIndex(-1);
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        // 🚨 quando sai da tela (chapter change, back, push)
+        stopAllAudio();
+      };
+    }, []),
+  );
+
   /* =========================
      UI
   ========================== */
@@ -509,6 +535,12 @@ export default function StorieScreen() {
           <ContainerStorie>
             {isTranslating ? (
               <>
+                <SkeletonBlock height={24} />
+                <SkeletonBlock height={24} />
+                <SkeletonBlock height={24} />
+                <SkeletonBlock height={24} />
+                <SkeletonBlock height={24} />
+
                 <SkeletonBlock height={24} />
                 <SkeletonBlock height={24} />
                 <SkeletonBlock height={24} />

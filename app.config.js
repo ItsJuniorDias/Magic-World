@@ -13,6 +13,7 @@ export default {
       supportsTablet: true,
       bundleIdentifier: "com.alexandre.juniort10.magicworld",
       infoPlist: {
+        UIBackgroundModes: ["audio"],
         NSAppTransportSecurity: {
           NSAllowsArbitraryLoads: true,
         },
