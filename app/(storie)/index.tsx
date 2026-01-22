@@ -39,6 +39,7 @@ import TrackPlayer, {
 import { useLockScreenPlayer } from "@/hooks/LockScreenPlayer";
 
 import * as Notifications from "expo-notifications";
+import { BACKGROUND_TRACKS } from "@/constants/backgroundTracks";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -90,7 +91,9 @@ export default function StorieScreen() {
      STATE
   ========================== */
   const [isTranslating, setIsTranslating] = useState(false);
+
   const [selectedIndex, setSelectedIndex] = useState(0);
+
   const [isPlay, setIsPlay] = useState(false);
   const [activeSentenceIndex, setActiveSentenceIndex] = useState(-1);
   const [translatedText, setTranslatedText] = useState({
@@ -98,13 +101,41 @@ export default function StorieScreen() {
     storie,
   });
 
+  const [musicIndex, setMusicIndex] = useState(0);
+
+  console.log(musicIndex, "selectedIndexMusic");
+
   const { pause, play, stop } = useLockScreenPlayer({
     title: translatedText.title,
     artist: "Magic World",
     artwork: thumbnail,
-    url: require("@/assets/sounds/background.mp3"),
+    url: BACKGROUND_TRACKS[musicIndex].uri,
     volume: 0.15,
   });
+
+  useEffect(() => {
+    const changeBackgroundMusic = async () => {
+      const state = await TrackPlayer.getState();
+
+      // limpa a fila
+      await TrackPlayer.reset();
+
+      // adiciona a nova música
+      await TrackPlayer.add({
+        id: `bg-${musicIndex}`,
+        url: BACKGROUND_TRACKS[musicIndex].uri,
+        title: "Ambient Sound",
+        artist: "Magic World",
+      });
+
+      // se estava tocando, continua tocando
+      if (state === State.Playing) {
+        await TrackPlayer.play();
+      }
+    };
+
+    changeBackgroundMusic();
+  }, [musicIndex]);
 
   const notifyPaywall = async () => {
     // 1. pedir permissão
@@ -359,10 +390,13 @@ export default function StorieScreen() {
   const renderContextMenu = () => {
     const map = ["en", "es", "pt", "fr", "zh", "hi"];
 
+    const musicOptions = BACKGROUND_TRACKS.map((t) => t.title);
+
     return (
       <Host style={{ width: 48, height: 48 }}>
         <ContextMenu>
           <ContextMenu.Items>
+            {/* 🌍 TRANSLATE */}
             <Picker
               label="Translate"
               options={[
@@ -380,12 +414,25 @@ export default function StorieScreen() {
                 handleTranslateAll(map[index]);
               }}
             />
+
+            {/* 🎵 AMBIENT MUSIC */}
+            <Picker
+              label="Ambient Sound"
+              options={musicOptions}
+              variant="menu"
+              selectedIndex={musicIndex}
+              onOptionSelected={async ({ nativeEvent: { index } }) => {
+                setMusicIndex(index);
+
+                await TrackPlayer.stop();
+              }}
+            />
           </ContextMenu.Items>
 
           <ContextMenu.Trigger>
             <GlassView style={styles.glassButton} isInteractive>
               <FontAwesome6
-                name={isTranslating ? "spinner" : "language"}
+                name={isTranslating ? "spinner" : "ellipsis-vertical"}
                 size={20}
                 color={Colors.dark.text}
               />
