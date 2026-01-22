@@ -27,6 +27,8 @@ import * as Speech from "expo-speech";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 import { Audio } from "expo-av";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import GuidedReadingModal from "@/components/guided-reading-modal";
 
 /* =========================
    CONSTANTS
@@ -50,6 +52,8 @@ export const geminiModel = genAI.getGenerativeModel({
 export default function StorieScreen() {
   const { storie, title, thumbnail, currentIndex, storyId } =
     useLocalSearchParams();
+
+  const [showGuidedModal, setShowGuidedModal] = useState(false);
 
   const router = useRouter();
 
@@ -393,6 +397,18 @@ export default function StorieScreen() {
     });
   }, [activeSentenceIndex, isPlay]);
 
+  const handlePlayPress = async () => {
+    const hasSeen = await AsyncStorage.getItem("@guided_reading_seen");
+
+    if (!hasSeen) {
+      await AsyncStorage.setItem("@guided_reading_seen", "true");
+      setShowGuidedModal(true);
+      return;
+    }
+
+    handleSpeak(); // sua função real de play
+  };
+
   /* =========================
      UI
   ========================== */
@@ -429,7 +445,7 @@ export default function StorieScreen() {
         </Pressable>
 
         {/* PLAY */}
-        <Pressable style={styles.playButtonWrapper} onPress={handleSpeak}>
+        <Pressable style={styles.playButtonWrapper} onPress={handlePlayPress}>
           <GlassView style={styles.glassButton} isInteractive>
             <FontAwesome6
               name={isPlay ? "stop" : "play"}
@@ -438,6 +454,7 @@ export default function StorieScreen() {
             />
           </GlassView>
         </Pressable>
+
         {/* TITLE */}
         <Animated.View
           style={[
@@ -529,6 +546,14 @@ export default function StorieScreen() {
       <NextChapterButton
         storyId={String(storyId)}
         currentIndex={Number(currentIndex)}
+      />
+
+      <GuidedReadingModal
+        visible={showGuidedModal}
+        onClose={() => {
+          setShowGuidedModal(false);
+          handleSpeak();
+        }}
       />
     </>
   );
