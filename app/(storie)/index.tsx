@@ -37,6 +37,19 @@ import TrackPlayer, {
 } from "react-native-track-player";
 
 import { useLockScreenPlayer } from "@/hooks/LockScreenPlayer";
+
+import * as Notifications from "expo-notifications";
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
+
 /* =========================
    CONSTANTS
 ========================= */
@@ -85,55 +98,64 @@ export default function StorieScreen() {
     storie,
   });
 
-  const lockScreen = useLockScreenPlayer({
+  const { pause, play, stop } = useLockScreenPlayer({
     title: translatedText.title,
     artist: "Magic World",
     artwork: thumbnail,
     url: require("@/assets/sounds/background.mp3"),
-    volume: 0.09,
+    volume: 0.15,
   });
 
-  /* =========================
-     TRACKPLAYER INIT
-  ========================== */
-  useEffect(() => {
-    (async () => {
-      await TrackPlayer.setupPlayer();
+  const notifyPaywall = async () => {
+    // 1. pedir permissão
+    const { status } = await Notifications.getPermissionsAsync();
 
-      await TrackPlayer.updateOptions({
-        stopWithApp: true,
-        alwaysPauseOnInterruption: true,
-        capabilities: [
-          TrackPlayer.CAPABILITY_PLAY,
-          TrackPlayer.CAPABILITY_PAUSE,
-          TrackPlayer.CAPABILITY_SKIP_TO_NEXT,
-          TrackPlayer.CAPABILITY_SKIP_TO_PREVIOUS,
-          TrackPlayer.CAPABILITY_STOP,
-        ],
-        compactCapabilities: [
-          TrackPlayer.CAPABILITY_PLAY,
-          TrackPlayer.CAPABILITY_PAUSE,
-        ],
-        notificationCapabilities: [
-          TrackPlayer.CAPABILITY_PLAY,
-          TrackPlayer.CAPABILITY_PAUSE,
-          TrackPlayer.CAPABILITY_STOP,
-        ],
-      });
+    console.log(status, "notification status");
 
-      await TrackPlayer.add([
-        {
-          id: "bg-music",
-          url: require("@/assets/sounds/background.mp3"),
-          title: title,
-          artist: "Magic World",
-          artwork: thumbnail,
-        },
-      ]);
+    let finalStatus = status;
 
-      await TrackPlayer.setVolume(0.15);
-    })();
-  }, []);
+    if (status !== "granted") {
+      const permission = await Notifications.requestPermissionsAsync();
+      finalStatus = permission.status;
+    }
+
+    if (finalStatus !== "granted") {
+      console.log("Notification permission not granted");
+      return;
+    }
+
+    // 2. disparar notificação
+    const id = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "Next Chapter Locked 🔒",
+        body: "Subscribe to access the next chapter.",
+        sound: true,
+      },
+      trigger: null, // imediato
+    });
+
+    console.log("Notification scheduled with ID:", id);
+  };
+
+  const handleNextChapter = async () => {
+    // checar paywall
+    const hasAccess = await AsyncStorage.getItem("@user_has_access");
+
+    console.log(!hasAccess, "hasAccess");
+
+    if (!hasAccess) {
+      // sem acesso → pausa tudo
+      await pauseAllAudio();
+
+      // dispara notificação local
+      await notifyPaywall();
+
+      return;
+    }
+
+    // Se tiver acesso → avança normalmente
+    // router.push(`/story/${Number(currentIndex) + 1}`);
+  };
 
   /* =========================
      TRACKPLAYER EVENTS
@@ -141,28 +163,59 @@ export default function StorieScreen() {
 
   const pauseAllAudio = useCallback(async () => {
     speakSessionRef.current += 1; // interrompe sessão atual do speech
+
     Speech.stop(); // pausa a fala
-    await TrackPlayer.pause(); // pausa a música
+    await pause(); // pausa a música
 
     setIsPlay(false);
     setActiveSentenceIndex(-1);
   }, []);
 
   useTrackPlayerEvents(
-    [Event.PlaybackQueueEnded, Event.RemotePlay, Event.RemotePause],
+    [
+      Event.PlaybackQueueEnded,
+      Event.RemotePlay,
+      Event.RemotePause,
+      Event.RemoteNext,
+      Event.RemotePrevious,
+    ],
     async (event) => {
       if (event.type === Event.PlaybackQueueEnded) {
         await TrackPlayer.seekTo(0);
-        await TrackPlayer.play();
+        await play();
       }
 
       if (event.type === Event.RemotePlay) {
-        await TrackPlayer.play();
-        handleSpeak(true); // resume speech
+        await play();
+
+        handleSpeak();
+
+        // resume speech
       }
 
       if (event.type === Event.RemotePause) {
-        await pauseAllAudio(); // chama a função unificada
+        await pauseAllAudio();
+      }
+
+      if (event.type === Event.RemotePrevious) {
+        // quando clico no botão e voltar quero a começe do zero tanto a musica quando a voz
+        const isPlaying = (await TrackPlayer.getState()) === State.Playing;
+
+        await TrackPlayer.seekTo(0);
+
+        if (isPlaying) {
+          await TrackPlayer.play();
+        }
+
+        handleSpeak(true); // resume speech from beginning
+
+        // scroll to top
+
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+      }
+
+      if (event.type === Event.RemoteNext) {
+        await handleNextChapter();
       }
     },
   );
@@ -434,7 +487,7 @@ export default function StorieScreen() {
   const handlePlayPress = async () => {
     const hasSeen = await AsyncStorage.getItem("@guided_reading_seen");
 
-    await lockScreen.play();
+    await TrackPlayer.play();
 
     if (!hasSeen) {
       await AsyncStorage.setItem("@guided_reading_seen", "true");
@@ -459,9 +512,9 @@ export default function StorieScreen() {
     useCallback(() => {
       return () => {
         stopAllAudio();
-        lockScreen.stop();
+        stop();
       };
-    }, [lockScreen]),
+    }, [stop]),
   );
 
   /* =========================
@@ -476,7 +529,7 @@ export default function StorieScreen() {
           onPress={async () => {
             speakSessionRef.current += 1;
             Speech.stop();
-            await TrackPlayer.pause();
+            await pause();
 
             setIsPlay(false);
             setActiveSentenceIndex(-1);

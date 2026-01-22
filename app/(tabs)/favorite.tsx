@@ -38,7 +38,7 @@ export default function FavoriteScreen() {
         stories: state.stories.map((story) =>
           story.storyId === storyId
             ? { ...story, views: (story.views ?? 0) + 1 }
-            : story
+            : story,
         ),
       }));
     } catch (err) {
@@ -72,7 +72,7 @@ export default function FavoriteScreen() {
         },
       });
     },
-    [stories]
+    [stories],
   );
 
   /* ---------------------------------------------------
@@ -94,7 +94,8 @@ export default function FavoriteScreen() {
    * -------------------------------------------------- */
 
   const renderItem = ({ item }: any) => {
-    const isFavorite = likedIds.includes(item.storyId);
+    const id = item.storyId || item.id; // garante id único
+    const isFavorite = likedIds.includes(id);
 
     return (
       <Card
@@ -103,16 +104,28 @@ export default function FavoriteScreen() {
         views={item.views}
         isFavorite={isFavorite}
         onToggleFavorite={() => {
-          toggleLike({
-            storyId: item.storyId,
-            title: item.title,
-            thumbnail: item.thumbnail,
-            chapter: item.chapter ?? [],
-          });
+          // Atualiza likedIds na store
+          useLikedStore.setState((state) => {
+            const newLikedIds = state.likedIds.includes(id)
+              ? state.likedIds.filter((i) => i !== id) // remove se já é favorito
+              : [...state.likedIds, id]; // adiciona se não é favorito
 
-          loadLikedStories();
+            // Atualiza likedStories localmente para render imediato
+            const newLikedStories = state.likedStories.filter(
+              (s) => s.storyId !== id && s.id !== id,
+            );
+            if (!state.likedIds.includes(id)) {
+              // adiciona item se estava sendo adicionado
+              newLikedStories.push(item);
+            }
+
+            return {
+              likedIds: newLikedIds,
+              likedStories: newLikedStories,
+            };
+          });
         }}
-        onPress={() => navigateToStory(item.storyId ?? item.id)}
+        onPress={() => navigateToStory(id)}
       />
     );
   };

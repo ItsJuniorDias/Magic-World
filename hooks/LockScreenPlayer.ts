@@ -23,22 +23,37 @@ export function useLockScreenPlayer({
   // Setup inicial
   useEffect(() => {
     let playbackEndedListener: any;
+
     async function setupPlayer() {
       await TrackPlayer.setupPlayer();
+
       await TrackPlayer.updateOptions({
         stopWithApp: false,
-        capabilities: [Capability.Play, Capability.Pause, Capability.Stop],
-        compactCapabilities: [Capability.Play, Capability.Pause],
+        capabilities: [
+          Capability.Play, 
+          Capability.Pause, 
+          Capability.Stop, 
+          Capability.SkipToPrevious, 
+          Capability.SkipToNext 
+        ],
+        compactCapabilities: [
+          Capability.Play, 
+          Capability.Pause,   
+          Capability.Stop,     
+          Capability.SkipToPrevious, 
+          Capability.SkipToNext 
+        ],
         alwaysShowNotification: true,
       });
 
-      await TrackPlayer.add({
-        id: "track",
+      await TrackPlayer.add([{
+        id: "track1",
         url,
         title,
         artist,
         artwork,
-      });
+      } 
+    ]);
 
       playbackEndedListener = TrackPlayer.addEventListener(Event.PlaybackQueueEnded, async () => {
         await TrackPlayer.seekTo(0);
@@ -61,7 +76,7 @@ export function useLockScreenPlayer({
   const play = async () => {
     const current = await TrackPlayer.getCurrentTrack();
     
-    if (current == null) await TrackPlayer.skip("track");
+    if (current == null) await TrackPlayer.skip("track1");
     await TrackPlayer.play();
   };
 

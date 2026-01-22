@@ -8,6 +8,11 @@ export default {
     scheme: "magicworld",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
+    extra: {
+      eas: {
+        projectId: "2ed87d70-4ddc-404a-b9eb-2478b82fd7d3",
+      },
+    },
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.alexandre.juniort10.magicworld",

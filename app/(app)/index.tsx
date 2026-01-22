@@ -14,6 +14,8 @@ import Purchases from "react-native-purchases";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLikedStore } from "@/store/useLikedStore";
 
+import * as Notifications from "expo-notifications";
+
 const { height } = Dimensions.get("window");
 
 export default function OnboardingScreen() {
@@ -68,6 +70,13 @@ export default function OnboardingScreen() {
 
   useEffect(() => {
     init();
+
+    const loadNotification = async () => {
+      await Notifications.getPermissionsAsync();
+    };
+
+    loadNotification();
+
     // saveProStatus(false);
 
     // Platform-specific API keys
