@@ -37,7 +37,6 @@ import TrackPlayer, {
 } from "react-native-track-player";
 
 import { useLockScreenPlayer } from "@/hooks/LockScreenPlayer";
-
 /* =========================
    CONSTANTS
 ========================= */
@@ -102,23 +101,33 @@ export default function StorieScreen() {
       await TrackPlayer.setupPlayer();
 
       await TrackPlayer.updateOptions({
-        stopWithApp: false,
-        capabilities: [Capability.Play, Capability.Pause, Capability.Stop],
-        compactCapabilities: [Capability.Play, Capability.Pause],
-        notificationCapabilities: [
-          Capability.Play,
-          Capability.Pause,
-          Capability.Stop,
+        stopWithApp: true,
+        alwaysPauseOnInterruption: true,
+        capabilities: [
+          TrackPlayer.CAPABILITY_PLAY,
+          TrackPlayer.CAPABILITY_PAUSE,
+          TrackPlayer.CAPABILITY_SKIP_TO_NEXT,
+          TrackPlayer.CAPABILITY_SKIP_TO_PREVIOUS,
+          TrackPlayer.CAPABILITY_STOP,
         ],
-        alwaysShowNotification: true, // mantém na lock scree
+        compactCapabilities: [
+          TrackPlayer.CAPABILITY_PLAY,
+          TrackPlayer.CAPABILITY_PAUSE,
+        ],
+        notificationCapabilities: [
+          TrackPlayer.CAPABILITY_PLAY,
+          TrackPlayer.CAPABILITY_PAUSE,
+          TrackPlayer.CAPABILITY_STOP,
+        ],
       });
 
       await TrackPlayer.add([
         {
           id: "bg-music",
           url: require("@/assets/sounds/background.mp3"),
-          title: "Background Music",
+          title: title,
           artist: "Magic World",
+          artwork: thumbnail,
         },
       ]);
 
@@ -129,6 +138,16 @@ export default function StorieScreen() {
   /* =========================
      TRACKPLAYER EVENTS
   ========================== */
+
+  const pauseAllAudio = useCallback(async () => {
+    speakSessionRef.current += 1; // interrompe sessão atual do speech
+    Speech.stop(); // pausa a fala
+    await TrackPlayer.pause(); // pausa a música
+
+    setIsPlay(false);
+    setActiveSentenceIndex(-1);
+  }, []);
+
   useTrackPlayerEvents(
     [Event.PlaybackQueueEnded, Event.RemotePlay, Event.RemotePause],
     async (event) => {
@@ -139,14 +158,11 @@ export default function StorieScreen() {
 
       if (event.type === Event.RemotePlay) {
         await TrackPlayer.play();
-        handleSpeak(true); // resume speech if paused
+        handleSpeak(true); // resume speech
       }
 
       if (event.type === Event.RemotePause) {
-        await TrackPlayer.pause();
-        Speech.stop();
-        setIsPlay(false);
-        setActiveSentenceIndex(-1);
+        await pauseAllAudio(); // chama a função unificada
       }
     },
   );
@@ -335,6 +351,7 @@ export default function StorieScreen() {
     if (isPlay && !resume) {
       speakSessionRef.current += 1;
       Speech.stop();
+
       await TrackPlayer.pause();
       setIsPlay(false);
       setActiveSentenceIndex(-1);
@@ -377,6 +394,7 @@ export default function StorieScreen() {
       setActiveSentenceIndex(index);
 
       Speech.speak(sentences[index], {
+        volume: 1.0,
         language,
         rate: 0.9,
         pitch: 1.0,

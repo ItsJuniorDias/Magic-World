@@ -2,14 +2,13 @@ export default {
   expo: {
     name: "Magic World",
     slug: "magicworld",
-    version: "1.0.0",
+    version: "2.4.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "magicworld",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     ios: {
-      newArchEnabled: false,
       supportsTablet: true,
       bundleIdentifier: "com.alexandre.juniort10.magicworld",
       infoPlist: {

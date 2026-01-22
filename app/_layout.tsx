@@ -14,6 +14,9 @@ import {
   QueryClientProvider,
 } from "@tanstack/react-query";
 
+import TrackPlayer from "react-native-track-player";
+import trackPlayerService from "../services/trackPlayer";
+
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export const unstable_settings = {
@@ -21,6 +24,8 @@ export const unstable_settings = {
 };
 
 const queryClient = new QueryClient();
+
+TrackPlayer.registerPlaybackService(() => trackPlayerService);
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();

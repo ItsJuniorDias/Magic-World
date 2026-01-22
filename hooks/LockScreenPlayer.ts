@@ -22,6 +22,7 @@ export function useLockScreenPlayer({
 }) {
   // Setup inicial
   useEffect(() => {
+    let playbackEndedListener: any;
     async function setupPlayer() {
       await TrackPlayer.setupPlayer();
       await TrackPlayer.updateOptions({
@@ -39,23 +40,27 @@ export function useLockScreenPlayer({
         artwork,
       });
 
-      TrackPlayer.addEventListener(Event.PlaybackQueueEnded, async () => {
+      playbackEndedListener = TrackPlayer.addEventListener(Event.PlaybackQueueEnded, async () => {
         await TrackPlayer.seekTo(0);
         await TrackPlayer.play();
       });
 
       await TrackPlayer.setVolume(volume);
     }
-
     setupPlayer();
 
     return () => {
-      TrackPlayer.destroy();
+      if (playbackEndedListener && typeof playbackEndedListener.remove === "function") {
+        playbackEndedListener.remove();
+      }
+      TrackPlayer.reset();
     };
   }, []);
+  
 
   const play = async () => {
     const current = await TrackPlayer.getCurrentTrack();
+    
     if (current == null) await TrackPlayer.skip("track");
     await TrackPlayer.play();
   };
