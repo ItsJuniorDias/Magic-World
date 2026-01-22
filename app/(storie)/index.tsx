@@ -1,6 +1,13 @@
-import { Pressable, StyleSheet, Animated, Alert } from "react-native";
+import {
+  Pressable,
+  StyleSheet,
+  Animated,
+  Alert,
+  Dimensions,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 
 import { Colors } from "@/constants/theme";
 import Text from "@/components/text";
@@ -21,10 +28,17 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 import { Audio } from "expo-av";
 
+/* =========================
+   CONSTANTS
+========================= */
 const HEADER_HEIGHT = 420;
 const MIN_HEADER_HEIGHT = 160;
+const SCREEN_HEIGHT = Dimensions.get("window").height;
+const SAFE_MARGIN = 140;
 
-/* GEMINI */
+/* =========================
+   GEMINI
+========================= */
 const genAI = new GoogleGenerativeAI(
   process.env.EXPO_PUBLIC_GOOGLE_API_KEY || "",
 );
@@ -38,15 +52,27 @@ export default function StorieScreen() {
     useLocalSearchParams();
 
   const router = useRouter();
-  const scrollY = useRef(new Animated.Value(0)).current;
 
+  /* =========================
+     REFS
+  ========================== */
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const currentScrollY = useRef(0);
+  const scrollRef = useRef<Animated.ScrollView>(null);
   const backgroundSound = useRef<Audio.Sound | null>(null);
+  const sentencePositions = useRef<number[]>([]);
 
   const [isSpeaking, setIsSpeaking] = useState(false);
+
+  /* =========================
+     STATE
+  ========================== */
   const [isTranslating, setIsTranslating] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   const [isPlay, setIsPlay] = useState(false);
+  const [activeSentenceIndex, setActiveSentenceIndex] = useState(-1);
+  const speakSessionRef = useRef(0);
 
   const [translatedText, setTranslatedText] = useState({
     title,
@@ -137,6 +163,13 @@ export default function StorieScreen() {
       ]}
     />
   );
+  /* =========================
+     SPLIT EM FRASES
+  ========================== */
+  const sentences = useMemo(() => {
+    if (!translatedText.storie) return [];
+    return translatedText.storie.split(/(?<=[.!?])\s+/).filter(Boolean);
+  }, [translatedText.storie]);
 
   /* =========================
      HEADER ANIMATIONS
@@ -259,67 +292,124 @@ export default function StorieScreen() {
   };
 
   /* =========================
-     SPEECH
+     SPEECH + TIMELINE
   ========================== */
   const handleSpeak = async () => {
-    const text = translatedText.storie;
-
+    // 🔴 Se estiver tocando → invalida sessão e para tudo
     if (isPlay) {
-      Speech.stop();
-      stopBackgroundMusic();
-      setIsPlay(false);
+      speakSessionRef.current += 1; // ❌ invalida callbacks antigos
 
+      Speech.stop();
+      await stopBackgroundMusic();
+
+      setIsPlay(false);
+      setActiveSentenceIndex(-1);
       return;
     }
 
+    // 🟢 Sempre começa do zero
+    if (!sentences.length) return;
+
+    // 🔄 Reset geral
+    speakSessionRef.current += 1;
+    const sessionId = speakSessionRef.current;
+
+    Speech.stop();
+    await stopBackgroundMusic();
+
+    setIsPlay(true);
+    setActiveSentenceIndex(0);
+
     await playBackgroundMusic();
 
-    if (!text) return;
+    const langCode = franc(translatedText.storie as string);
 
-    if (!isPlay) {
-      setIsPlay(true);
-
-      const langCode = franc(text);
-
-      const langMap = {
+    const language =
+      {
         eng: "en-US",
         spa: "es-ES",
         por: "pt-BR",
         fra: "fr-FR",
         cmn: "zh-CN",
         hin: "hi-IN",
-      };
+      }[langCode] ?? "en-US";
 
-      const language = langMap[langCode as keyof typeof langMap] ?? "en-US"; // fallback padrão
+    let index = 0;
 
-      Speech.speak(text, {
+    const speakNext = () => {
+      // 🛑 Sessão inválida? aborta
+      if (speakSessionRef.current !== sessionId) return;
+
+      // 🏁 Fim da história
+      if (index >= sentences.length) {
+        stopBackgroundMusic();
+        setIsPlay(false);
+        setActiveSentenceIndex(-1);
+        return;
+      }
+
+      setActiveSentenceIndex(index);
+
+      Speech.speak(sentences[index], {
         language,
         rate: 0.9,
         pitch: 1.0,
         onDone: () => {
-          stopBackgroundMusic();
-          setIsPlay(false);
+          if (speakSessionRef.current !== sessionId) return;
+
+          index += 1;
+          speakNext();
         },
         onStopped: () => {
+          // só para se for a sessão atual
+          if (speakSessionRef.current !== sessionId) return;
+
           stopBackgroundMusic();
           setIsPlay(false);
+          setActiveSentenceIndex(-1);
         },
       });
-    } else {
-      Speech.stop();
-      setIsPlay(false);
-    }
+    };
+
+    speakNext();
   };
 
+  /* =========================
+     SCROLL INTELIGENTE
+  ========================== */
+  useEffect(() => {
+    if (!isPlay || activeSentenceIndex < 0) return;
+
+    // ⛔ só scrolla a cada 3 frases
+    if (activeSentenceIndex % 3 !== 0) return;
+
+    const sentenceY = sentencePositions.current[activeSentenceIndex];
+
+    if (sentenceY == null) return;
+
+    scrollRef.current?.scrollTo({
+      y: Math.max(sentenceY - SCREEN_HEIGHT / 2, 0),
+      animated: true,
+    });
+  }, [activeSentenceIndex, isPlay]);
+
+  /* =========================
+     UI
+  ========================== */
   return (
     <>
       <Container>
         {/* BACK */}
         <Pressable
           style={styles.backButtonWrapper}
-          onPress={() => {
+          onPress={async () => {
+            speakSessionRef.current += 1;
+
             Speech.stop();
-            stopBackgroundMusic();
+            await stopBackgroundMusic();
+
+            setIsPlay(false);
+            setActiveSentenceIndex(-1);
 
             router.back();
           }}
@@ -342,13 +432,12 @@ export default function StorieScreen() {
         <Pressable style={styles.playButtonWrapper} onPress={handleSpeak}>
           <GlassView style={styles.glassButton} isInteractive>
             <FontAwesome6
-              name={isSpeaking ? "stop" : "play"}
+              name={isPlay ? "stop" : "play"}
               size={20}
               color={Colors.dark.text}
             />
           </GlassView>
         </Pressable>
-
         {/* TITLE */}
         <Animated.View
           style={[
@@ -380,11 +469,10 @@ export default function StorieScreen() {
           source={{ uri: String(thumbnail) }}
           style={[styles.headerImage, { height: headerHeight }]}
         />
-
         <Animated.View style={[styles.gradient, { height: headerHeight }]} />
-
         {/* CONTENT */}
         <Animated.ScrollView
+          ref={scrollRef}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
             paddingTop: HEADER_HEIGHT,
@@ -392,7 +480,12 @@ export default function StorieScreen() {
           }}
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { useNativeDriver: false },
+            {
+              useNativeDriver: false,
+              listener: (e) => {
+                currentScrollY.current = e.nativeEvent.contentOffset.y;
+              },
+            },
           )}
           scrollEventThrottle={16}
         >
@@ -406,12 +499,28 @@ export default function StorieScreen() {
                 <SkeletonBlock height={24} />
               </>
             ) : (
-              <Text
-                fontFamily="regular"
-                fontSize={16}
-                color={Colors.dark.text}
-                title={translatedText.storie}
-              />
+              <>
+                {sentences.map((sentence, index) => (
+                  <View
+                    key={index}
+                    onLayout={(e) => {
+                      sentencePositions.current[index] =
+                        e.nativeEvent.layout.y + HEADER_HEIGHT;
+                    }}
+                    style={[
+                      styles.sentence,
+                      index === activeSentenceIndex && styles.activeSentence,
+                    ]}
+                  >
+                    <Text
+                      fontFamily="regular"
+                      fontSize={16}
+                      color={Colors.dark.text}
+                      title={sentence}
+                    />
+                  </View>
+                ))}
+              </>
             )}
           </ContainerStorie>
         </Animated.ScrollView>
@@ -425,6 +534,9 @@ export default function StorieScreen() {
   );
 }
 
+/* =========================
+   STYLES
+========================= */
 const styles = StyleSheet.create({
   backButtonWrapper: {
     position: "absolute",
@@ -459,16 +571,13 @@ const styles = StyleSheet.create({
   headerImage: {
     position: "absolute",
     top: 0,
-    left: 0,
-    right: 0,
     width: "100%",
     zIndex: 1,
   },
   gradient: {
     position: "absolute",
     top: 0,
-    left: 0,
-    right: 0,
+    width: "100%",
     backgroundColor: "rgba(0,0,0,0.45)",
     zIndex: 2,
   },
@@ -476,5 +585,16 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: "rgba(255,255,255,0.35)", // mais visível no header
     marginBottom: 8,
+  },
+  sentence: {
+    marginBottom: 12,
+    paddingHorizontal: 2,
+  },
+  activeSentence: {
+    backgroundColor: "rgba(255,215,120,0.35)",
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    marginBottom: 6,
   },
 });
