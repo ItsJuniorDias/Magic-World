@@ -17,6 +17,9 @@ import {
   View,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  LayoutAnimation,
+  Animated,
+  Easing,
 } from "react-native";
 
 type SectionType = "favorites" | "recommended" | "trending";
@@ -97,72 +100,168 @@ export default function FavoriteScreen() {
     [stories, likedIds],
   );
 
-  const recommendedStories = useMemo(() => stories.slice(0, 10), [stories]);
+  const recommendedStories = useMemo(
+    () => stories.slice(0, 10),
+    [stories],
+  ).filter((story) => !likedIds.includes(story.id));
 
   const popularStories = useMemo(
     () =>
       [...stories].sort((a, b) => (b.views ?? 0) - (a.views ?? 0)).slice(0, 10),
     [stories],
-  );
-
-  /* ---------------------------------------------------
-   * Scroll restore helper
-   * -------------------------------------------------- */
-
-  const restoreScroll = (section: SectionType) => {
-    requestAnimationFrame(() => {
-      if (section === "favorites") {
-        favoritesRef.current?.scrollToOffset({
-          offset: favoritesOffset.current,
-          animated: false,
-        });
-      }
-
-      if (section === "recommended") {
-        recommendedRef.current?.scrollToOffset({
-          offset: recommendedOffset.current,
-          animated: false,
-        });
-      }
-
-      if (section === "trending") {
-        trendingRef.current?.scrollToOffset({
-          offset: trendingOffset.current,
-          animated: false,
-        });
-      }
-    });
-  };
+  ).filter((story) => !likedIds.includes(story.id));
 
   /* ---------------------------------------------------
    * Render Item
    * -------------------------------------------------- */
 
+  const AnimatedCard = ({ item, onRemove, onPress, isFavorite }: any) => {
+    const opacity = useRef(new Animated.Value(1)).current;
+    const scale = useRef(new Animated.Value(1)).current;
+    const translateY = useRef(new Animated.Value(0)).current;
+
+    const CARD_WIDTH = 220;
+
+    const animateOut = (cb?: () => void) => {
+      Animated.parallel([
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 180,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(scale, {
+          toValue: 0.96,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+        Animated.timing(translateY, {
+          toValue: 6,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+      ]).start(() => cb?.());
+    };
+
+    const handleToggleFavorite = () => {
+      animateOut(() => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        onRemove(item.id);
+      });
+    };
+
+    return (
+      <Animated.View
+        style={{
+          opacity,
+          transform: [{ scale }, { translateY }],
+          width: CARD_WIDTH,
+        }}
+      >
+        <Card
+          thumbnail={item.thumbnail}
+          title={item.title}
+          views={item.views}
+          isFavorite={isFavorite}
+          onToggleFavorite={handleToggleFavorite}
+          onPress={() => onPress(item.id)}
+        />
+      </Animated.View>
+    );
+  };
+
   const renderItem = useCallback(
-    (section: SectionType) =>
-      ({ item }: any) => {
+    (section: SectionType) => {
+      const RenderItem = ({ item, index }: any) => {
         const isFavorite = likedIds.includes(item.id);
 
-        return (
-          <Card
-            thumbnail={item.thumbnail}
-            title={item.title}
-            views={item.views}
-            isFavorite={isFavorite}
-            onToggleFavorite={() => {
-              toggleLike({
-                storyId: item.id,
-                title: item.title,
-                thumbnail: item.thumbnail,
-                chapter: item.chapter,
-              });
+        // Variáveis animadas "por item"
+        const opacity = new Animated.Value(1);
+        const scale = new Animated.Value(1);
+        const translateY = new Animated.Value(0);
 
-              restoreScroll(section);
+        const CARD_WIDTH = 232;
+
+        const animateOut = (cb?: () => void) => {
+          Animated.parallel([
+            Animated.timing(opacity, {
+              toValue: 0,
+              duration: 180,
+              easing: Easing.out(Easing.quad),
+              useNativeDriver: true,
+            }),
+            Animated.timing(scale, {
+              toValue: 0.96,
+              duration: 180,
+              useNativeDriver: true,
+            }),
+            Animated.timing(translateY, {
+              toValue: 6,
+              duration: 180,
+              useNativeDriver: true,
+            }),
+          ]).start(() => cb?.());
+        };
+
+        const handleToggleFavorite = () => {
+          animateOut(() => {
+            // Animação de layout para que os próximos itens deslizem para a esquerda
+            LayoutAnimation.configureNext(
+              LayoutAnimation.Presets.easeInEaseOut,
+            );
+
+            toggleLike({
+              storyId: item.id,
+              title: item.title,
+              thumbnail: item.thumbnail,
+              chapter: item.chapter,
+            });
+
+            // Scroll automático para manter posição próxima
+            const ref =
+              section === "favorites"
+                ? favoritesRef.current
+                : section === "recommended"
+                  ? recommendedRef.current
+                  : trendingRef.current;
+
+            const offsetRef =
+              section === "favorites"
+                ? favoritesOffset
+                : section === "recommended"
+                  ? recommendedOffset
+                  : trendingOffset;
+
+            if (ref) {
+              const newOffset = Math.max(offsetRef.current - CARD_WIDTH, 0);
+              ref.scrollToOffset({ offset: newOffset, animated: true });
+            }
+          });
+        };
+
+        return (
+          <Animated.View
+            style={{
+              opacity,
+              transform: [{ scale }, { translateY }],
+              width: CARD_WIDTH,
             }}
-            onPress={() => navigateToStory(item.id)}
-          />
+          >
+            <Card
+              thumbnail={item.thumbnail}
+              title={item.title}
+              views={item.views}
+              isFavorite={isFavorite}
+              onToggleFavorite={handleToggleFavorite}
+              onPress={() => navigateToStory(item.id)}
+            />
+          </Animated.View>
         );
-      },
+      };
+
+      RenderItem.displayName = `Section`;
+      return RenderItem;
+    },
     [likedIds, navigateToStory, toggleLike],
   );
 
