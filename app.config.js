@@ -14,6 +14,7 @@ export default {
       },
     },
     ios: {
+      newArchEnabled: true,
       supportsTablet: true,
       bundleIdentifier: "com.alexandre.juniort10.magicworld",
       infoPlist: {

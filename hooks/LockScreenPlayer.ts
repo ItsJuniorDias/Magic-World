@@ -13,12 +13,14 @@ export function useLockScreenPlayer({
   artwork,
   url,
   volume = 0.08,
+  currentIndex,
 }: {
   title: string;
   artist: string;
   artwork?: string;
   url: any;
   volume?: number;
+  currentIndex: number;
 }) {
   // Setup inicial
   useEffect(() => {
@@ -47,7 +49,7 @@ export function useLockScreenPlayer({
       });
 
       await TrackPlayer.add([{
-        id: "track1",
+        id: currentIndex.toString(),
         url,
         title,
         artist,
@@ -74,9 +76,6 @@ export function useLockScreenPlayer({
   
 
   const play = async () => {
-    const current = await TrackPlayer.getCurrentTrack();
-    
-    if (current == null) await TrackPlayer.skip("track1");
     await TrackPlayer.play();
   };
 

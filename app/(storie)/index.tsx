@@ -10,11 +10,15 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useRef, useState, useEffect, useMemo, useCallback } from "react";
 
 import { LinearGradient } from "expo-linear-gradient";
+
 import { Colors } from "@/constants/theme";
 import Text from "@/components/text";
+
 import { GlassView } from "expo-glass-effect";
 import { FontAwesome6 } from "@expo/vector-icons";
+
 import { franc } from "franc-min";
+
 import { ContextMenu, Host, Picker } from "@expo/ui/swift-ui";
 
 import { Container, ContainerStorie } from "./styles";
@@ -23,20 +27,22 @@ import { NextChapterButton } from "@/components/(next-chapter-button)";
 
 import * as Speech from "expo-speech";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import GuidedReadingModal from "@/components/guided-reading-modal";
 
 import TrackPlayer, {
+  Capability,
   Event,
   State,
   useTrackPlayerEvents,
 } from "react-native-track-player";
 
 import { useLockScreenPlayer } from "@/hooks/LockScreenPlayer";
+
 import * as Notifications from "expo-notifications";
 import { BACKGROUND_TRACKS } from "@/constants/backgroundTracks";
-import { doc, updateDoc, increment } from "firebase/firestore";
-import { db } from "@/firebaseConfig";
+import { useStoriesStore } from "@/store/useStoriesStore";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -48,158 +54,178 @@ Notifications.setNotificationHandler({
   }),
 });
 
+/* =========================
+   CONSTANTS
+========================= */
 const HEADER_HEIGHT = 420;
 const MIN_HEADER_HEIGHT = 160;
 const SCREEN_HEIGHT = Dimensions.get("window").height;
+const SAFE_MARGIN = 140;
 
+/* =========================
+   GEMINI
+========================= */
 const genAI = new GoogleGenerativeAI(
   process.env.EXPO_PUBLIC_GOOGLE_API_KEY || "",
 );
+
 export const geminiModel = genAI.getGenerativeModel({
   model: "gemini-2.5-flash",
 });
 
 export default function StorieScreen() {
-  const { storie, title, thumbnail, currentIndex, storyId } =
+  const { storie, title, thumbnail, currentIndex, storyId, autoPlay } =
     useLocalSearchParams();
+
   const router = useRouter();
 
-  // --- REFS ---
+  const story = useStoriesStore((state) =>
+    state.stories.find((item) => item.id === storyId),
+  );
+
+  /* =========================
+     REFS
+  ========================== */
   const scrollY = useRef(new Animated.Value(0)).current;
   const currentScrollY = useRef(0);
   const scrollRef = useRef<Animated.ScrollView>(null);
   const sentencePositions = useRef<number[]>([]);
   const speakSessionRef = useRef(0);
+
   const lastSentenceIndexRef = useRef(0);
 
-  // --- STATE ---
+  /* =========================
+     STATE
+  ========================== */
   const [isTranslating, setIsTranslating] = useState(false);
+
   const [selectedIndex, setSelectedIndex] = useState(0);
+
   const [showGuidedModal, setShowGuidedModal] = useState(false);
   const [isPlay, setIsPlay] = useState(false);
   const [activeSentenceIndex, setActiveSentenceIndex] = useState(-1);
   const [translatedText, setTranslatedText] = useState({
-    title: String(title),
-    storie: String(storie),
+    title,
+    storie,
   });
-  const [musicIndex, setMusicIndex] = useState(0);
 
-  // Novos estados para otimização
-  const [chapters, setChapters] = useState<any[]>([]);
-  const [hasAccess, setHasAccess] = useState(false);
+  const [musicIndex, setMusicIndex] = useState(0);
 
   const { pause, play, stop } = useLockScreenPlayer({
     title: translatedText.title,
     artist: "Magic World",
-    artwork: String(thumbnail),
+    artwork: thumbnail,
     url: BACKGROUND_TRACKS[musicIndex].uri,
     volume: 0.15,
+    currentIndex: Number(currentIndex),
   });
-
-  // --- EFEITOS DE CARREGAMENTO ---
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [storiesData, accessStatus] = await Promise.all([
-          AsyncStorage.getItem("@user_stories_data"),
-          AsyncStorage.getItem("@user_has_access"),
-        ]);
-
-        if (storiesData && storyId) {
-          const parsed = JSON.parse(storiesData);
-          if (parsed[storyId as string]) {
-            setChapters(parsed[storyId as string].chapter || []);
-          }
-        }
-        setHasAccess(accessStatus === "true");
-      } catch (e) {
-        console.warn("Error loading context data", e);
-      }
-    };
-    loadData();
-  }, [storyId]);
 
   useEffect(() => {
     const changeBackgroundMusic = async () => {
+      const state = await TrackPlayer.getState();
+
+      // limpa a fila
       await TrackPlayer.reset();
+
+      // adiciona a nova música
       await TrackPlayer.add({
         id: `bg-${musicIndex}`,
         url: BACKGROUND_TRACKS[musicIndex].uri,
         title: "Ambient Sound",
         artist: "Magic World",
       });
-      const state = await TrackPlayer.getState();
-      if (state === State.Playing) await TrackPlayer.play();
+
+      // se estava tocando, continua tocando
+      if (state === State.Playing) {
+        await TrackPlayer.play();
+      }
     };
+
     changeBackgroundMusic();
   }, [musicIndex]);
 
-  // --- LOGICA DE NOTIFICAÇÃO E PAYWALL ---
   const notifyPaywall = async () => {
+    // 1. pedir permissão
     const { status } = await Notifications.getPermissionsAsync();
+
     let finalStatus = status;
+
     if (status !== "granted") {
       const permission = await Notifications.requestPermissionsAsync();
       finalStatus = permission.status;
     }
-    if (finalStatus !== "granted") return;
 
-    await Notifications.scheduleNotificationAsync({
+    if (finalStatus !== "granted") {
+      console.log("Notification permission not granted");
+      return;
+    }
+
+    // 2. disparar notificação
+    const id = await Notifications.scheduleNotificationAsync({
       content: {
         title: "Next Chapter Locked 🔒",
         body: "Subscribe to access the next chapter.",
         sound: true,
       },
-      trigger: null,
+      trigger: null, // imediato
     });
   };
 
-  const handleNextChapter = useCallback(async () => {
-    const nextIdx = Number(currentIndex) + 1;
+  const handleNextChapter = async () => {
+    // checar paywall
+    const isPro = await AsyncStorage.getItem("@user_is_pro");
 
-    // Fim da história
-    if (nextIdx >= chapters.length) {
-      Alert.alert("The End", "You've reached the last chapter of this story!");
-      return;
-    }
+    console.log(!isPro, "hasAccess");
 
-    // Bloqueio de plano
-    if (!hasAccess) {
+    if (!isPro) {
+      // sem acesso → pausa tudo
       await pauseAllAudio();
+
+      // dispara notificação local
       await notifyPaywall();
+
       return;
+    } else {
+      // com acesso → avança pro próximo capítulo
+      speakSessionRef.current += 1;
+      lastSentenceIndexRef.current = 0;
+
+      Speech.stop();
+      await TrackPlayer.pause();
+
+      setIsPlay(false);
+      setActiveSentenceIndex(-1);
+
+      const nextIndex = Number(currentIndex) + 1;
+      const nextChapter = (story as any)?.chapter?.[nextIndex];
+
+      if (!nextChapter) return;
+
+      router.replace({
+        pathname: "/(storie)",
+        params: {
+          storie: nextChapter.storie,
+          title: nextChapter.title,
+          thumbnail: nextChapter.thumbnail,
+          storyId: storyId,
+          currentIndex: nextIndex, // ✅ agora está correto
+          autoPlay: "true",
+        },
+      });
     }
+  };
 
-    // Sucesso -> Navega
-    await stopAllAudio();
-    const nextChapter = chapters[nextIdx];
+  /* =========================
+     TRACKPLAYER EVENTS
+  ========================== */
 
-    router.push({
-      pathname: "/(storie)",
-      params: {
-        storie: nextChapter.storie,
-        title: nextChapter.title,
-        thumbnail: nextChapter.thumbnail,
-        storyId: storyId,
-        currentIndex: nextIdx,
-      },
-    });
-  }, [currentIndex, chapters, hasAccess, storyId]);
-
-  // --- CONTROLES DE ÁUDIO ---
   const pauseAllAudio = useCallback(async () => {
     speakSessionRef.current += 1;
+
     Speech.stop();
     await pause();
-    setIsPlay(false);
-  }, [pause]);
 
-  const stopAllAudio = useCallback(async () => {
-    speakSessionRef.current += 1;
-    Speech.stop();
-    await TrackPlayer.pause();
     setIsPlay(false);
-    setActiveSentenceIndex(-1);
   }, []);
 
   useTrackPlayerEvents(
@@ -215,30 +241,47 @@ export default function StorieScreen() {
         await TrackPlayer.seekTo(0);
         await play();
       }
+
       if (event.type === Event.RemotePlay) {
         await play();
         handleSpeak();
       }
+
       if (event.type === Event.RemotePause) {
         await pauseAllAudio();
       }
-      if (event.type === Event.RemoteNext) {
-        handleNextChapter();
-      }
+
       if (event.type === Event.RemotePrevious) {
+        // quando clico no botão e voltar quero a começe do zero tanto a musica quando a voz
         const isPlaying = (await TrackPlayer.getState()) === State.Playing;
+
         await TrackPlayer.seekTo(0);
-        if (isPlaying) await TrackPlayer.play();
-        handleSpeak(true);
+
+        if (isPlaying) {
+          await TrackPlayer.play();
+        }
+
+        handleSpeak(true); // resume speech from beginning
+
+        // scroll to top
+
         scrollRef.current?.scrollTo({ y: 0, animated: true });
+      }
+
+      if (event.type === Event.RemoteNext) {
+        await handleNextChapter();
       }
     },
   );
 
-  // --- SKELETON ANIMATION ---
+  /* =========================
+     SKELETON ANIMATION
+  ========================== */
   const skeletonAnim = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     if (!isTranslating) return;
+
     Animated.loop(
       Animated.sequence([
         Animated.timing(skeletonAnim, {
@@ -253,14 +296,14 @@ export default function StorieScreen() {
         }),
       ]),
     ).start();
-  }, [isTranslating]);
+  }, [isTranslating, skeletonAnim]);
 
   const SkeletonBlock = ({
     height,
     width = "100%",
   }: {
     height: number;
-    width?: any;
+    width?: number | string;
   }) => (
     <Animated.View
       style={[
@@ -277,26 +320,185 @@ export default function StorieScreen() {
     />
   );
 
-  // --- SENTENCES & SPEECH ---
+  /* =========================
+     SENTENCES
+  ========================== */
   const sentences = useMemo(() => {
     if (!translatedText.storie) return [];
     return translatedText.storie.split(/(?<=[.!?])\s+/).filter(Boolean);
   }, [translatedText.storie]);
 
+  useEffect(() => {
+    if (autoPlay === "true") {
+      setTimeout(() => {
+        handleSpeak();
+      }, 800);
+    }
+  }, [autoPlay]);
+
+  /* =========================
+     HEADER ANIMATIONS
+  ========================== */
+  const headerHeight = scrollY.interpolate({
+    inputRange: [0, HEADER_HEIGHT - MIN_HEADER_HEIGHT],
+    outputRange: [HEADER_HEIGHT, MIN_HEADER_HEIGHT],
+    extrapolate: "clamp",
+  });
+
+  const titleTranslateY = scrollY.interpolate({
+    inputRange: [0, 140],
+    outputRange: [320, 72],
+    extrapolate: "clamp",
+  });
+
+  const titleTranslateX = scrollY.interpolate({
+    inputRange: [0, 140],
+    outputRange: [24, 96],
+    extrapolate: "clamp",
+  });
+
+  const titleScale = scrollY.interpolate({
+    inputRange: [0, 140],
+    outputRange: [1, 0.8],
+    extrapolate: "clamp",
+  });
+
+  /* =========================
+     TRANSLATION
+  ========================== */
+  async function translateText(text: string, target = "en") {
+    const prompt = `
+      Translate the following text to ${target}.
+      Return only the translated text.
+      Text: "${text}"
+    `;
+
+    let attempts = 3;
+
+    while (attempts > 0) {
+      try {
+        const result = await geminiModel.generateContent(prompt);
+        return result.response.text();
+      } catch (error: any) {
+        if (error.toString().includes("503")) {
+          attempts--;
+          await new Promise((r) => setTimeout(r, 1200));
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    Alert.alert(
+      "Translation unavailable",
+      "The translation service is overloaded. Please try again later.",
+    );
+
+    return text;
+  }
+
+  async function handleTranslateAll(lang: string) {
+    setIsTranslating(true);
+
+    try {
+      const newTitle = await translateText(String(title), lang);
+      const newStorie = await translateText(String(storie), lang);
+
+      setTranslatedText({
+        title: newTitle,
+        storie: newStorie,
+      });
+    } finally {
+      setIsTranslating(false);
+    }
+  }
+
+  /* =========================
+     CONTEXT MENU
+  ========================== */
+  const renderContextMenu = () => {
+    const map = ["en", "es", "pt", "fr", "zh", "hi"];
+
+    const musicOptions = BACKGROUND_TRACKS.map((t) => t.title);
+
+    return (
+      <Host style={{ width: 48, height: 48 }}>
+        <ContextMenu>
+          <ContextMenu.Items>
+            {/* 🌍 TRANSLATE */}
+            <Picker
+              label="Translate"
+              options={[
+                "English",
+                "Spanish",
+                "Portuguese",
+                "French",
+                "Chinese",
+                "Hindi",
+              ]}
+              variant="menu"
+              selectedIndex={selectedIndex}
+              onOptionSelected={({ nativeEvent: { index } }) => {
+                setSelectedIndex(index);
+                handleTranslateAll(map[index]);
+              }}
+            />
+
+            {/* 🎵 AMBIENT MUSIC */}
+            <Picker
+              label="Ambient Sound"
+              options={musicOptions}
+              variant="menu"
+              selectedIndex={musicIndex}
+              onOptionSelected={async ({ nativeEvent: { index } }) => {
+                setMusicIndex(index);
+
+                await TrackPlayer.stop();
+              }}
+            />
+          </ContextMenu.Items>
+
+          <ContextMenu.Trigger>
+            <GlassView style={styles.glassButton} isInteractive>
+              <FontAwesome6
+                name={isTranslating ? "spinner" : "ellipsis-vertical"}
+                size={20}
+                color={Colors.dark.text}
+              />
+            </GlassView>
+          </ContextMenu.Trigger>
+        </ContextMenu>
+      </Host>
+    );
+  };
+
+  /* =========================
+     SPEECH + TRACKPLAYER
+  ========================== */
   const handleSpeak = async (resume = false) => {
+    // Se já está tocando, pausa tudo
     if (isPlay && !resume) {
-      await pauseAllAudio();
+      speakSessionRef.current += 1;
+      Speech.stop();
+
+      await TrackPlayer.pause();
+      setIsPlay(false);
       setActiveSentenceIndex(-1);
       return;
     }
+
+    // Inicia do zero
     if (!sentences.length) return;
 
     speakSessionRef.current += 1;
     const sessionId = speakSessionRef.current;
+
     setIsPlay(true);
+    setActiveSentenceIndex(0);
+
     await TrackPlayer.play();
 
-    const langCode = franc(translatedText.storie);
+    const langCode = franc(translatedText.storie as string);
     const language =
       {
         eng: "en-US",
@@ -309,14 +511,20 @@ export default function StorieScreen() {
 
     let index = resume ? lastSentenceIndexRef.current : 0;
 
+    setActiveSentenceIndex(index);
+
     const speakNext = () => {
       if (speakSessionRef.current !== sessionId) return;
+
       if (index >= sentences.length) {
         TrackPlayer.pause();
         setIsPlay(false);
+        // mantém última frase destacada
         return;
       }
+
       setActiveSentenceIndex(index);
+
       lastSentenceIndexRef.current = index;
 
       Speech.speak(sentences[index], {
@@ -325,63 +533,59 @@ export default function StorieScreen() {
         rate: 0.9,
         pitch: 1.0,
         onDone: () => {
+          if (speakSessionRef.current !== sessionId) return;
           index += 1;
           speakNext();
         },
         onStopped: () => {
-          if (speakSessionRef.current === sessionId) {
-            setIsPlay(false);
-            setActiveSentenceIndex(-1);
-          }
+          if (speakSessionRef.current !== sessionId) return;
+          TrackPlayer.pause();
+          setIsPlay(false);
+          setActiveSentenceIndex(-1);
         },
       });
     };
+
     speakNext();
   };
 
-  // --- HEADER ANIMATIONS ---
-  const headerHeight = scrollY.interpolate({
-    inputRange: [0, HEADER_HEIGHT - MIN_HEADER_HEIGHT],
-    outputRange: [HEADER_HEIGHT, MIN_HEADER_HEIGHT],
-    extrapolate: "clamp",
-  });
+  /* =========================
+     SCROLL INTELIGENTE
+  ========================== */
+  useEffect(() => {
+    if (!isPlay || activeSentenceIndex < 0) return;
+    if (activeSentenceIndex % 3 !== 0) return;
 
-  const titleTranslateY = scrollY.interpolate({
-    inputRange: [0, 140],
-    outputRange: [320, 72],
-    extrapolate: "clamp",
-  });
-  const titleTranslateX = scrollY.interpolate({
-    inputRange: [0, 140],
-    outputRange: [24, 96],
-    extrapolate: "clamp",
-  });
-  const titleScale = scrollY.interpolate({
-    inputRange: [0, 140],
-    outputRange: [1, 0.8],
-    extrapolate: "clamp",
-  });
+    const sentenceY = sentencePositions.current[activeSentenceIndex];
+    if (sentenceY == null) return;
 
-  // --- TRANSLATION ---
-  async function handleTranslateAll(lang: string) {
-    setIsTranslating(true);
-    try {
-      const prompt = (t: string) =>
-        `Translate to ${lang}. Return only text: "${t}"`;
-      const [newTitleRes, newStorieRes] = await Promise.all([
-        geminiModel.generateContent(prompt(String(title))),
-        geminiModel.generateContent(prompt(String(storie))),
-      ]);
-      setTranslatedText({
-        title: newTitleRes.response.text(),
-        storie: newStorieRes.response.text(),
-      });
-    } catch (e) {
-      Alert.alert("Error", "Translation service busy.");
-    } finally {
-      setIsTranslating(false);
+    scrollRef.current?.scrollTo({
+      y: Math.max(sentenceY - SCREEN_HEIGHT / 2, 0),
+      animated: true,
+    });
+  }, [activeSentenceIndex, isPlay]);
+
+  const handlePlayPress = async () => {
+    const hasSeen = await AsyncStorage.getItem("@guided_reading_seen");
+
+    if (!hasSeen) {
+      await AsyncStorage.setItem("@guided_reading_seen", "true");
+      setShowGuidedModal(true);
+      return;
     }
-  }
+
+    handleSpeak();
+  };
+
+  const stopAllAudio = async () => {
+    speakSessionRef.current += 1;
+
+    Speech.stop();
+    await TrackPlayer.pause();
+
+    setIsPlay(false);
+    setActiveSentenceIndex(-1);
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -392,13 +596,23 @@ export default function StorieScreen() {
     }, [stop]),
   );
 
+  /* =========================
+     UI
+  ========================== */
   return (
     <>
       <Container>
+        {/* BACK */}
         <Pressable
           style={styles.backButtonWrapper}
-          onPress={() => {
-            stopAllAudio();
+          onPress={async () => {
+            speakSessionRef.current += 1;
+            Speech.stop();
+            await pause();
+
+            setIsPlay(false);
+            setActiveSentenceIndex(-1);
+
             router.back();
           }}
         >
@@ -411,50 +625,13 @@ export default function StorieScreen() {
           </GlassView>
         </Pressable>
 
-        <View style={styles.translateButtonWrapper}>
-          <Host style={{ width: 48, height: 48 }}>
-            <ContextMenu>
-              <ContextMenu.Items>
-                <Picker
-                  label="Translate"
-                  options={[
-                    "English",
-                    "Spanish",
-                    "Portuguese",
-                    "French",
-                    "Chinese",
-                    "Hindi",
-                  ]}
-                  selectedIndex={selectedIndex}
-                  onOptionSelected={({ nativeEvent: { index } }) => {
-                    setSelectedIndex(index);
-                    const map = ["en", "es", "pt", "fr", "zh", "hi"];
-                    handleTranslateAll(map[index]);
-                  }}
-                />
-                <Picker
-                  label="Ambient Sound"
-                  options={BACKGROUND_TRACKS.map((t) => t.title)}
-                  selectedIndex={musicIndex}
-                  onOptionSelected={({ nativeEvent: { index } }) =>
-                    setMusicIndex(index)
-                  }
-                />
-              </ContextMenu.Items>
-              <ContextMenu.Trigger>
-                <GlassView style={styles.glassButton} isInteractive>
-                  <FontAwesome6
-                    name={isTranslating ? "spinner" : "ellipsis-vertical"}
-                    size={20}
-                    color={Colors.dark.text}
-                  />
-                </GlassView>
-              </ContextMenu.Trigger>
-            </ContextMenu>
-          </Host>
-        </View>
+        {/* TRANSLATE */}
+        <Pressable style={styles.translateButtonWrapper}>
+          {renderContextMenu()}
+        </Pressable>
 
-        <Pressable style={styles.playButtonWrapper} onPress={handleSpeak}>
+        {/* PLAY */}
+        <Pressable style={styles.playButtonWrapper} onPress={handlePlayPress}>
           <GlassView style={styles.glassButton} isInteractive>
             <FontAwesome6
               name={isPlay ? "stop" : "play"}
@@ -464,6 +641,7 @@ export default function StorieScreen() {
           </GlassView>
         </Pressable>
 
+        {/* TITLE */}
         <Animated.View
           style={[
             styles.animatedTitle,
@@ -489,64 +667,88 @@ export default function StorieScreen() {
           )}
         </Animated.View>
 
+        {/* HEADER IMAGE */}
         <Animated.Image
           source={{ uri: String(thumbnail) }}
           style={[styles.headerImage, { height: headerHeight }]}
         />
         <Animated.View style={[styles.gradient, { height: headerHeight }]} />
-
+        {/* CONTENT */}
         <Animated.ScrollView
           ref={scrollRef}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
             paddingTop: HEADER_HEIGHT,
-            paddingBottom: 100,
+            paddingBottom: 32,
           }}
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { useNativeDriver: false },
+            {
+              useNativeDriver: false,
+              listener: (e) => {
+                currentScrollY.current = e.nativeEvent.contentOffset.y;
+              },
+            },
           )}
           scrollEventThrottle={16}
         >
           <ContainerStorie>
-            {isTranslating
-              ? Array(8)
-                  .fill(0)
-                  .map((_, i) => <SkeletonBlock key={i} height={24} />)
-              : sentences.map((sentence, index) => (
-                  <View
-                    key={index}
-                    style={styles.sentence}
-                    onLayout={(e) => {
-                      sentencePositions.current[index] =
-                        e.nativeEvent.layout.y + HEADER_HEIGHT;
-                    }}
-                  >
-                    {index === activeSentenceIndex ? (
-                      <LinearGradient
-                        colors={[
-                          "rgba(255,215,120,0.28)",
-                          "rgba(255,215,120,0.19)",
-                        ]}
-                        style={styles.activeHighlight}
-                      >
+            {isTranslating ? (
+              <>
+                <SkeletonBlock height={24} />
+                <SkeletonBlock height={24} />
+                <SkeletonBlock height={24} />
+                <SkeletonBlock height={24} />
+
+                <SkeletonBlock height={24} />
+                <SkeletonBlock height={24} />
+                <SkeletonBlock height={24} />
+                <SkeletonBlock height={24} />
+              </>
+            ) : (
+              <>
+                {sentences.map((sentence, index) => {
+                  const isActive = index === activeSentenceIndex;
+
+                  return (
+                    <View
+                      key={index}
+                      onLayout={(e) => {
+                        sentencePositions.current[index] =
+                          e.nativeEvent.layout.y + HEADER_HEIGHT;
+                      }}
+                      style={styles.sentence}
+                    >
+                      {isActive ? (
+                        <LinearGradient
+                          colors={[
+                            "rgba(255,215,120,0.28)",
+                            "rgba(255,215,120,0.19)",
+                          ]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.activeHighlight}
+                        >
+                          <Text
+                            fontFamily="regular"
+                            fontSize={16}
+                            color={Colors.dark.text}
+                            title={sentence}
+                          />
+                        </LinearGradient>
+                      ) : (
                         <Text
                           fontFamily="regular"
                           fontSize={16}
                           color={Colors.dark.text}
                           title={sentence}
                         />
-                      </LinearGradient>
-                    ) : (
-                      <Text
-                        fontFamily="regular"
-                        fontSize={16}
-                        color={Colors.dark.text}
-                        title={sentence}
-                      />
-                    )}
-                  </View>
-                ))}
+                      )}
+                    </View>
+                  );
+                })}
+              </>
+            )}
           </ContainerStorie>
         </Animated.ScrollView>
       </Container>
@@ -554,13 +756,13 @@ export default function StorieScreen() {
       <NextChapterButton
         storyId={String(storyId)}
         currentIndex={Number(currentIndex)}
-        onPress={handleNextChapter} // Integrado com a lógica de acesso
       />
 
       <GuidedReadingModal
         visible={showGuidedModal}
-        onClose={() => {
+        onClose={async () => {
           setShowGuidedModal(false);
+          await TrackPlayer.pause();
           handleSpeak();
         }}
       />
@@ -568,15 +770,28 @@ export default function StorieScreen() {
   );
 }
 
+/* =========================
+   STYLES
+========================= */
 const styles = StyleSheet.create({
-  backButtonWrapper: { position: "absolute", top: 64, left: 24, zIndex: 40 },
+  backButtonWrapper: {
+    position: "absolute",
+    top: 64,
+    left: 24,
+    zIndex: 40,
+  },
   translateButtonWrapper: {
     position: "absolute",
     top: 64,
     right: 88,
     zIndex: 40,
   },
-  playButtonWrapper: { position: "absolute", top: 64, right: 24, zIndex: 40 },
+  playButtonWrapper: {
+    position: "absolute",
+    top: 64,
+    right: 24,
+    zIndex: 40,
+  },
   glassButton: {
     height: 48,
     width: 48,
@@ -584,8 +799,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 48,
   },
-  animatedTitle: { position: "absolute", zIndex: 30, paddingRight: 32 },
-  headerImage: { position: "absolute", top: 0, width: "100%", zIndex: 1 },
+  animatedTitle: {
+    position: "absolute",
+    zIndex: 30,
+    paddingRight: 32,
+  },
+  headerImage: {
+    position: "absolute",
+    top: 0,
+    width: "100%",
+    zIndex: 1,
+  },
   gradient: {
     position: "absolute",
     top: 0,
@@ -598,7 +822,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.35)",
     marginBottom: 8,
   },
-  sentence: { marginBottom: 12, paddingHorizontal: 2 },
+  sentence: {
+    marginBottom: 12,
+    paddingHorizontal: 2,
+  },
   activeHighlight: {
     paddingHorizontal: 6,
     paddingVertical: 4,
