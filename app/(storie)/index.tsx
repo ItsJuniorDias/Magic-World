@@ -83,6 +83,10 @@ export default function StorieScreen() {
     state.stories.find((item) => item.id === storyId),
   );
 
+  const nextIndex = Number(currentIndex) + 1;
+
+  const nextChapter = (story as any)?.chapter?.[nextIndex];
+
   /* =========================
      REFS
   ========================== */
@@ -104,6 +108,7 @@ export default function StorieScreen() {
   const [showGuidedModal, setShowGuidedModal] = useState(false);
   const [isPlay, setIsPlay] = useState(false);
   const [activeSentenceIndex, setActiveSentenceIndex] = useState(-1);
+
   const [translatedText, setTranslatedText] = useState({
     title,
     storie,
@@ -111,38 +116,15 @@ export default function StorieScreen() {
 
   const [musicIndex, setMusicIndex] = useState(0);
 
+  //adicionar imagem de cada capitulo e o t
   const { pause, play, stop } = useLockScreenPlayer({
-    title: translatedText.title,
+    title: String(title),
     artist: "Magic World",
-    artwork: thumbnail,
+    artwork: String(thumbnail),
     url: BACKGROUND_TRACKS[musicIndex].uri,
     volume: 0.15,
     currentIndex: Number(currentIndex),
   });
-
-  useEffect(() => {
-    const changeBackgroundMusic = async () => {
-      const state = await TrackPlayer.getState();
-
-      // limpa a fila
-      await TrackPlayer.reset();
-
-      // adiciona a nova música
-      await TrackPlayer.add({
-        id: `bg-${musicIndex}`,
-        url: BACKGROUND_TRACKS[musicIndex].uri,
-        title: "Ambient Sound",
-        artist: "Magic World",
-      });
-
-      // se estava tocando, continua tocando
-      if (state === State.Playing) {
-        await TrackPlayer.play();
-      }
-    };
-
-    changeBackgroundMusic();
-  }, [musicIndex]);
 
   const notifyPaywall = async () => {
     // 1. pedir permissão
@@ -196,9 +178,6 @@ export default function StorieScreen() {
       setIsPlay(false);
       setActiveSentenceIndex(-1);
 
-      const nextIndex = Number(currentIndex) + 1;
-      const nextChapter = (story as any)?.chapter?.[nextIndex];
-
       if (!nextChapter) return;
 
       router.replace({
@@ -208,10 +187,22 @@ export default function StorieScreen() {
           title: nextChapter.title,
           thumbnail: nextChapter.thumbnail,
           storyId: storyId,
-          currentIndex: nextIndex, // ✅ agora está correto
+          currentIndex: nextIndex,
           autoPlay: "true",
         },
       });
+
+      await TrackPlayer.reset();
+
+      await TrackPlayer.add({
+        id: nextIndex.toString(),
+        url: BACKGROUND_TRACKS[musicIndex].uri,
+        title: String(translatedText.title),
+        artist: "Magic World",
+        artwork: nextChapter.thumbnail,
+      });
+
+      await TrackPlayer.play();
     }
   };
 

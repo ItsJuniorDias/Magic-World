@@ -14,19 +14,27 @@ import { db } from "@/firebaseConfig";
 // Exemplo de dados de stories por categoria
 
 export default function CategoryDetailsScreen() {
-  const params = useLocalSearchParams<{ category: string }>();
-  const categoryName = params.category;
+  const params = useLocalSearchParams<{
+    category: string;
+    storyId: string;
+    currentIndex: string;
+  }>();
 
-  const [stories, setStories] = useState<typeof allStories>([]);
+  const categoryName = params.category;
 
   const allStories = useStoriesStore((state) => state.stories);
 
+  const [stories, setStories] = useState<typeof allStories>([]);
+
   useEffect(() => {
     // Filtra os stories da categoria selecionada
-    const filtered = allStories.filter((s) => s.category === categoryName);
+    const targetCategory = categoryName ?? params.storyId;
+    const filtered = allStories.filter(
+      (s) => (s as any).category === targetCategory,
+    );
 
     setStories(filtered);
-  }, [categoryName]);
+  }, [categoryName, params.storyId, allStories]);
 
   const incrementStoryViews = async (storyId: string) => {
     const storyRef = doc(db, "stories", storyId);
@@ -41,7 +49,7 @@ export default function CategoryDetailsScreen() {
       stories: state.stories.map((story) =>
         story.id === storyId
           ? { ...story, views: (story.views ?? 0) + 1 }
-          : story
+          : story,
       ),
     }));
   };
@@ -103,7 +111,7 @@ export default function CategoryDetailsScreen() {
           fontFamily="bold"
           fontSize={24}
           color="#FFFFFF"
-          title={categoryName || "Category"}
+          title={categoryName || params.storyId}
         />
 
         <View style={{ width: 48 }} />

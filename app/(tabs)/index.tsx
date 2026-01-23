@@ -273,15 +273,43 @@ Structure:
   // 🗂 Categoria (exemplo: Fairy Tale)
   const categoryStories = [
     {
-      id: "1",
-      title: "Children's Comic",
+      id: "fantasy",
+      title: "Fantasy",
       chapter: [
         {
-          navigate: "/(categories)",
+          navigate: "/(categories-detail)",
         },
       ],
       thumbnail:
-        "https://res.cloudinary.com/dqvujibkn/image/upload/v1767753186/Gemini_Generated_Image_mijilhmijilhmiji_1_frh7nh.png", // substitua pela sua imagem
+        "https://res.cloudinary.com/dqvujibkn/image/upload/v1769205788/pfwo9imq95av3qlnlqf3.png", // Castelo/Magia
+    },
+    {
+      id: "adventure",
+      title: "Adventure",
+      chapter: [{ navigate: "/(categories-detail)" }],
+      thumbnail:
+        "https://res.cloudinary.com/dqvujibkn/image/upload/v1769205676/fqgbiicg2oacp9jfo8ah.png", // Bússola/Exploração
+    },
+    {
+      id: "mystery",
+      title: "Mystery",
+      chapter: [{ navigate: "/(categories-detail)" }],
+      thumbnail:
+        "https://res.cloudinary.com/dqvujibkn/image/upload/v1769205719/agbq553klppl3upwl3s9.png", // Melancolia/Pôr do sol expressivo
+    },
+    {
+      id: "future",
+      title: "Future",
+      chapter: [{ navigate: "/(categories-detail)" }],
+      thumbnail:
+        "https://res.cloudinary.com/dqvujibkn/image/upload/v1769205882/hnv00nh6zqskkjn2saqw.png", // Melancolia/Pôr do sol expressivo
+    },
+    {
+      id: "all",
+      title: "All Categories",
+      chapter: [{ navigate: "/(categories)" }],
+      thumbnail:
+        "https://res.cloudinary.com/dqvujibkn/image/upload/v1767753186/Gemini_Generated_Image_mijilhmijilhmiji_1_frh7nh.png", // Colagem de cores/Geométrico limpo
     },
   ];
 
