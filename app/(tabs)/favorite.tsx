@@ -7,15 +7,13 @@ import { useStoriesStore } from "@/store/useStoriesStore";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { doc, increment, updateDoc } from "firebase/firestore";
-import { useEffect, useMemo, useCallback } from "react";
+import React, { useEffect, useMemo, useCallback } from "react";
 import { FlatList, ScrollView, StyleSheet, View } from "react-native";
 
 export default function FavoriteScreen() {
   const router = useRouter();
 
-  const { likedIds, likedStories, loadLikedStories, toggleLike } =
-    useLikedStore();
-
+  const { likedIds = [], loadLikedStories, toggleLike } = useLikedStore();
   const stories = useStoriesStore((s) => s.stories);
 
   useEffect(() => {
@@ -36,7 +34,7 @@ export default function FavoriteScreen() {
 
       useStoriesStore.setState((state) => ({
         stories: state.stories.map((story) =>
-          story.storyId === storyId
+          story.id === storyId
             ? { ...story, views: (story.views ?? 0) + 1 }
             : story,
         ),
@@ -48,18 +46,12 @@ export default function FavoriteScreen() {
 
   const navigateToStory = useCallback(
     async (storyId: string) => {
-      console.log("Navegando para a história:", storyId);
-
       const fullStory = stories.find((s) => s.id === storyId);
-
-      if (!fullStory?.chapter?.length) {
-        console.warn("Story sem capítulos:", fullStory);
-        return;
-      }
-
-      const firstChapter = fullStory.chapter[0];
+      if (!fullStory?.chapter?.length) return;
 
       await incrementStoryViews(storyId);
+
+      const firstChapter = fullStory.chapter[0];
 
       router.push({
         pathname: firstChapter.navigate,
@@ -79,82 +71,88 @@ export default function FavoriteScreen() {
    * Derived Data
    * -------------------------------------------------- */
 
-  const recommendedStories = useMemo(() => {
-    return stories.filter((story) => !likedIds.includes(story.id)).slice(0, 10);
-  }, [stories, likedIds]);
+  const favoriteStories = useMemo(
+    () => stories.filter((story) => likedIds.includes(story.id)),
+    [stories, likedIds],
+  );
 
-  const popularStories = useMemo(() => {
-    return [...stories]
-      .sort((a, b) => (b.views ?? 0) - (a.views ?? 0))
-      .slice(0, 10);
-  }, [stories]);
+  const recommendedStories = useMemo(
+    () => stories.filter((story) => !likedIds.includes(story.id)).slice(0, 10),
+    [stories, likedIds],
+  );
+
+  const popularStories = useMemo(
+    () =>
+      [...stories].sort((a, b) => (b.views ?? 0) - (a.views ?? 0)).slice(0, 10),
+    [stories],
+  );
 
   /* ---------------------------------------------------
    * Render
    * -------------------------------------------------- */
 
-  const renderItem = ({ item }: any) => {
-    const id = item.storyId || item.id; // garante id único
-    const isFavorite = likedIds.includes(id);
+  const renderItem = useCallback(
+    ({ item }: any) => {
+      const isFavorite = likedIds.includes(item.id);
 
-    return (
-      <Card
-        thumbnail={item.thumbnail}
-        title={item.title}
-        views={item.views}
-        isFavorite={isFavorite}
-        onToggleFavorite={() => {
-          // Atualiza likedIds na store
-          useLikedStore.setState((state) => {
-            const newLikedIds = state.likedIds.includes(id)
-              ? state.likedIds.filter((i) => i !== id) // remove se já é favorito
-              : [...state.likedIds, id]; // adiciona se não é favorito
+      return (
+        <Card
+          thumbnail={item.thumbnail}
+          title={item.title}
+          views={item.views}
+          isFavorite={isFavorite}
+          onToggleFavorite={() => {
+            toggleLike({
+              storyId: item.id,
+              title: item.title,
+              thumbnail: item.thumbnail,
+              chapter: item.chapter,
+            });
+            // ❌ NÃO recarrega a store aqui
+          }}
+          onPress={() => navigateToStory(item.id)}
+        />
+      );
+    },
+    [likedIds, navigateToStory, toggleLike],
+  );
 
-            // Atualiza likedStories localmente para render imediato
-            const newLikedStories = state.likedStories.filter(
-              (s) => s.storyId !== id && s.id !== id,
-            );
-            if (!state.likedIds.includes(id)) {
-              // adiciona item se estava sendo adicionado
-              newLikedStories.push(item);
-            }
-
-            return {
-              likedIds: newLikedIds,
-              likedStories: newLikedStories,
-            };
-          });
-        }}
-        onPress={() => navigateToStory(id)}
-      />
-    );
-  };
-
-  const Section = ({ title, data }: { title: string; data: any[] }) => {
+  const SectionComponent = ({
+    title,
+    data,
+  }: {
+    title: string;
+    data: any[];
+  }) => {
     if (!data?.length) return null;
 
     return (
-      <View style={styles.section}>
-        <Text title={title} fontFamily="bold" fontSize={22} color="#FFFFFF" />
+      <View>
+        <View style={styles.section}>
+          <Text title={title} fontFamily="bold" fontSize={22} color="#FFFFFF" />
+        </View>
 
         <FlatList
           data={data}
-          keyExtractor={(item) => item.storyId}
+          keyExtractor={(item) => item.id}
           renderItem={renderItem}
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingTop: 16 }}
+          contentContainerStyle={{ paddingTop: 16, paddingLeft: 24 }}
+          extraData={likedIds} // 🔒 garante update sem reset
         />
       </View>
     );
   };
 
+  const Section = React.memo(SectionComponent);
+  Section.displayName = "Section";
+
   return (
     <>
       <StatusBar style="light" translucent />
       <ScrollView showsVerticalScrollIndicator={false} style={styles.container}>
-        <Section title="My Favorites" data={likedStories} />
-
+        <Section title="My Favorites" data={favoriteStories} />
         <Section title="Recommended for You" data={recommendedStories} />
         <Section title="Trending" data={popularStories} />
       </ScrollView>
@@ -167,9 +165,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.dark.background,
     paddingTop: 64,
-    paddingLeft: 24,
   },
   section: {
-    marginBottom: 32,
+    paddingLeft: 24,
   },
 });

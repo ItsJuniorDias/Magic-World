@@ -9,6 +9,8 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import { useRef, useState, useEffect, useMemo, useCallback } from "react";
 
+import { LinearGradient } from "expo-linear-gradient";
+
 import { Colors } from "@/constants/theme";
 import Text from "@/components/text";
 
@@ -74,8 +76,6 @@ export default function StorieScreen() {
   const { storie, title, thumbnail, currentIndex, storyId } =
     useLocalSearchParams();
 
-  const [showGuidedModal, setShowGuidedModal] = useState(false);
-
   const router = useRouter();
 
   /* =========================
@@ -87,6 +87,8 @@ export default function StorieScreen() {
   const sentencePositions = useRef<number[]>([]);
   const speakSessionRef = useRef(0);
 
+  const lastSentenceIndexRef = useRef(0);
+
   /* =========================
      STATE
   ========================== */
@@ -94,6 +96,7 @@ export default function StorieScreen() {
 
   const [selectedIndex, setSelectedIndex] = useState(0);
 
+  const [showGuidedModal, setShowGuidedModal] = useState(false);
   const [isPlay, setIsPlay] = useState(false);
   const [activeSentenceIndex, setActiveSentenceIndex] = useState(-1);
   const [translatedText, setTranslatedText] = useState({
@@ -193,13 +196,12 @@ export default function StorieScreen() {
   ========================== */
 
   const pauseAllAudio = useCallback(async () => {
-    speakSessionRef.current += 1; // interrompe sessão atual do speech
+    speakSessionRef.current += 1;
 
-    Speech.stop(); // pausa a fala
-    await pause(); // pausa a música
+    Speech.stop();
+    await pause();
 
     setIsPlay(false);
-    setActiveSentenceIndex(-1);
   }, []);
 
   useTrackPlayerEvents(
@@ -257,25 +259,23 @@ export default function StorieScreen() {
   const skeletonAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (isTranslating) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(skeletonAnim, {
-            toValue: 1,
-            duration: 700,
-            useNativeDriver: true,
-          }),
-          Animated.timing(skeletonAnim, {
-            toValue: 0,
-            duration: 700,
-            useNativeDriver: true,
-          }),
-        ]),
-      ).start();
-    } else {
-      skeletonAnim.stopAnimation();
-    }
-  }, [isTranslating]);
+    if (!isTranslating) return;
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonAnim, {
+          toValue: 1,
+          duration: 1400,
+          useNativeDriver: false,
+        }),
+        Animated.timing(skeletonAnim, {
+          toValue: 0,
+          duration: 1400,
+          useNativeDriver: false,
+        }),
+      ]),
+    ).start();
+  }, [isTranslating, skeletonAnim]);
 
   const SkeletonBlock = ({
     height,
@@ -480,18 +480,23 @@ export default function StorieScreen() {
         hin: "hi-IN",
       }[langCode] ?? "en-US";
 
-    let index = resume ? activeSentenceIndex : 0;
+    let index = resume ? lastSentenceIndexRef.current : 0;
+
+    setActiveSentenceIndex(index);
 
     const speakNext = () => {
       if (speakSessionRef.current !== sessionId) return;
+
       if (index >= sentences.length) {
         TrackPlayer.pause();
         setIsPlay(false);
-        setActiveSentenceIndex(-1);
+        // mantém última frase destacada
         return;
       }
 
       setActiveSentenceIndex(index);
+
+      lastSentenceIndexRef.current = index;
 
       Speech.speak(sentences[index], {
         volume: 1.0,
@@ -667,8 +672,7 @@ export default function StorieScreen() {
                 <SkeletonBlock height={24} />
                 <SkeletonBlock height={24} />
                 <SkeletonBlock height={24} />
-                <SkeletonBlock height={24} />
-                <SkeletonBlock height={24} />
+
                 <SkeletonBlock height={24} />
                 <SkeletonBlock height={24} />
                 <SkeletonBlock height={24} />
@@ -676,26 +680,46 @@ export default function StorieScreen() {
               </>
             ) : (
               <>
-                {sentences.map((sentence, index) => (
-                  <View
-                    key={index}
-                    onLayout={(e) => {
-                      sentencePositions.current[index] =
-                        e.nativeEvent.layout.y + HEADER_HEIGHT;
-                    }}
-                    style={[
-                      styles.sentence,
-                      index === activeSentenceIndex && styles.activeSentence,
-                    ]}
-                  >
-                    <Text
-                      fontFamily="regular"
-                      fontSize={16}
-                      color={Colors.dark.text}
-                      title={sentence}
-                    />
-                  </View>
-                ))}
+                {sentences.map((sentence, index) => {
+                  const isActive = index === activeSentenceIndex;
+
+                  return (
+                    <View
+                      key={index}
+                      onLayout={(e) => {
+                        sentencePositions.current[index] =
+                          e.nativeEvent.layout.y + HEADER_HEIGHT;
+                      }}
+                      style={styles.sentence}
+                    >
+                      {isActive ? (
+                        <LinearGradient
+                          colors={[
+                            "rgba(255,215,120,0.28)",
+                            "rgba(255,215,120,0.19)",
+                          ]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.activeHighlight}
+                        >
+                          <Text
+                            fontFamily="regular"
+                            fontSize={16}
+                            color={Colors.dark.text}
+                            title={sentence}
+                          />
+                        </LinearGradient>
+                      ) : (
+                        <Text
+                          fontFamily="regular"
+                          fontSize={16}
+                          color={Colors.dark.text}
+                          title={sentence}
+                        />
+                      )}
+                    </View>
+                  );
+                })}
               </>
             )}
           </ContainerStorie>
@@ -774,11 +798,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingHorizontal: 2,
   },
-  activeSentence: {
-    backgroundColor: "rgba(255,215,120,0.35)",
-    borderRadius: 8,
+  activeHighlight: {
     paddingHorizontal: 6,
     paddingVertical: 4,
-    marginBottom: 6,
+    borderRadius: 8,
   },
 });

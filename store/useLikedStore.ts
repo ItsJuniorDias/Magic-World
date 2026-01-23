@@ -67,6 +67,7 @@ export const useLikedStore = create<LikedStore>((set, get) => ({
       });
     } else {
       await likeStory({ userId, storyId, title, thumbnail });
+      
       set({
         likedIds: [...likedIds, storyId],
       });
