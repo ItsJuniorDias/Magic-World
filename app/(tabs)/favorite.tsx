@@ -2,23 +2,44 @@ import Card from "@/components/card";
 import Text from "@/components/text";
 import { Colors } from "@/constants/theme";
 import { db } from "@/firebaseConfig";
+import { getStories } from "@/services/getStories";
 import { useLikedStore } from "@/store/useLikedStore";
 import { useStoriesStore } from "@/store/useStoriesStore";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { doc, increment, updateDoc } from "firebase/firestore";
-import React, { useEffect, useMemo, useCallback } from "react";
-import { FlatList, ScrollView, StyleSheet, View } from "react-native";
+import React, { useEffect, useMemo, useCallback, useRef } from "react";
+import {
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  View,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+} from "react-native";
+
+type SectionType = "favorites" | "recommended" | "trending";
 
 export default function FavoriteScreen() {
   const router = useRouter();
 
   const { likedIds = [], loadLikedStories, toggleLike } = useLikedStore();
+
   const stories = useStoriesStore((s) => s.stories);
+
+  /** refs por seção */
+  const favoritesRef = useRef<FlatList>(null);
+  const recommendedRef = useRef<FlatList>(null);
+  const trendingRef = useRef<FlatList>(null);
+
+  const favoritesOffset = useRef(0);
+  const recommendedOffset = useRef(0);
+  const trendingOffset = useRef(0);
 
   useEffect(() => {
     loadLikedStories();
-  }, []);
+  }, [loadLikedStories]);
 
   /* ---------------------------------------------------
    * Helpers
@@ -76,10 +97,7 @@ export default function FavoriteScreen() {
     [stories, likedIds],
   );
 
-  const recommendedStories = useMemo(
-    () => stories.filter((story) => !likedIds.includes(story.id)).slice(0, 10),
-    [stories, likedIds],
-  );
+  const recommendedStories = useMemo(() => stories.slice(0, 10), [stories]);
 
   const popularStories = useMemo(
     () =>
@@ -88,41 +106,82 @@ export default function FavoriteScreen() {
   );
 
   /* ---------------------------------------------------
-   * Render
+   * Scroll restore helper
+   * -------------------------------------------------- */
+
+  const restoreScroll = (section: SectionType) => {
+    requestAnimationFrame(() => {
+      if (section === "favorites") {
+        favoritesRef.current?.scrollToOffset({
+          offset: favoritesOffset.current,
+          animated: false,
+        });
+      }
+
+      if (section === "recommended") {
+        recommendedRef.current?.scrollToOffset({
+          offset: recommendedOffset.current,
+          animated: false,
+        });
+      }
+
+      if (section === "trending") {
+        trendingRef.current?.scrollToOffset({
+          offset: trendingOffset.current,
+          animated: false,
+        });
+      }
+    });
+  };
+
+  /* ---------------------------------------------------
+   * Render Item
    * -------------------------------------------------- */
 
   const renderItem = useCallback(
-    ({ item }: any) => {
-      const isFavorite = likedIds.includes(item.id);
+    (section: SectionType) =>
+      ({ item }: any) => {
+        const isFavorite = likedIds.includes(item.id);
 
-      return (
-        <Card
-          thumbnail={item.thumbnail}
-          title={item.title}
-          views={item.views}
-          isFavorite={isFavorite}
-          onToggleFavorite={() => {
-            toggleLike({
-              storyId: item.id,
-              title: item.title,
-              thumbnail: item.thumbnail,
-              chapter: item.chapter,
-            });
-            // ❌ NÃO recarrega a store aqui
-          }}
-          onPress={() => navigateToStory(item.id)}
-        />
-      );
-    },
+        return (
+          <Card
+            thumbnail={item.thumbnail}
+            title={item.title}
+            views={item.views}
+            isFavorite={isFavorite}
+            onToggleFavorite={() => {
+              toggleLike({
+                storyId: item.id,
+                title: item.title,
+                thumbnail: item.thumbnail,
+                chapter: item.chapter,
+              });
+
+              restoreScroll(section);
+            }}
+            onPress={() => navigateToStory(item.id)}
+          />
+        );
+      },
     [likedIds, navigateToStory, toggleLike],
   );
 
-  const SectionComponent = ({
+  /* ---------------------------------------------------
+   * Section
+   * -------------------------------------------------- */
+
+  const Section = ({
     title,
     data,
+    section,
+    listRef,
+    offsetRef,
   }: {
     title: string;
     data: any[];
+    section: SectionType;
+    listRef: React.RefObject<FlatList>;
+    offsetRef: React.MutableRefObject<number>;
   }) => {
     if (!data?.length) return null;
 
@@ -133,28 +192,52 @@ export default function FavoriteScreen() {
         </View>
 
         <FlatList
+          ref={listRef}
           data={data}
           keyExtractor={(item) => item.id}
-          renderItem={renderItem}
+          renderItem={renderItem(section)}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingTop: 16, paddingLeft: 24 }}
-          extraData={likedIds} // 🔒 garante update sem reset
+          onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
+            offsetRef.current = e.nativeEvent.contentOffset.x;
+          }}
+          maintainVisibleContentPosition={{
+            minIndexForVisible: 0,
+          }}
+          scrollEventThrottle={16}
         />
       </View>
     );
   };
 
-  const Section = React.memo(SectionComponent);
-  Section.displayName = "Section";
-
   return (
     <>
       <StatusBar style="light" translucent />
       <ScrollView showsVerticalScrollIndicator={false} style={styles.container}>
-        <Section title="My Favorites" data={favoriteStories} />
-        <Section title="Recommended for You" data={recommendedStories} />
-        <Section title="Trending" data={popularStories} />
+        <Section
+          title="My Favorites"
+          data={favoriteStories}
+          section="favorites"
+          listRef={favoritesRef}
+          offsetRef={favoritesOffset}
+        />
+
+        <Section
+          title="Recommended for You"
+          data={recommendedStories}
+          section="recommended"
+          listRef={recommendedRef}
+          offsetRef={recommendedOffset}
+        />
+
+        <Section
+          title="Trending"
+          data={popularStories}
+          section="trending"
+          listRef={trendingRef}
+          offsetRef={trendingOffset}
+        />
       </ScrollView>
     </>
   );
