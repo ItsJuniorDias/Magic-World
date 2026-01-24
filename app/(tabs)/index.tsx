@@ -2,106 +2,63 @@ import Card from "@/components/card";
 import Text from "@/components/text";
 import { StatusBar } from "expo-status-bar";
 import {
+  FlatList,
   Platform,
   ScrollView,
   StyleSheet,
   View,
-  FlatList,
   Animated,
-} from "react-native";
+} from "react-native"; // Adicionado Animated
 
 import { db } from "../../firebaseConfig";
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react"; // Adicionado useRef
 import { useRouter } from "expo-router";
-import { doc, increment, updateDoc } from "firebase/firestore";
-
+import {
+  addDoc,
+  collection,
+  doc,
+  getDocs,
+  increment,
+  serverTimestamp,
+  updateDoc,
+} from "firebase/firestore";
 import { useStoriesStore } from "@/store/useStoriesStore";
+
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
 import { useLikedStore } from "@/store/useLikedStore";
-import { useQuery } from "@tanstack/react-query";
+
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getStories } from "@/services/getStories";
 import CardSkeleton from "@/components/card-skeleton";
+import { uploadGeminiToCloudinary } from "@/services/generateURL";
+
+import * as StoreReview from "expo-store-review";
 import { useAppReview } from "@/hooks/useAppReview";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-/* -------------------------------------------------------------------------- */
-/*                                   CONSTS                                   */
-/* -------------------------------------------------------------------------- */
+const genAI = new GoogleGenerativeAI(
+  process.env.EXPO_PUBLIC_GOOGLE_API_KEY || "",
+);
 
-const CARD_WIDTH = 220;
-const SPACING = 16;
-const FULL_SIZE = CARD_WIDTH + SPACING;
+export const geminiModel = genAI.getGenerativeModel({
+  model: "gemini-2.5-flash",
+});
 
-/* -------------------------------------------------------------------------- */
-/*                              PARALLAX CARD                                 */
-/* -------------------------------------------------------------------------- */
-
-const AnimatedCard = ({
-  item,
-  index,
-  variant,
-  scrollX,
-  onPress,
-  onToggleFavorite,
-  isFavorite,
-}: any) => {
-  const inputRange = [
-    (index - 1) * FULL_SIZE,
-    index * FULL_SIZE,
-    (index + 1) * FULL_SIZE,
-  ];
-
-  const scale = scrollX.interpolate({
-    inputRange,
-    outputRange: [0.98, 1, 0.98],
-    extrapolate: "clamp",
-  });
-
-  const imageTranslateX = scrollX.interpolate({
-    inputRange,
-    outputRange: [-24, 0, 24],
-    extrapolate: "clamp",
-  });
-
-  return (
-    <Animated.View
-      style={{
-        transform: [{ scale }],
-        marginRight: SPACING,
-      }}
-    >
-      <Card
-        variant={variant}
-        title={item.title}
-        views={item.views}
-        isFavorite={isFavorite}
-        onToggleFavorite={onToggleFavorite}
-        onPress={onPress}
-        thumbnail={item.thumbnail}
-        thumbnailComponent={
-          <Animated.Image
-            source={{ uri: item.thumbnail }}
-            resizeMode="cover"
-            style={{
-              width: "110%",
-              height: "100%",
-              transform: [{ translateX: imageTranslateX }],
-            }}
-          />
-        }
-      />
-    </Animated.View>
-  );
-};
-
-/* -------------------------------------------------------------------------- */
-/*                                HOME SCREEN                                 */
-/* -------------------------------------------------------------------------- */
+const geminiImage = genAI.getGenerativeModel({
+  model: "gemini-2.5-flash-image", // Note o sufixo "-image"
+});
 
 export default function HomeScreen() {
   const router = useRouter();
+
+  const [generatedStory, setGeneratedStory] = useState<any>(null);
+
   const { requestReviewOnce } = useAppReview();
 
   const likedIds = useLikedStore((s) => s.likedIds);
   const toggleLike = useLikedStore((s) => s.toggleLike);
+
   const loadLikedStories = useLikedStore((s) => s.loadLikedStories);
 
   const query = useQuery({ queryKey: ["stories"], queryFn: getStories });
@@ -109,10 +66,12 @@ export default function HomeScreen() {
   const incrementStoryViews = async (storyId: string) => {
     const storyRef = doc(db, "stories", storyId);
 
+    // Atualiza no Firestore
     await updateDoc(storyRef, {
       views: increment(1),
     });
 
+    // Atualiza localmente no Zustand (UX instantânea)
     useStoriesStore.setState((state) => ({
       stories: state.stories.map((story) =>
         story.id === storyId
@@ -122,82 +81,270 @@ export default function HomeScreen() {
     }));
   };
 
+  async function generateStory() {
+    const textResult = await geminiModel.generateContent(`
+Write an original children’s saga-style story set in a magical adventure world.
+
+Important character rules:
+Each chapter must focus on different main characters (children, creatures, or heroes), with unique personalities, backgrounds, and motivations.
+Do not reuse the same protagonist across chapters.
+Characters may meet, influence events, or be connected by the same world or legend, but each chapter should feel like a new perspective.
+
+
+Story guidelines:
+Genre: adventure
+Tone: Epic, immersive, mysterious
+Style: Saga narrative
+Audience: Children
+World-building should feel magical, safe, and wondrous
+Include discovery, courage, friendship, and mystery
+Avoid violence or dark themes unsuitable for children
+
+
+Narrative focus:
+Chapter 1: Introduce the world through the eyes of the first character
+Chapter 2: Expand the world with a new character from a different place or culture
+Chapter 3: Reveal a deeper secret of the world through a third, unexpected character
+
+
+Writing rules:
+Rich descriptions and sensory details
+Clear beginning, middle, and end for each chapter
+Maintain continuity of the world while changing protagonists
+Generate the story following a structured JSON format when requested.
+
+Structure:
+{
+  category: "adventure",
+  title: "",
+  thumbnail: "",
+  views: 0,
+  id: "",
+  chapter: [
+    {
+      locked: false,
+      navigate: "/(storie)",
+      storie: "",
+      title: "",
+      thumbnail: ""
+    },
+    {
+      locked: true,
+      navigate: "/(storie)",
+      storie: "",
+      title: "",
+      thumbnail: ""
+    },
+    {
+      locked: true,
+      navigate: "/(storie)",
+      storie: "",
+      title: "",
+      thumbnail: ""
+    }
+  ]
+}
+`);
+
+    const cleaned = textResult.response
+      .text()
+      .replace(/```json|```/g, "")
+      .trim();
+
+    console.log("CLEANED JSON:", cleaned);
+
+    const story = JSON.parse(cleaned);
+
+    // Upload and set story thumbnail
+    const storyImagePrompt = `Cover illustration for a children's mystery saga titled "${story.title}". The scene should be magical, safe, and wondrous, capturing the essence of discovery, courage, friendship, and mystery. Style: vibrant colors, whimsical details, and a touch of fantasy.`;
+
+    const storyImageResult = await geminiImage.generateContent({
+      contents: [{ role: "user", parts: [{ text: storyImagePrompt }] }],
+      generationConfig: {
+        responseModalities: ["TEXT", "IMAGE"],
+      },
+    });
+
+    const storyImagePart =
+      storyImageResult.response.candidates[0].content.parts.find(
+        (p) => p.inlineData,
+      );
+
+    if (storyImagePart) {
+      const permanentUrl = await uploadGeminiToCloudinary(
+        storyImagePart.inlineData.data,
+      );
+
+      story.thumbnail = permanentUrl;
+    }
+
+    // Generate and upload thumbnails for each chapter
+    for (let i = 0; i < story.chapter.length; i++) {
+      const chapter = story.chapter[i];
+
+      const imagePrompt = `Illustration for the chapter titled "${chapter.title}" in a children's mystery saga. The scene should be magical, safe, and wondrous, capturing the essence of discovery, courage, friendship, and mystery. Style: vibrant colors, whimsical details, and a touch of fantasy.`;
+
+      const result = await geminiImage.generateContent({
+        contents: [{ role: "user", parts: [{ text: imagePrompt }] }],
+        generationConfig: {
+          responseModalities: ["TEXT", "IMAGE"],
+        },
+      });
+
+      const imagePart = result.response.candidates[0].content.parts.find(
+        (p) => p.inlineData,
+      );
+
+      if (imagePart) {
+        const permanentUrl = await uploadGeminiToCloudinary(
+          imagePart.inlineData.data,
+        );
+
+        story.chapter[i].thumbnail = permanentUrl;
+      }
+    }
+
+    return story;
+  }
+
   useEffect(() => {
-    setTimeout(() => {
-      requestReviewOnce();
-    }, 30000);
+    const load = async () => {
+      try {
+        setTimeout(() => {
+          requestReviewOnce();
+        }, 30000);
+
+        // await AsyncStorage.removeItem("@app_review_requested");
+
+        // const story = await generateStory();
+        // console.log("GENERATED STORY:", story);
+
+        // const result = await addDoc(collection(db, "stories"), {
+        //   ...story,
+        //   createdAt: serverTimestamp(),
+        // });
+        // console.log(result, "STORY ADDED WITH ID");
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    load();
   }, []);
 
-  /* ------------------------------------------------------------------------ */
-  /*                                DATA                                      */
-  /* ------------------------------------------------------------------------ */
+  // console.log(response, "RESPONSE FROM GEMINI");
 
+  const renderItem = (
+    { item, variant, index, scrollX }: any, // Adicionado index e scrollX
+  ) => (
+    <Card
+      variant={variant}
+      thumbnail={item.thumbnail}
+      title={item.title}
+      views={item.views}
+      index={index} // Repassado para o Card
+      scrollX={scrollX} // Repassado para o Card
+      isFavorite={likedIds.includes(item.id)}
+      onToggleFavorite={() => {
+        toggleLike({
+          storyId: item.id,
+          title: item.title,
+          thumbnail: item.thumbnail,
+          chapter: item.chapter,
+        });
+
+        loadLikedStories();
+      }}
+      onPress={async () => {
+        if (variant !== "category") {
+          await incrementStoryViews(item.id);
+        }
+
+        router.push({
+          pathname: item.chapter[0].navigate,
+          params: {
+            storie: item.chapter[0].storie,
+            title: item.chapter[0].title,
+            thumbnail: item.chapter[0].thumbnail,
+            storyId: item.id,
+            currentIndex: 0,
+          },
+        });
+      }}
+    />
+  );
+
+  // 🔥 Mais vistas
   const mostWatched = useMemo(() => {
     return [...(query.data ?? [])].sort(
       (a, b) => (b.views ?? 0) - (a.views ?? 0),
     );
   }, [query.data]);
 
-  const recentlyPublished = useMemo(() => {
-    return [...(query.data ?? [])].sort(
-      (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
-    );
-  }, [query.data]);
-
+  // 🗂 Categoria (exemplo: Fairy Tale)
   const categoryStories = [
     {
       id: "fantasy",
       title: "Fantasy",
-      chapter: [{ navigate: "/(categories-detail)" }],
+      chapter: [
+        {
+          navigate: "/(categories-detail)",
+        },
+      ],
       thumbnail:
-        "https://res.cloudinary.com/dqvujibkn/image/upload/v1769205788/pfwo9imq95av3qlnlqf3.png",
+        "https://res.cloudinary.com/dqvujibkn/image/upload/v1769205788/pfwo9imq95av3qlnlqf3.png", // Castelo/Magia
     },
     {
       id: "adventure",
       title: "Adventure",
       chapter: [{ navigate: "/(categories-detail)" }],
       thumbnail:
-        "https://res.cloudinary.com/dqvujibkn/image/upload/v1769205676/fqgbiicg2oacp9jfo8ah.png",
+        "https://res.cloudinary.com/dqvujibkn/image/upload/v1769205676/fqgbiicg2oacp9jfo8ah.png", // Bússola/Exploração
     },
     {
       id: "mystery",
       title: "Mystery",
       chapter: [{ navigate: "/(categories-detail)" }],
       thumbnail:
-        "https://res.cloudinary.com/dqvujibkn/image/upload/v1769205719/agbq553klppl3upwl3s9.png",
+        "https://res.cloudinary.com/dqvujibkn/image/upload/v1769205719/agbq553klppl3upwl3s9.png", // Melancolia/Pôr do sol expressivo
     },
     {
       id: "future",
       title: "Future",
       chapter: [{ navigate: "/(categories-detail)" }],
       thumbnail:
-        "https://res.cloudinary.com/dqvujibkn/image/upload/v1769205882/hnv00nh6zqskkjn2saqw.png",
+        "https://res.cloudinary.com/dqvujibkn/image/upload/v1769205882/hnv00nh6zqskkjn2saqw.png", // Melancolia/Pôr do sol expressivo
     },
     {
       id: "all",
       title: "All Categories",
       chapter: [{ navigate: "/(categories)" }],
       thumbnail:
-        "https://res.cloudinary.com/dqvujibkn/image/upload/v1767753186/Gemini_Generated_Image_mijilhmijilhmiji_1_frh7nh.png",
+        "https://res.cloudinary.com/dqvujibkn/image/upload/v1767753186/Gemini_Generated_Image_mijilhmijilhmiji_1_frh7nh.png", // Colagem de cores/Geométrico limpo
     },
   ];
 
-  /* ------------------------------------------------------------------------ */
-  /*                                SECTION                                   */
-  /* ------------------------------------------------------------------------ */
+  // 🕒 Publicadas recentemente
+  const recentlyPublished = useMemo(() => {
+    return [...(query.data ?? [])].sort(
+      (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
+    );
+  }, [query.data]);
 
-  const Section = ({
+  const SectionComponent = ({
     title,
     data,
     variant,
     loading,
+    renderItem,
   }: {
     title: string;
     data: any[];
-    variant: "default" | "category" | "recent";
+    variant?: "default" | "category" | "recent";
     loading: boolean;
+    renderItem: any;
   }) => {
-    const scrollX = useRef(new Animated.Value(0)).current;
+    const scrollX = useRef(new Animated.Value(0)).current; // Hook para o parallax
 
     return (
       <View style={styles.section}>
@@ -211,7 +358,7 @@ export default function HomeScreen() {
 
         {loading ? (
           <FlatList
-            data={[1, 2, 3, 4]}
+            data={[1, 2, 3, 4, 5]}
             renderItem={() => <CardSkeleton variant={variant} />}
             horizontal
             keyExtractor={(item) => item.toString()}
@@ -219,60 +366,28 @@ export default function HomeScreen() {
             contentContainerStyle={{ paddingLeft: 24 }}
           />
         ) : (
-          <Animated.FlatList
+          <Animated.FlatList // Trocado para Animated
             data={data}
+            renderItem={(info) => renderItem({ ...info, variant, scrollX })} // Passado o scrollX
             horizontal
-            keyExtractor={(item) => item.id}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingLeft: 24 }}
             onScroll={Animated.event(
               [{ nativeEvent: { contentOffset: { x: scrollX } } }],
               { useNativeDriver: true },
             )}
             scrollEventThrottle={16}
-            renderItem={({ item, index }) => (
-              <AnimatedCard
-                item={item}
-                index={index}
-                variant={variant}
-                scrollX={scrollX}
-                isFavorite={likedIds.includes(item.id)}
-                onToggleFavorite={() => {
-                  toggleLike({
-                    storyId: item.id,
-                    title: item.title,
-                    thumbnail: item.thumbnail,
-                    chapter: item.chapter,
-                  });
-                  loadLikedStories();
-                }}
-                onPress={async () => {
-                  if (variant !== "category") {
-                    await incrementStoryViews(item.id);
-                  }
-
-                  router.push({
-                    pathname: item.chapter[0].navigate,
-                    params: {
-                      storie: item.chapter[0].storie,
-                      title: item.chapter[0].title,
-                      thumbnail: item.chapter[0].thumbnail,
-                      storyId: item.id,
-                      currentIndex: 0,
-                    },
-                  });
-                }}
-              />
-            )}
+            initialNumToRender={10}
+            keyExtractor={(item) => item.id}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingLeft: 24 }}
           />
         )}
       </View>
     );
   };
 
-  /* ------------------------------------------------------------------------ */
-  /*                                 RENDER                                   */
-  /* ------------------------------------------------------------------------ */
+  const Section = React.memo(SectionComponent);
+
+  Section.displayName = "Section";
 
   return (
     <>
@@ -283,6 +398,7 @@ export default function HomeScreen() {
           data={mostWatched}
           variant="default"
           loading={query.isLoading}
+          renderItem={renderItem}
         />
 
         <Section
@@ -290,6 +406,7 @@ export default function HomeScreen() {
           data={categoryStories}
           variant="category"
           loading={false}
+          renderItem={renderItem}
         />
 
         <Section
@@ -297,15 +414,12 @@ export default function HomeScreen() {
           data={recentlyPublished}
           variant="recent"
           loading={query.isLoading}
+          renderItem={renderItem}
         />
       </ScrollView>
     </>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/*                                   STYLES                                   */
-/* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
   container: {
@@ -313,6 +427,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#15141A",
     paddingTop: Platform.OS === "ios" ? 8 : 24,
   },
+
   section: {
     marginBottom: 16,
   },

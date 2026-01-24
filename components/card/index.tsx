@@ -4,6 +4,7 @@ import {
   Animated,
   StyleProp,
   ImageStyle,
+  View, // Adicionado
 } from "react-native";
 import { FontAwesome6 } from "@expo/vector-icons";
 
@@ -22,7 +23,10 @@ export type CardProps = {
   onToggleFavorite?: () => void;
   onPress?: () => void;
   thumbnailComponent?: React.ReactNode;
-  imageStyle?: StyleProp<ImageStyle>; // ✅ corrigido
+  imageStyle?: StyleProp<ImageStyle>;
+  // ✅ Novas props para o Parallax
+  index?: number;
+  scrollX?: Animated.Value;
 };
 
 export default function Card({
@@ -35,6 +39,8 @@ export default function Card({
   onPress,
   thumbnailComponent,
   imageStyle,
+  index = 0,
+  scrollX,
 }: CardProps) {
   const [localFavorite, setLocalFavorite] = useState(isFavorite);
 
@@ -62,19 +68,44 @@ export default function Card({
     }
   }, [localFavorite]);
 
+  /* =========================
+     LÓGICA DE PARALLAX
+  ========================== */
+  // Largura aproximada do card baseada no seu estilo (ajuste se necessário)
+  const CARD_WIDTH = variant === "category" ? 140 : 280;
+
+  const translateX = scrollX
+    ? scrollX.interpolate({
+        inputRange: [
+          (index - 1) * CARD_WIDTH,
+          index * CARD_WIDTH,
+          (index + 1) * CARD_WIDTH,
+        ],
+        outputRange: [-30, 0, 30], // Intensidade do movimento
+        extrapolate: "clamp",
+      })
+    : 0;
+
   return (
     <CardContainer onPress={onPress} activeOpacity={0.85} variant={variant}>
-      {/* THUMBNAIL */}
-      {thumbnailComponent ?? (
-        <Animated.Image
-          source={{ uri: thumbnail }}
-          style={[
-            { width: "100%", height: "100%", borderRadius: 16 },
-            imageStyle,
-          ]}
-          resizeMode="cover"
-        />
-      )}
+      {/* THUMBNAIL CONTAINER COM OVERFLOW HIDDEN */}
+      <View style={{ flex: 1, overflow: "hidden", borderRadius: 16 }}>
+        {thumbnailComponent ?? (
+          <Animated.Image
+            source={{ uri: thumbnail }}
+            style={[
+              {
+                width: "140%", // Maior que o card para permitir o movimento
+                height: "100%",
+                borderRadius: 16,
+                transform: [{ translateX }], // Aplica o Parallax
+              },
+              imageStyle,
+            ]}
+            resizeMode="cover"
+          />
+        )}
+      </View>
 
       {/* FAVORITE BUTTON */}
       {onToggleFavorite && variant !== "category" && (
@@ -104,7 +135,7 @@ export default function Card({
       )}
 
       <Gradient
-        colors={["transparent", "rgba(0,0,0,0.7)", "rgba(0,0,0,0.9)"]}
+        colors={["transparent", "rgba(0,0,0,0.4)", "rgba(0,0,0,0.9)"]}
         variant={variant}
       >
         {title && (
@@ -117,7 +148,7 @@ export default function Card({
           />
         )}
 
-        {views !== undefined && (
+        {views !== undefined && variant !== "category" && (
           <Text
             fontFamily="regular"
             fontSize={14}

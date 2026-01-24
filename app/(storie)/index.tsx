@@ -130,13 +130,13 @@ export default function StorieScreen() {
 
   const [showFinishModal, setShowFinishModal] = useState(false);
 
-  const [userKey, setUserKey] = useState<string | null>(null);
-
   const [branchOptions, setBranchOptions] = useState<
     { title: string; targetIndex: number }[] | null
   >(null);
 
   const [isSavingProgress, setIsSavingProgress] = useState(false);
+
+  console.log(deviceId, "DEVICE ID");
 
   useEffect(() => {
     if (!isFocused) return;
@@ -146,9 +146,9 @@ export default function StorieScreen() {
     initProgress().then(() => {});
   }, [isFocused, deviceId, initProgress]);
 
-  useEffect(() => {
-    getUserKey().then((key) => setUserKey(key));
-  }, []);
+  // useEffect(() => {
+  //   getUserKey().then((key) => setUserKey(key));
+  // }, []);
 
   //adicionar imagem de cada capitulo e o t
   const { pause, play, stop } = useLockScreenPlayer({
@@ -644,44 +644,48 @@ export default function StorieScreen() {
       if (showFinishModal || isSavingProgress) return;
 
       if (force) {
-        if (!userKey) return;
-
-        const storageKey = `@chapter_finished_${storyId}_${currentIndex}`;
+        if (!deviceId) return;
 
         try {
           setIsSavingProgress(true);
-          const alreadySaved = await AsyncStorage.getItem(storageKey);
 
-          // REGRA PARA TODOS OS CAPÍTULOS: Atualiza chaptersRead no Firestore
-          if (alreadySaved) {
-            // deviceId can be null in the store; ensure it's available before calling addChapter
-            if (!deviceId) {
-              console.warn("Skipping addChapter: deviceId is not available");
-            } else {
-              await addChapter(deviceId, String(storyId), Number(currentIndex));
-            }
+          await addChapter(deviceId, String(storyId), Number(currentIndex));
 
-            await AsyncStorage.setItem(storageKey, "true");
+          console.log(Number(currentIndex), "CURRENT INDEX");
+
+          // 2. Lógica de Ramificação - SOMENTE NO CAPÍTULO 2 (Index 1)
+          if (Number(currentIndex) === 1) {
+            const prompt = `
+            Based on the ending of this story: "${sentences.slice(-3).join(" ")}", 
+            generate two distinct emotional or action-driven choices for the final chapter.
+            Return ONLY a JSON array with this exact structure:
+            [
+              {"title": "Short action title", "description": "Briefly what happens", "targetIndex": 2},
+              {"title": "Short emotional title", "description": "Briefly what happens", "targetIndex": 2}
+            ]
+          `;
+
+            const result = await geminiModel.generateContent(prompt);
+            const responseText = result.response.text();
+
+            // Limpeza de Markdown do JSON
+            const cleanJson = responseText.replace(/```json|```/g, "").trim();
+            const parsedChoices = JSON.parse(cleanJson);
+
+            console.log(parsedChoices, "PARSED CHOICES");
+
+            setBranchOptions(parsedChoices);
+          } else {
+            setBranchOptions(null);
           }
 
-          // // REGRA DO CAPÍTULO 2: Ramificação da IA
-          // if (Number(currentIndex) === 1) {
-          //   // 1 é o índice do 2º capítulo
-          //   setIsTranslating(true);
-          //   const prompt = `Generate two paths to Chapter 3 based on: ${sentences.slice(-2)}`;
-          //   const result = await geminiModel.generateContent(prompt);
-          //   const cleanJson = result.response
-          //     .text()
-          //     .replace(/```json|```/g, "");
-          //   setBranchOptions(JSON.parse(cleanJson));
-          //   setIsTranslating(false);
-          // } else {
-          //   setBranchOptions(null);
-          // }
-
+          // 3. Abre o modal (que agora terá as escolhas se for Cap 2)
           setShowFinishModal(true);
         } catch (error) {
-          console.error("Erro ao finalizar capítulo:", error);
+          console.error("Erro ao finalizar capítulo ou gerar caminhos:", error);
+          // Fallback: se a IA falhar, não trava o app, apenas mostra o modal sem escolhas
+          setBranchOptions(null);
+          setShowFinishModal(true);
         } finally {
           setIsSavingProgress(false);
         }
@@ -689,7 +693,7 @@ export default function StorieScreen() {
     },
     [
       currentIndex,
-      userKey,
+      deviceId,
       storyId,
       sentences,
       showFinishModal,
@@ -697,6 +701,10 @@ export default function StorieScreen() {
       addChapter,
     ],
   );
+
+  // useEffect(() => {
+  //   handleFinishReading(true);
+  // }, []);
 
   /* =========================
      UI
@@ -865,51 +873,56 @@ export default function StorieScreen() {
         onChoiceSelected={async (choice: any) => {
           setShowFinishModal(false);
 
-          // Se for a escolha do Capítulo 2 para o 3, geramos o texto na hora
-          if (Number(currentIndex) === 2) {
+          // Se estamos no Capítulo 2 e o usuário escolheu o caminho
+          if (Number(currentIndex) === 1) {
             setIsTranslating(true);
 
             const finalePrompt = `
-        Write the FINAL chapter (Chapter 3) of this story.
-        Previous context: "${sentences.join(" ")}"
-        The reader chose the path: "${choice.title}".
-        Provide a satisfying and immersive conclusion 2in English.
-        Return ONLY a JSON object: 
-        {"title": "The Final Destiny", "storie": "Your long story here..."}
-      `;
+                Write the FINAL chapter (Chapter 3) of this story.
+                Previous context: "${sentences.join(" ")}"
+                The reader chose the path: "${choice.title}".
+                Provide a satisfying and immersive conclusion in English.
+                Return ONLY a JSON object: 
+                {"title": "The Final Destiny", "storie": "Your long story here..."}
+            `;
 
             try {
               const result = await geminiModel.generateContent(finalePrompt);
+
+              // Remove possíveis blocos de código e parse para JSON
               const data = JSON.parse(
                 result.response.text().replace(/```json|```/g, ""),
               );
 
-              // Navega para o Capítulo 3 com o texto gerado pela IA
+              // Navega para a terceira tela com o texto gerado
               router.replace({
                 pathname: "/(storie)",
                 params: {
                   storie: data.storie,
                   title: data.title,
-                  thumbnail: thumbnail, // Ou uma nova imagem gerada
+                  thumbnail: story?.chapter[2].thumbnail, // você pode substituir por nova imagem se quiser
                   storyId: storyId,
-                  currentIndex: 2,
+                  currentIndex: 2, // Capítulo 3
                   autoPlay: "true",
                 },
               });
             } catch (e) {
               Alert.alert(
-                "The scroll is torn",
-                "Could not generate the final chapter.",
+                "Oops!",
+                "Não foi possível gerar o capítulo final. Tente novamente.",
               );
             } finally {
               setIsTranslating(false);
             }
           } else {
+            // Para outros capítulos, apenas avança normalmente
             handleNextChapter(choice.targetIndex);
           }
         }}
         onClose={async () => {
           setShowFinishModal(false);
+
+          // Se não houver opções de branching, apenas vai para o próximo capítulo
           if (!branchOptions) await handleNextChapter();
         }}
       />
