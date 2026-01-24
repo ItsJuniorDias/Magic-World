@@ -6,8 +6,10 @@ import {
   ScrollView,
   Dimensions,
   Animated,
+  TouchableOpacity,
 } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
+
 import Text from "@/components/text";
 import { Colors } from "@/constants/theme";
 import { useMagicProgressStore } from "@/store/useMagicProgressStore";
@@ -15,7 +17,7 @@ import { AchievementModal } from "@/components/(achievements)";
 
 const { width } = Dimensions.get("window");
 
-// Animação de entrada refinada
+// ================= Fade-In Animation for Achievements =================
 const FadeInItem = ({ children, delay, isFocused }: any) => {
   const animatedValue = useRef(new Animated.Value(0)).current;
 
@@ -26,7 +28,7 @@ const FadeInItem = ({ children, delay, isFocused }: any) => {
         toValue: 1,
         friction: 9,
         tension: 40,
-        delay: delay,
+        delay,
         useNativeDriver: true,
       }).start();
     }
@@ -51,6 +53,7 @@ const FadeInItem = ({ children, delay, isFocused }: any) => {
   );
 };
 
+// ================= LEVEL META =================
 const LEVEL_META = {
   Apprentice: {
     icon: "✨",
@@ -72,6 +75,7 @@ const LEVEL_META = {
   },
 };
 
+// ================= ACHIEVEMENTS =================
 const ACHIEVEMENTS = [
   { id: 1, title: "Initiate", req: 1, icon: "🌱" },
   { id: 2, title: "Bookworm", req: 5, icon: "📖" },
@@ -81,6 +85,7 @@ const ACHIEVEMENTS = [
   { id: 6, title: "Legendary", req: 100, icon: "🏆" },
 ];
 
+// ================= PROFILE SCREEN =================
 export default function ProfileScreen() {
   const isFocused = useIsFocused();
   const { chaptersRead, level, initProgress } = useMagicProgressStore();
@@ -88,12 +93,16 @@ export default function ProfileScreen() {
   const [activeAchievement, setActiveAchievement] = useState<any | null>(null);
   const shownRef = useRef<Record<number, boolean>>({});
 
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     initProgress().then(() => setLoading(false));
   }, []);
 
   useEffect(() => {
     if (!isFocused || loading) return;
+
+    // Automatically show newly unlocked achievement modal
     const potentialUnlockeds = ACHIEVEMENTS.filter(
       (a) => chaptersRead >= a.req && !shownRef.current[a.id],
     );
@@ -116,6 +125,15 @@ export default function ProfileScreen() {
     100,
   );
 
+  // Animate progress bar
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: progressPercent,
+      duration: 800,
+      useNativeDriver: false,
+    }).start();
+  }, [progressPercent]);
+
   if (loading) return null;
 
   return (
@@ -124,7 +142,7 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Profile Card Estilo Apple */}
+        {/* ================= Profile Card ================= */}
         <View style={styles.card}>
           <View style={styles.avatarWrapper}>
             <Text title="👤" fontSize={42} />
@@ -138,6 +156,7 @@ export default function ProfileScreen() {
             style={{ letterSpacing: -0.5 }}
           />
 
+          {/* Level Badge */}
           <View style={[styles.levelBadge, { borderColor: meta.color + "40" }]}>
             <Text fontSize={14} fontFamily="regular" title={meta.icon} />
             <Text
@@ -148,7 +167,7 @@ export default function ProfileScreen() {
             />
           </View>
 
-          {/* Stats Row */}
+          {/* Stats */}
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <Text
@@ -201,11 +220,14 @@ export default function ProfileScreen() {
                 />
               </View>
               <View style={styles.progressBarContainer}>
-                <View
+                <Animated.View
                   style={[
                     styles.progressBarFill,
                     {
-                      width: `${progressPercent}%`,
+                      width: progressAnim.interpolate({
+                        inputRange: [0, 100],
+                        outputRange: ["0%", "100%"],
+                      }),
                       backgroundColor: meta.color,
                     },
                   ]}
@@ -215,6 +237,7 @@ export default function ProfileScreen() {
           )}
         </View>
 
+        {/* Achievements Section */}
         <View style={styles.sectionHeader}>
           <Text
             fontFamily="bold"
@@ -234,7 +257,15 @@ export default function ProfileScreen() {
                 delay={index * 60}
                 isFocused={isFocused}
               >
-                <View style={styles.achievementWrapper}>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    if (isUnlocked) {
+                      setActiveAchievement(item); // Only open modal if unlocked
+                    }
+                  }}
+                  style={styles.achievementWrapper}
+                >
                   <View
                     style={[
                       styles.achievementIcon,
@@ -254,13 +285,14 @@ export default function ProfileScreen() {
                     title={item.title}
                     style={{ marginTop: 8 }}
                   />
-                </View>
+                </TouchableOpacity>
               </FadeInItem>
             );
           })}
         </View>
       </ScrollView>
 
+      {/* Achievement Modal */}
       {activeAchievement && (
         <AchievementModal
           achievement={activeAchievement}
@@ -271,10 +303,11 @@ export default function ProfileScreen() {
   );
 }
 
+// ================= STYLES =================
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000", // Fundo preto puro para contraste Apple
+    backgroundColor: Colors.dark.background,
   },
   scrollContent: {
     alignItems: "center",
@@ -286,7 +319,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     padding: 24,
     alignItems: "center",
-    backgroundColor: "#1C1C1E", // Dark Gray Apple
+    backgroundColor: "#1C1C1E",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     shadowColor: "#000",
@@ -346,7 +379,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   achievementWrapper: {
-    width: (width * 0.9 - 30) / 3, // 3 colunas para visual mais limpo
+    width: (width * 0.9 - 30) / 3,
     alignItems: "center",
     marginBottom: 25,
   },
