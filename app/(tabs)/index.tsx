@@ -26,6 +26,7 @@ import {
   getDocs,
   increment,
   serverTimestamp,
+  setDoc,
   updateDoc,
 } from "firebase/firestore";
 import { useStoriesStore } from "@/store/useStoriesStore";
@@ -150,13 +151,129 @@ export default function HomeScreen() {
   };
 
   async function generateStory() {
-    const textResult = await geminiModel.generateContent(`...`); // Prompt omitido por brevidade
+    const textResult = await geminiModel.generateContent(`
+Write an original children’s saga-style story set in a magical adventure world.
+
+Important character rules:
+Each chapter must focus on different main characters (children, creatures, or heroes), with unique personalities, backgrounds, and motivations.
+Do not reuse the same protagonist across chapters.
+Characters may meet, influence events, or be connected by the same world or legend, but each chapter should feel like a new perspective.
+
+
+Story guidelines:
+Genre: adventure
+Tone: Epic, immersive, mysterious
+Style: Saga narrative
+Audience: Children
+World-building should feel magical, safe, and wondrous
+Include discovery, courage, friendship, and mystery
+Avoid violence or dark themes unsuitable for children
+
+
+Narrative focus:
+Chapter 1: Introduce the world through the eyes of the first character
+Chapter 2: Expand the world with a new character from a different place or culture
+Chapter 3: Reveal a deeper secret of the world through a third, unexpected character
+
+
+Writing rules:
+Rich descriptions and sensory details
+Clear beginning, middle, and end for each chapter
+Maintain continuity of the world while changing protagonists
+Generate the story following a structured JSON format when requested.
+
+Structure:
+{
+  category: "adventure",
+  title: "",
+  thumbnail: "",
+  views: 0,
+  id: "",
+  isPro: true,
+  chapter: [
+    {
+      locked: false,
+      navigate: "/(storie)",
+      storie: "",
+      title: "",
+      thumbnail: ""
+    },
+    {
+      locked: true,
+      navigate: "/(storie)",
+      storie: "",
+      title: "",
+      thumbnail: ""
+    },
+    {
+      locked: true,
+      navigate: "/(storie)",
+      storie: "",
+      title: "",
+      thumbnail: ""
+    }
+  ]
+}
+`);
+
     const cleaned = textResult.response
       .text()
       .replace(/```json|```/g, "")
       .trim();
+
+    console.log("CLEANED JSON:", cleaned);
+
     const story = JSON.parse(cleaned);
-    // ... restante da lógica de imagem (mantida conforme seu código)
+
+    // Upload and set story thumbnail
+    const storyImagePrompt = `Cover illustration for a children's mystery saga titled "${story.title}". The scene should be magical, safe, and wondrous, capturing the essence of discovery, courage, friendship, and mystery. Style: vibrant colors, whimsical details, and a touch of fantasy.`;
+
+    const storyImageResult = await geminiImage.generateContent({
+      contents: [{ role: "user", parts: [{ text: storyImagePrompt }] }],
+      generationConfig: {
+        responseModalities: ["TEXT", "IMAGE"],
+      },
+    });
+
+    const storyImagePart =
+      storyImageResult.response.candidates[0].content.parts.find(
+        (p) => p.inlineData,
+      );
+
+    if (storyImagePart) {
+      const permanentUrl = await uploadGeminiToCloudinary(
+        storyImagePart.inlineData.data,
+      );
+
+      story.thumbnail = permanentUrl;
+    }
+
+    // Generate and upload thumbnails for each chapter
+    for (let i = 0; i < story.chapter.length; i++) {
+      const chapter = story.chapter[i];
+
+      const imagePrompt = `Illustration for the chapter titled "${chapter.title}" in a children's mystery saga. The scene should be magical, safe, and wondrous, capturing the essence of discovery, courage, friendship, and mystery. Style: vibrant colors, whimsical details, and a touch of fantasy.`;
+
+      const result = await geminiImage.generateContent({
+        contents: [{ role: "user", parts: [{ text: imagePrompt }] }],
+        generationConfig: {
+          responseModalities: ["TEXT", "IMAGE"],
+        },
+      });
+
+      const imagePart = result.response.candidates[0].content.parts.find(
+        (p) => p.inlineData,
+      );
+
+      if (imagePart) {
+        const permanentUrl = await uploadGeminiToCloudinary(
+          imagePart.inlineData.data,
+        );
+
+        story.chapter[i].thumbnail = permanentUrl;
+      }
+    }
+
     return story;
   }
 
@@ -166,11 +283,23 @@ export default function HomeScreen() {
         setTimeout(() => {
           requestReviewOnce();
         }, 30000);
+
+        // await AsyncStorage.removeItem("@app_review_requested");
+
+        // const story = await generateStory();
+        // console.log("GENERATED STORY:", story);
+
+        // const result = await addDoc(collection(db, "stories"), {
+        //   ...story,
+        //   createdAt: serverTimestamp(),
+        // });
+        // console.log(result, "STORY ADDED WITH ID");
       } catch (err) {
         console.error(err);
       }
     };
     load();
+
     loadLikedStories(); // Carrega os likes ao montar a tela
   }, []);
 
@@ -184,6 +313,7 @@ export default function HomeScreen() {
         views={item.views}
         index={index}
         scrollX={scrollX}
+        isPro={item.isPro}
         isFavorite={likedIds.includes(item.id)}
         onToggleFavorite={() => {
           toggleLike({
@@ -198,16 +328,25 @@ export default function HomeScreen() {
           if (variant !== "category") {
             await incrementStoryViews(item.id);
           }
-          router.push({
-            pathname: item.chapter[0].navigate,
-            params: {
-              storie: item.chapter[0].storie,
-              title: item.chapter[0].title,
-              thumbnail: item.chapter[0].thumbnail,
-              storyId: item.id,
-              currentIndex: 0,
-            },
-          });
+
+          console.log(item.isPro, "IS PRO?");
+
+          const hasPro = await AsyncStorage.getItem("@user_is_pro");
+
+          if (item.isPro === true && hasPro !== "true") {
+            router.push("/(subscribe)");
+          } else {
+            router.push({
+              pathname: item.chapter[0].navigate,
+              params: {
+                storie: item.chapter[0].storie,
+                title: item.chapter[0].title,
+                thumbnail: item.chapter[0].thumbnail,
+                storyId: item.id,
+                currentIndex: 0,
+              },
+            });
+          }
         }}
       />
     ),

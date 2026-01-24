@@ -10,7 +10,7 @@ import { FontAwesome6 } from "@expo/vector-icons";
 
 import { useEffect, useRef, useState } from "react";
 
-import { CardContainer, ImageCard, Gradient } from "./styles";
+import { CardContainer, Gradient } from "./styles";
 import Text from "../text";
 import { Colors } from "@/constants/theme";
 
@@ -27,6 +27,7 @@ export type CardProps = {
   // ✅ Novas props para o Parallax
   index?: number;
   scrollX?: Animated.Value;
+  isPro?: boolean;
 };
 
 export default function Card({
@@ -41,6 +42,7 @@ export default function Card({
   imageStyle,
   index = 0,
   scrollX,
+  isPro,
 }: CardProps) {
   const [localFavorite, setLocalFavorite] = useState(isFavorite);
 
@@ -88,6 +90,50 @@ export default function Card({
 
   return (
     <CardContainer onPress={onPress} activeOpacity={0.85} variant={variant}>
+      {/* BADGE PRO - DARK GLASS STYLE */}
+      {isPro && variant !== "category" && (
+        <View
+          style={{
+            position: "absolute",
+            top: 12,
+            left: 12,
+            zIndex: 15,
+            flexDirection: "row",
+            alignItems: "center",
+            // Fundo preto translúcido (efeito fumê)
+            backgroundColor: "rgba(0, 0, 0, 0.55)",
+            paddingHorizontal: 10,
+            paddingVertical: 5,
+            borderRadius: 20,
+            // Borda fina para dar profundidade ao "vidro"
+            borderWidth: 1,
+            borderColor: "rgba(255, 255, 255, 0.1)",
+            // Sombra suave para destacar do fundo
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 4,
+          }}
+        >
+          <FontAwesome6
+            name="crown"
+            size={10}
+            color="white" // Dourado para o ícone Pro
+            style={{ marginRight: 6 }}
+          />
+          <Text
+            fontFamily="bold"
+            fontSize={12}
+            color="#FFFFFF"
+            title="PREMIUM"
+            style={{
+              letterSpacing: 1.2, // Estilo Apple clássico
+              textTransform: "uppercase",
+            }}
+          />
+        </View>
+      )}
+
       {/* THUMBNAIL CONTAINER COM OVERFLOW HIDDEN */}
       <View style={{ flex: 1, overflow: "hidden", borderRadius: 16 }}>
         {thumbnailComponent ?? (
