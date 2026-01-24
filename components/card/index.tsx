@@ -1,5 +1,10 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { TouchableOpacity, Animated } from "react-native";
+import {
+  TouchableOpacity,
+  Animated,
+  StyleProp,
+  ImageStyle,
+} from "react-native";
 import { FontAwesome6 } from "@expo/vector-icons";
 
 import { useEffect, useRef, useState } from "react";
@@ -16,6 +21,8 @@ export type CardProps = {
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
   onPress?: () => void;
+  thumbnailComponent?: React.ReactNode;
+  imageStyle?: StyleProp<ImageStyle>; // ✅ corrigido
 };
 
 export default function Card({
@@ -26,6 +33,8 @@ export default function Card({
   isFavorite = false,
   onToggleFavorite,
   onPress,
+  thumbnailComponent,
+  imageStyle,
 }: CardProps) {
   const [localFavorite, setLocalFavorite] = useState(isFavorite);
 
@@ -55,7 +64,17 @@ export default function Card({
 
   return (
     <CardContainer onPress={onPress} activeOpacity={0.85} variant={variant}>
-      <ImageCard source={{ uri: thumbnail }} />
+      {/* THUMBNAIL */}
+      {thumbnailComponent ?? (
+        <Animated.Image
+          source={{ uri: thumbnail }}
+          style={[
+            { width: "100%", height: "100%", borderRadius: 16 },
+            imageStyle,
+          ]}
+          resizeMode="cover"
+        />
+      )}
 
       {/* FAVORITE BUTTON */}
       {onToggleFavorite && variant !== "category" && (
@@ -73,11 +92,7 @@ export default function Card({
             zIndex: 10,
           }}
         >
-          <Animated.View
-            style={{
-              transform: [{ scale: scaleAnim }],
-            }}
-          >
+          <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
             <FontAwesome6
               name="heart"
               size={24}
@@ -98,9 +113,7 @@ export default function Card({
             fontSize={18}
             color="#fff"
             title={title}
-            style={{
-              textAlign: variant === "category" ? "center" : "left",
-            }}
+            style={{ textAlign: variant === "category" ? "center" : "left" }}
           />
         )}
 

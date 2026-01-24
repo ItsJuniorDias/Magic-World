@@ -31,14 +31,14 @@ if (
 
 const FAVORITE_KEY = "anonymous_user_key";
 const CARD_WIDTH = 220;
+const CARD_SPACING = 12;
+const CARD_SIZE = CARD_WIDTH + CARD_SPACING;
 
-// --- COMPONENTE DE CARD COM FADE-IN E FADE-OUT ---
+// ================= CARD ANIMADO COM PARALLAX =================
 const AnimatedCard = React.memo(
-  ({ item, onToggle, onPress, isFavorite }: any) => {
-    // Começa com 0 para o Fade-in inicial
+  ({ item, index, scrollX, onToggle, onPress, isFavorite }: any) => {
     const opacity = useRef(new Animated.Value(0)).current;
 
-    // Efeito de Fade-in ao montar
     useEffect(() => {
       Animated.timing(opacity, {
         toValue: 1,
@@ -48,7 +48,6 @@ const AnimatedCard = React.memo(
     }, []);
 
     const handleToggle = () => {
-      // Efeito de Fade-out antes de remover
       Animated.timing(opacity, {
         toValue: 0,
         duration: 300,
@@ -58,8 +57,33 @@ const AnimatedCard = React.memo(
       });
     };
 
+    // ===== PARALLAX =====
+    const inputRange = [
+      (index - 1) * CARD_SIZE,
+      index * CARD_SIZE,
+      (index + 1) * CARD_SIZE,
+    ];
+
+    const imageTranslateX = scrollX.interpolate({
+      inputRange,
+      outputRange: [-20, 0, 20],
+      extrapolate: "clamp",
+    });
+
+    const imageScale = scrollX.interpolate({
+      inputRange,
+      outputRange: [0.95, 1, 0.95],
+      extrapolate: "clamp",
+    });
+
     return (
-      <Animated.View style={{ opacity, width: CARD_WIDTH, marginRight: 12 }}>
+      <Animated.View
+        style={{
+          opacity,
+          width: CARD_WIDTH,
+          marginRight: CARD_SPACING,
+        }}
+      >
         <Card
           thumbnail={item.thumbnail}
           title={item.title}
@@ -67,12 +91,16 @@ const AnimatedCard = React.memo(
           isFavorite={isFavorite}
           onToggleFavorite={handleToggle}
           onPress={() => onPress(item.id)}
+          imageStyle={{
+            transform: [{ translateX: imageTranslateX }, { scale: imageScale }],
+          }}
         />
       </Animated.View>
     );
   },
 );
 
+// ================= SCREEN =================
 export default function FavoriteScreen() {
   const router = useRouter();
   const { likedIds = [], loadLikedStories, toggleLike } = useLikedStore();
@@ -94,7 +122,6 @@ export default function FavoriteScreen() {
 
   const handleToggleLike = useCallback(
     (item: any) => {
-      // LayoutAnimation suave para os outros cards deslizarem lateralmente
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
 
       toggleLike({
@@ -120,12 +147,12 @@ export default function FavoriteScreen() {
         await updateDoc(doc(db, "stories", storyId), {
           views: increment(1) as any,
         });
-      } catch (e) {}
+      } catch {}
 
       const firstChapter = fullStory.chapter[0];
       router.push({
         pathname: firstChapter.navigate as any,
-        params: { ...firstChapter, storyId: fullStory.id, currentIndex: 0 },
+        params: { ...firstChapter, storyId, currentIndex: 0 },
       });
     },
     [stories, router],
@@ -151,9 +178,11 @@ export default function FavoriteScreen() {
   );
 
   const renderStoryItem = useCallback(
-    ({ item }: any) => (
+    ({ item, index, scrollX }: any) => (
       <AnimatedCard
         item={item}
+        index={index}
+        scrollX={scrollX}
         isFavorite={likedIds.includes(item.id)}
         onToggle={handleToggleLike}
         onPress={navigateToStory}
@@ -187,20 +216,30 @@ export default function FavoriteScreen() {
   );
 }
 
+// ================= SECTION =================
 const Section = ({ title, data, renderItem }: any) => {
   if (!data?.length) return null;
+
+  const scrollX = useRef(new Animated.Value(0)).current;
+
   return (
     <View style={styles.sectionWrapper}>
       <View style={styles.sectionHeader}>
         <Text title={title} fontFamily="bold" fontSize={22} color="#FFFFFF" />
       </View>
-      <FlatList
+
+      <Animated.FlatList
         data={data}
         keyExtractor={(item) => item.id}
-        renderItem={renderItem}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.flatListContent}
+        renderItem={({ item, index }) => renderItem({ item, index, scrollX })}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+          { useNativeDriver: true },
+        )}
+        scrollEventThrottle={16}
       />
     </View>
   );
@@ -214,5 +253,9 @@ const styles = StyleSheet.create({
   },
   sectionWrapper: { marginBottom: 24 },
   sectionHeader: { paddingLeft: 24 },
-  flatListContent: { paddingTop: 16, paddingLeft: 24, paddingRight: 12 },
+  flatListContent: {
+    paddingTop: 16,
+    paddingLeft: 24,
+    paddingRight: 12,
+  },
 });
