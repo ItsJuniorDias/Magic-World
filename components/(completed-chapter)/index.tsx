@@ -9,21 +9,28 @@ import {
 import { GlassView } from "expo-glass-effect";
 import Text from "../text";
 import { Colors } from "@/constants/theme";
+import { saveStoryProgress } from "@/services/saveStoryProgress";
+import { getUserKey } from "@/services/getUserKey";
 
 const { width } = Dimensions.get("window");
 
 export function ChapterCompletedModal({
   visible,
   onClose,
-  chapterNumber,
+  storyId,
+  chapterIndex,
+  currentPage = 0,
 }: {
   visible: boolean;
   onClose: () => void;
-  chapterNumber: number;
+  storyId: string;
+  chapterIndex: number;
+  currentPage?: number;
 }) {
   const scale = useRef(new Animated.Value(0.9)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
+  // ==== Animation ====
   useEffect(() => {
     if (visible) {
       scale.setValue(0.9);
@@ -47,12 +54,20 @@ export function ChapterCompletedModal({
 
   if (!visible) return null;
 
+  const handleContinue = async () => {
+    // Salvar progresso no Firestore usando userKey
+    const userKey = await getUserKey();
+    await saveStoryProgress(userKey, storyId, chapterIndex, currentPage);
+
+    // Fechar modal
+    onClose();
+  };
+
   return (
     <View style={styles.overlay}>
       <Animated.View
         style={[styles.modalContainer, { opacity, transform: [{ scale }] }]}
       >
-        {/* O GlassView precisa envolver o conteúdo para o efeito de vidro */}
         <GlassView intensity={90} style={styles.glassCard}>
           <View style={styles.iconContainer}>
             <Text title="✨" fontSize={56} />
@@ -60,7 +75,7 @@ export function ChapterCompletedModal({
 
           <Text
             fontFamily="bold"
-            fontSize={28}
+            fontSize={24}
             color={Colors.light.text}
             title="Great Reading!"
             style={styles.title}
@@ -70,7 +85,7 @@ export function ChapterCompletedModal({
             fontSize={16}
             color={Colors.light.text}
             fontFamily="regular"
-            title={`You've successfully finished chapter ${chapterNumber}. Your magic level has increased!`}
+            title={`You've successfully finished chapter ${chapterIndex + 1}. Your progress has been saved!`}
             style={styles.description}
           />
 
@@ -79,7 +94,7 @@ export function ChapterCompletedModal({
               styles.button,
               { backgroundColor: pressed ? "rgba(255,255,255,0.8)" : "#FFF" },
             ]}
-            onPress={onClose}
+            onPress={handleContinue}
           >
             <Text
               fontFamily="bold"
@@ -97,7 +112,7 @@ export function ChapterCompletedModal({
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.5)", // Fundo levemente escuro para o vidro destacar
+    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
     zIndex: 9999,
@@ -105,7 +120,7 @@ const styles = StyleSheet.create({
   modalContainer: {
     width: width * 0.86,
     borderRadius: 38,
-    overflow: "hidden", // Importante para o GlassView respeitar o radius
+    overflow: "hidden",
   },
   glassCard: {
     padding: 32,
@@ -141,7 +156,6 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    // Sombra sutil no botão para destacar do vidro
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,

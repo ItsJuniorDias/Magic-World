@@ -46,6 +46,9 @@ import { useStoriesStore } from "@/store/useStoriesStore";
 
 import { useMagicProgressStore } from "@/store/useMagicProgressStore";
 import { ChapterCompletedModal } from "@/components/(completed-chapter)";
+import { getUserKey } from "@/services/getUserKey";
+import { getStoryProgress } from "@/services/getStoryProgress";
+import { saveStoryProgress } from "@/services/saveStoryProgress";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -122,6 +125,29 @@ export default function StorieScreen() {
   const [musicIndex, setMusicIndex] = useState(0);
 
   const [showFinishModal, setShowFinishModal] = useState(false);
+
+  const [userKey, setUserKey] = useState<string | null>(null);
+  const [currentChapter, setCurrentChapter] = useState(0);
+
+  useEffect(() => {
+    getUserKey().then((key) => setUserKey(key));
+  }, []);
+
+  useEffect(() => {
+    if (!userKey) return;
+
+    getStoryProgress(userKey, story.id).then((progress) => {
+      if (progress) setCurrentChapter(progress.chapterIndex);
+    });
+  }, [userKey, story.id]);
+
+  const goToNextChapter = (nextChapter: number, currentPage: number = 0) => {
+    setCurrentChapter(nextChapter);
+
+    if (userKey) {
+      saveStoryProgress(userKey, story.id, nextChapter, currentPage);
+    }
+  };
 
   //adicionar imagem de cada capitulo e o t
   const { pause, play, stop } = useLockScreenPlayer({
@@ -595,14 +621,22 @@ export default function StorieScreen() {
   );
 
   const handleFinishReading = useCallback(async () => {
-    // Verificamos se chegou na última frase
     if (activeSentenceIndex === sentences.length - 1) {
-      // Evita disparar o modal múltiplas vezes se o scroll continuar
+      if (!userKey) return;
+
+      // Evita múltiplos disparos
       const alreadySaved = await AsyncStorage.getItem(
         `@chapter_finished_${storyId}_${currentIndex}`,
       );
-
       if (alreadySaved) return;
+
+      // Salva progresso no Firestore
+      await saveStoryProgress(
+        userKey,
+        story.id,
+        Number(currentIndex),
+        activeSentenceIndex,
+      );
 
       await addChapter();
 
@@ -619,6 +653,7 @@ export default function StorieScreen() {
     addChapter,
     storyId,
     currentIndex,
+    userKey,
   ]);
 
   /* =========================
@@ -781,8 +816,27 @@ export default function StorieScreen() {
 
       <ChapterCompletedModal
         visible={showFinishModal}
-        chapterNumber={Number(currentIndex) + 1}
-        onClose={() => setShowFinishModal(false)}
+        storyId={String(storyId)}
+        chapterIndex={Number(currentIndex)}
+        currentPage={activeSentenceIndex} // para continuar do ponto exato
+        onClose={() => {
+          setShowFinishModal(false);
+          // Avança para o próximo capítulo automaticamente se existir
+          if (nextChapter) {
+            goToNextChapter(nextIndex);
+            router.replace({
+              pathname: "/(storie)",
+              params: {
+                storie: nextChapter.storie,
+                title: nextChapter.title,
+                thumbnail: nextChapter.thumbnail,
+                storyId: storyId,
+                currentIndex: nextIndex,
+                autoPlay: "true",
+              },
+            });
+          }
+        }}
       />
 
       <NextChapterButton
