@@ -43,6 +43,22 @@ export default function TabLayout() {
           selectedColor={Colors.light.tint}
         />
       </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="profile">
+        <Label
+          selectedStyle={{
+            color: Colors.light.tint,
+          }}
+        >
+          Profile
+        </Label>
+
+        <Icon
+          sf={"person.fill"}
+          drawable="ic_menu_preferences"
+          selectedColor={Colors.light.tint}
+        />
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }

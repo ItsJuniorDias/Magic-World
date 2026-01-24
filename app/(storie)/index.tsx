@@ -7,7 +7,7 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useRef, useState, useEffect, useMemo, useCallback } from "react";
+import { useRef, useState, useEffect, useMemo, useCallback, use } from "react";
 
 import { LinearGradient } from "expo-linear-gradient";
 
@@ -44,6 +44,8 @@ import * as Notifications from "expo-notifications";
 import { BACKGROUND_TRACKS } from "@/constants/backgroundTracks";
 import { useStoriesStore } from "@/store/useStoriesStore";
 
+import { useMagicProgressStore } from "@/store/useMagicProgressStore";
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -76,6 +78,8 @@ export const geminiModel = genAI.getGenerativeModel({
 export default function StorieScreen() {
   const { storie, title, thumbnail, currentIndex, storyId, autoPlay } =
     useLocalSearchParams();
+
+  const { addChapter } = useMagicProgressStore();
 
   const router = useRouter();
 
@@ -587,6 +591,15 @@ export default function StorieScreen() {
     }, [stop]),
   );
 
+  const handleFinishReading = useCallback(async () => {
+    if (activeSentenceIndex !== sentences.length - 1) return;
+
+    // Usuário chegou ao fim do capítulo
+    await addChapter();
+
+    alert("Chapter completed! Your magic power grows. ✨");
+  }, [activeSentenceIndex, sentences.length, addChapter]);
+
   /* =========================
      UI
   ========================== */
@@ -678,6 +691,7 @@ export default function StorieScreen() {
               useNativeDriver: false,
               listener: (e) => {
                 currentScrollY.current = e.nativeEvent.contentOffset.y;
+                handleFinishReading();
               },
             },
           )}

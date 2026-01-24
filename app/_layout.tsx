@@ -65,6 +65,10 @@ export default function RootLayout() {
               name="(subscribe)/index"
               options={{ headerShown: false }}
             />
+            <Stack.Screen
+              name="(profile)/index"
+              options={{ headerShown: false }}
+            />
 
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           </Stack>
