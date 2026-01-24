@@ -9,6 +9,8 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import { useRef, useState, useEffect, useMemo, useCallback, use } from "react";
 
+import * as Application from "expo-application";
+
 import { LinearGradient } from "expo-linear-gradient";
 
 import { Colors } from "@/constants/theme";
@@ -47,8 +49,8 @@ import { useStoriesStore } from "@/store/useStoriesStore";
 import { useMagicProgressStore } from "@/store/useMagicProgressStore";
 import { ChapterCompletedModal } from "@/components/(completed-chapter)";
 import { getUserKey } from "@/services/getUserKey";
-import { getStoryProgress } from "@/services/getStoryProgress";
-import { saveStoryProgress } from "@/services/saveStoryProgress";
+
+import { useIsFocused } from "@react-navigation/native";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -80,10 +82,12 @@ export const geminiModel = genAI.getGenerativeModel({
 });
 
 export default function StorieScreen() {
+  const isFocused = useIsFocused();
+
   const { storie, title, thumbnail, currentIndex, storyId, autoPlay } =
     useLocalSearchParams();
 
-  const { addChapter } = useMagicProgressStore();
+  const { addChapter, initProgress, deviceId } = useMagicProgressStore();
 
   const router = useRouter();
 
@@ -127,27 +131,24 @@ export default function StorieScreen() {
   const [showFinishModal, setShowFinishModal] = useState(false);
 
   const [userKey, setUserKey] = useState<string | null>(null);
-  const [currentChapter, setCurrentChapter] = useState(0);
+
+  const [branchOptions, setBranchOptions] = useState<
+    { title: string; targetIndex: number }[] | null
+  >(null);
+
+  const [isSavingProgress, setIsSavingProgress] = useState(false);
+
+  useEffect(() => {
+    if (!isFocused) return;
+
+    if (deviceId) return;
+
+    initProgress().then(() => {});
+  }, [isFocused, deviceId, initProgress]);
 
   useEffect(() => {
     getUserKey().then((key) => setUserKey(key));
   }, []);
-
-  useEffect(() => {
-    if (!userKey) return;
-
-    getStoryProgress(userKey, story.id).then((progress) => {
-      if (progress) setCurrentChapter(progress.chapterIndex);
-    });
-  }, [userKey, story.id]);
-
-  const goToNextChapter = (nextChapter: number, currentPage: number = 0) => {
-    setCurrentChapter(nextChapter);
-
-    if (userKey) {
-      saveStoryProgress(userKey, story.id, nextChapter, currentPage);
-    }
-  };
 
   //adicionar imagem de cada capitulo e o t
   const { pause, play, stop } = useLockScreenPlayer({
@@ -176,7 +177,7 @@ export default function StorieScreen() {
     }
 
     // 2. disparar notificação
-    const id = await Notifications.scheduleNotificationAsync({
+    await Notifications.scheduleNotificationAsync({
       content: {
         title: "Next Chapter Locked 🔒",
         body: "Subscribe to access the next chapter.",
@@ -186,22 +187,33 @@ export default function StorieScreen() {
     });
   };
 
-  const handleNextChapter = async () => {
-    // checar paywall
+  const handleNextChapter = async (forcedIndex?: number) => {
+    // 1. Checar paywall
     const isPro = await AsyncStorage.getItem("@user_is_pro");
 
-    console.log(!isPro, "hasAccess");
-
-    if (!isPro) {
+    // Consideramos Pro se o valor for "true" (ajuste conforme seu salvamento)
+    if (isPro !== "true") {
       // sem acesso → pausa tudo
       await pauseAllAudio();
 
       // dispara notificação local
       await notifyPaywall();
 
+      // Opcional: Redirecionar para tela de assinatura
+      // router.push("/(subscribe)");
       return;
     } else {
-      // com acesso → avança pro próximo capítulo
+      // 2. Determinar qual capítulo carregar
+      // Se forcedIndex existir (escolha do usuário), usa ele. Senão, usa o nextIndex padrão.
+      const targetIndex = forcedIndex ?? nextIndex;
+      const targetChapter = (story as any)?.chapter?.[targetIndex];
+
+      if (!targetChapter) {
+        console.log("Próximo capítulo não encontrado");
+        return;
+      }
+
+      // 3. Limpar estados de áudio e fala atuais
       speakSessionRef.current += 1;
       lastSentenceIndexRef.current = 0;
 
@@ -211,34 +223,33 @@ export default function StorieScreen() {
       setIsPlay(false);
       setActiveSentenceIndex(-1);
 
-      if (!nextChapter) return;
-
+      // 4. Navegar para o novo capítulo
       router.replace({
         pathname: "/(storie)",
         params: {
-          storie: nextChapter.storie,
-          title: nextChapter.title,
-          thumbnail: nextChapter.thumbnail,
+          storie: targetChapter.storie,
+          title: targetChapter.title,
+          thumbnail: targetChapter.thumbnail,
           storyId: storyId,
-          currentIndex: nextIndex,
+          currentIndex: targetIndex,
           autoPlay: "true",
         },
       });
 
+      // 5. Configurar TrackPlayer para a nova trilha
       await TrackPlayer.reset();
 
       await TrackPlayer.add({
-        id: nextIndex.toString(),
+        id: targetIndex.toString(),
         url: BACKGROUND_TRACKS[musicIndex].uri,
-        title: String(translatedText.title),
+        title: String(targetChapter.title), // Título do novo capítulo
         artist: "Magic World",
-        artwork: nextChapter.thumbnail,
+        artwork: targetChapter.thumbnail,
       });
 
       await TrackPlayer.play();
     }
   };
-
   /* =========================
      TRACKPLAYER EVENTS
   ========================== */
@@ -544,6 +555,8 @@ export default function StorieScreen() {
         TrackPlayer.pause();
         setIsPlay(false);
         // mantém última frase destacada
+
+        handleFinishReading();
         return;
       }
 
@@ -558,8 +571,14 @@ export default function StorieScreen() {
         pitch: 1.0,
         onDone: () => {
           if (speakSessionRef.current !== sessionId) return;
+
           index += 1;
-          speakNext();
+
+          if (index >= sentences.length) {
+            handleFinishReading(true); // Fim da leitura por voz
+          } else {
+            speakNext();
+          }
         },
         onStopped: () => {
           if (speakSessionRef.current !== sessionId) return;
@@ -620,41 +639,64 @@ export default function StorieScreen() {
     }, [stop]),
   );
 
-  const handleFinishReading = useCallback(async () => {
-    if (activeSentenceIndex === sentences.length - 1) {
-      if (!userKey) return;
+  const handleFinishReading = useCallback(
+    async (force = false) => {
+      if (showFinishModal || isSavingProgress) return;
 
-      // Evita múltiplos disparos
-      const alreadySaved = await AsyncStorage.getItem(
-        `@chapter_finished_${storyId}_${currentIndex}`,
-      );
-      if (alreadySaved) return;
+      if (force) {
+        if (!userKey) return;
 
-      // Salva progresso no Firestore
-      await saveStoryProgress(
-        userKey,
-        story.id,
-        Number(currentIndex),
-        activeSentenceIndex,
-      );
+        const storageKey = `@chapter_finished_${storyId}_${currentIndex}`;
 
-      await addChapter();
+        try {
+          setIsSavingProgress(true);
+          const alreadySaved = await AsyncStorage.getItem(storageKey);
 
-      await AsyncStorage.setItem(
-        `@chapter_finished_${storyId}_${currentIndex}`,
-        "true",
-      );
+          // REGRA PARA TODOS OS CAPÍTULOS: Atualiza chaptersRead no Firestore
+          if (alreadySaved) {
+            // deviceId can be null in the store; ensure it's available before calling addChapter
+            if (!deviceId) {
+              console.warn("Skipping addChapter: deviceId is not available");
+            } else {
+              await addChapter(deviceId, String(storyId), Number(currentIndex));
+            }
 
-      setShowFinishModal(true);
-    }
-  }, [
-    activeSentenceIndex,
-    sentences.length,
-    addChapter,
-    storyId,
-    currentIndex,
-    userKey,
-  ]);
+            await AsyncStorage.setItem(storageKey, "true");
+          }
+
+          // // REGRA DO CAPÍTULO 2: Ramificação da IA
+          // if (Number(currentIndex) === 1) {
+          //   // 1 é o índice do 2º capítulo
+          //   setIsTranslating(true);
+          //   const prompt = `Generate two paths to Chapter 3 based on: ${sentences.slice(-2)}`;
+          //   const result = await geminiModel.generateContent(prompt);
+          //   const cleanJson = result.response
+          //     .text()
+          //     .replace(/```json|```/g, "");
+          //   setBranchOptions(JSON.parse(cleanJson));
+          //   setIsTranslating(false);
+          // } else {
+          //   setBranchOptions(null);
+          // }
+
+          setShowFinishModal(true);
+        } catch (error) {
+          console.error("Erro ao finalizar capítulo:", error);
+        } finally {
+          setIsSavingProgress(false);
+        }
+      }
+    },
+    [
+      currentIndex,
+      userKey,
+      storyId,
+      sentences,
+      showFinishModal,
+      isSavingProgress,
+      addChapter,
+    ],
+  );
 
   /* =========================
      UI
@@ -746,9 +788,9 @@ export default function StorieScreen() {
             {
               useNativeDriver: false,
               listener: (e) => {
-                currentScrollY.current = e.nativeEvent.contentOffset.y;
-                //chamar ao final da lista de sentenças
-                handleFinishReading();
+                const { layoutMeasurement, contentOffset, contentSize } =
+                  e.nativeEvent;
+                currentScrollY.current = contentOffset.y;
               },
             },
           )}
@@ -819,34 +861,56 @@ export default function StorieScreen() {
         visible={showFinishModal}
         storyId={String(storyId)}
         chapterIndex={Number(currentIndex)}
-        currentPage={activeSentenceIndex} // para continuar do ponto exato
+        choices={branchOptions}
+        onChoiceSelected={async (choice: any) => {
+          setShowFinishModal(false);
+
+          // Se for a escolha do Capítulo 2 para o 3, geramos o texto na hora
+          if (Number(currentIndex) === 2) {
+            setIsTranslating(true);
+
+            const finalePrompt = `
+        Write the FINAL chapter (Chapter 3) of this story.
+        Previous context: "${sentences.join(" ")}"
+        The reader chose the path: "${choice.title}".
+        Provide a satisfying and immersive conclusion 2in English.
+        Return ONLY a JSON object: 
+        {"title": "The Final Destiny", "storie": "Your long story here..."}
+      `;
+
+            try {
+              const result = await geminiModel.generateContent(finalePrompt);
+              const data = JSON.parse(
+                result.response.text().replace(/```json|```/g, ""),
+              );
+
+              // Navega para o Capítulo 3 com o texto gerado pela IA
+              router.replace({
+                pathname: "/(storie)",
+                params: {
+                  storie: data.storie,
+                  title: data.title,
+                  thumbnail: thumbnail, // Ou uma nova imagem gerada
+                  storyId: storyId,
+                  currentIndex: 2,
+                  autoPlay: "true",
+                },
+              });
+            } catch (e) {
+              Alert.alert(
+                "The scroll is torn",
+                "Could not generate the final chapter.",
+              );
+            } finally {
+              setIsTranslating(false);
+            }
+          } else {
+            handleNextChapter(choice.targetIndex);
+          }
+        }}
         onClose={async () => {
           setShowFinishModal(false);
-          // Avança para o próximo capítulo automaticamente se existir
-
-          //valida se o user e premium
-          const isPro = await AsyncStorage.getItem("@user_is_pro");
-
-          if (isPro !== "true") {
-            router.replace("/(subscribe)");
-
-            return;
-          }
-
-          if (nextChapter) {
-            goToNextChapter(nextIndex);
-            router.replace({
-              pathname: "/(storie)",
-              params: {
-                storie: nextChapter.storie,
-                title: nextChapter.title,
-                thumbnail: nextChapter.thumbnail,
-                storyId: storyId,
-                currentIndex: nextIndex,
-                autoPlay: "true",
-              },
-            });
-          }
+          if (!branchOptions) await handleNextChapter();
         }}
       />
 

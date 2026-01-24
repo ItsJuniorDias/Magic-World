@@ -1,164 +1,191 @@
-import React, { useEffect, useRef } from "react";
-import {
-  StyleSheet,
-  View,
-  Animated,
-  Pressable,
-  Dimensions,
-} from "react-native";
-import { GlassView } from "expo-glass-effect";
-import Text from "../text";
+import React from "react";
+import { Modal, View, StyleSheet, Pressable } from "react-native";
+import { BlurView } from "expo-blur";
 import { Colors } from "@/constants/theme";
-import { saveStoryProgress } from "@/services/saveStoryProgress";
-import { getUserKey } from "@/services/getUserKey";
+import Text from "@/components/text";
+import { FontAwesome6 } from "@expo/vector-icons";
+import { GlassView } from "expo-glass-effect";
+import { LinearGradient } from "expo-linear-gradient";
 
-const { width } = Dimensions.get("window");
+interface Choice {
+  title: string;
+  targetIndex: number;
+}
 
-export function ChapterCompletedModal({
-  visible,
-  onClose,
-  storyId,
-  chapterIndex,
-  currentPage = 0,
-}: {
+interface Props {
   visible: boolean;
   onClose: () => void;
-  storyId: string;
-  chapterIndex: number;
-  currentPage?: number;
-}) {
-  const scale = useRef(new Animated.Value(0.9)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  choices?: Choice[] | null;
+  onChoiceSelected?: (choice: Choice) => void;
+}
 
-  // ==== Animation ====
-  useEffect(() => {
-    if (visible) {
-      scale.setValue(0.9);
-      opacity.setValue(0);
-
-      Animated.parallel([
-        Animated.spring(scale, {
-          toValue: 1,
-          friction: 10,
-          tension: 50,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [visible]);
-
-  if (!visible) return null;
-
-  const handleContinue = async () => {
-    // Salvar progresso no Firestore usando userKey
-    const userKey = await getUserKey();
-    await saveStoryProgress(userKey, storyId, chapterIndex, currentPage);
-
-    // Fechar modal
-    onClose();
-  };
-
+export const ChapterCompletedModal = ({
+  visible,
+  onClose,
+  choices,
+  onChoiceSelected,
+}: Props) => {
   return (
-    <View style={styles.overlay}>
-      <Animated.View
-        style={[styles.modalContainer, { opacity, transform: [{ scale }] }]}
-      >
-        <GlassView intensity={90} style={styles.glassCard}>
-          <View style={styles.iconContainer}>
-            <Text title="✨" fontSize={56} />
+    <Modal visible={visible} transparent animationType="fade">
+      <BlurView intensity={30} tint="dark" style={styles.container}>
+        <View style={styles.card}>
+          {/* Icon Header */}
+          <View style={styles.headerIcon}>
+            <FontAwesome6
+              name={choices ? "wand-magic-sparkles" : "star"}
+              size={32}
+              color={choices ? "#A855F7" : "#FACC15"}
+            />
           </View>
 
           <Text
             fontFamily="bold"
             fontSize={24}
-            color={Colors.light.text}
-            title="Great Reading!"
-            style={styles.title}
+            color="#FFF"
+            title={choices ? "The Choice is Yours" : "Story Completed"}
+            style={styles.mainTitle}
           />
 
           <Text
-            fontSize={16}
-            color={Colors.light.text}
             fontFamily="regular"
-            title={`You've successfully finished chapter ${chapterIndex + 1}. Your progress has been saved!`}
-            style={styles.description}
+            fontSize={16}
+            color="rgba(255,255,255,0.6)"
+            title={
+              choices
+                ? "Your journey has reached a pivotal moment. Which path will you take?"
+                : "You’ve turned the final page of this chapter. Ready for the next adventure?"
+            }
+            style={styles.subtitle}
           />
 
-          <Pressable
-            style={({ pressed }) => [
-              styles.button,
-              { backgroundColor: pressed ? "rgba(255,255,255,0.8)" : "#FFF" },
-            ]}
-            onPress={handleContinue}
-          >
-            <Text
-              fontFamily="bold"
-              fontSize={18}
-              color={Colors.light.text}
-              title="Continue Journey"
-            />
-          </Pressable>
-        </GlassView>
-      </Animated.View>
-    </View>
+          <View style={styles.buttonContainer}>
+            {choices ? (
+              // AI CHOICES (Apple List Style)
+              choices.map((choice, index) => (
+                <Pressable
+                  key={index}
+                  onPress={() => onChoiceSelected?.(choice)}
+                  style={({ pressed }) => [
+                    styles.choiceButton,
+                    { opacity: pressed ? 0.8 : 1 },
+                  ]}
+                >
+                  <GlassView style={styles.glassChoice} intensity={20}>
+                    <Text
+                      fontFamily="semi-bold"
+                      fontSize={16}
+                      color="#FFF"
+                      title={choice.title}
+                    />
+                    <FontAwesome6
+                      name="chevron-right"
+                      size={12}
+                      color="rgba(255,255,255,0.3)"
+                    />
+                  </GlassView>
+                </Pressable>
+              ))
+            ) : (
+              // PRIMARY CTA
+              <Pressable
+                onPress={onClose}
+                style={({ pressed }) => [
+                  styles.mainButton,
+                  { transform: [{ scale: pressed ? 0.97 : 1 }] },
+                ]}
+              >
+                <LinearGradient
+                  colors={["#FFF", "#F1F5F9"]}
+                  style={styles.gradientButton}
+                >
+                  <Text
+                    fontFamily="bold"
+                    fontSize={18}
+                    color="#000"
+                    title="Continue"
+                  />
+                </LinearGradient>
+              </Pressable>
+            )}
+          </View>
+        </View>
+      </BlurView>
+    </Modal>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.5)",
+  container: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    zIndex: 9999,
+    padding: 24,
   },
-  modalContainer: {
-    width: width * 0.86,
-    borderRadius: 38,
-    overflow: "hidden",
-  },
-  glassCard: {
-    padding: 32,
+  card: {
+    width: "100%",
+    backgroundColor: "rgba(28, 28, 30, 0.8)", // Dark Secondary System Background
+    borderRadius: 36,
+    paddingHorizontal: 24,
+    paddingVertical: 32,
     alignItems: "center",
-    borderRadius: 38,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
-    color: Colors.dark.background,
+    borderWidth: 0.5,
+    borderColor: "rgba(255, 255, 255, 0.15)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.5,
+    shadowRadius: 40,
   },
-  iconContainer: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: "rgba(255,255,255,0.1)",
+  headerIcon: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 24,
+    marginBottom: 20,
   },
-  title: {
+  mainTitle: {
     textAlign: "center",
-    letterSpacing: -0.8,
-    marginBottom: 10,
+    letterSpacing: -0.5,
   },
-  description: {
+  subtitle: {
+    marginTop: 10,
     textAlign: "center",
     lineHeight: 22,
-    marginBottom: 30,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
   },
-  button: {
+  buttonContainer: {
     width: "100%",
-    paddingVertical: 18,
-    borderRadius: 22,
+    marginTop: 30,
+    gap: 12,
+  },
+  choiceButton: {
+    width: "100%",
+  },
+  glassChoice: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    justifyContent: "center",
+    paddingVertical: 18,
+    paddingHorizontal: 22,
+    borderRadius: 22,
+    width: "100%",
+    borderWidth: 0.5,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+  },
+  mainButton: {
+    width: "100%",
+    height: 62,
+    borderRadius: 22,
+    overflow: "hidden",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
-    shadowRadius: 8,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  gradientButton: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

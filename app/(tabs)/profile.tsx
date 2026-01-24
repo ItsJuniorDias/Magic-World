@@ -209,6 +209,7 @@ export default function ProfileScreen() {
   // 1. Carregar dados
   useEffect(() => {
     if (!isFocused) return;
+
     initProgress().then(() => setLoading(false));
   }, [isFocused]);
 
@@ -419,7 +420,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark.background,
     paddingTop: 64,
   },
-  scrollContent: { alignItems: "center", paddingTop: 30, paddingBottom: 120 },
+  scrollContent: { alignItems: "center", paddingTop: 30, paddingBottom: 60 },
   card: {
     width: width * 0.9,
     borderRadius: 28,

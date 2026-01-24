@@ -1,15 +1,16 @@
 import { create } from 'zustand';
 import { db } from '@/firebaseConfig';
-import { doc, getDoc, setDoc, updateDoc, increment } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, increment, arrayUnion } from 'firebase/firestore';
 import * as Application from 'expo-application';
 import { Platform } from 'react-native';
+
 
 interface MagicState {
   chaptersRead: number;
   level: "Apprentice" | "Sorcerer" | "Wizard" | "Archmage";
   deviceId: string | null;
   initProgress: () => Promise<void>;
-  addChapter: () => Promise<void>;
+  addChapter: (userKey: string, storyId: string, chapterIndex: number) => Promise<void>;
 }
 
 export const useMagicProgressStore = create<MagicState>((set, get) => ({
@@ -39,12 +40,14 @@ export const useMagicProgressStore = create<MagicState>((set, get) => ({
       const userRef = doc(db, "users", iosId);
       const userSnap = await getDoc(userRef);
 
+       let newLevel: "Apprentice" | "Sorcerer" | "Wizard" | "Archmage" = "Apprentice";
+
       if (userSnap.exists()) {
         const data = userSnap.data();
         const count = data.chaptersRead || 0;
         
         // Atualiza estado local com os dados da nuvem
-        let newLevel: "Apprentice" | "Sorcerer" | "Wizard" | "Archmage" = "Apprentice";
+       
 
         // Define o nível baseado no count
         if (count >= 100) newLevel = "Archmage";
@@ -58,6 +61,7 @@ export const useMagicProgressStore = create<MagicState>((set, get) => ({
         await setDoc(userRef, { 
           chaptersRead: 0, 
           platform: 'ios',
+          level: newLevel,
           createdAt: new Date().toISOString() 
         });
       }
@@ -66,34 +70,30 @@ export const useMagicProgressStore = create<MagicState>((set, get) => ({
     }
   },
 
-  addChapter: async () => {
-    const { deviceId, chaptersRead } = get();
-    
-    // Se não tiver o ID (ex: erro na inicialização), não prossegue
-    if (!deviceId) return;
+  addChapter: async (userKey, storyId, chapterIndex) => {
+    console.log({
+      userKey,
+      storyId,
+      chapterIndex ,
+    }, "PROPS ")
 
-    const newCount = chaptersRead + 1;
-    
-    // Update Otimista (Interface atualiza na hora)
-    let newLevel: "Apprentice" | "Sorcerer" | "Wizard" | "Archmage" = "Apprentice";
-     
-     
-      // Define o nível baseado no novo count
-      if (newCount >= 100) newLevel = "Archmage";
-      else if (newCount >= 50) newLevel = "Wizard";
-      else if (newCount >= 10) newLevel = "Sorcerer"; 
-      else newLevel = "Apprentice";
+    // Referência para o documento do utilizador baseado na chave única do dispositivo
+    const userRef = doc(db, "users", userKey);
 
-    set({ chaptersRead: newCount, level: newLevel });
-
-    // Sincroniza com o Firestore em background
     try {
-      const userRef = doc(db, "users", deviceId);
-      await updateDoc(userRef, {
-        chaptersRead: increment(1)
-      });
+      // Usamos setDoc com { merge: true } para que, se o documento 
+      // não existir (primeira vez), ele seja criado.
+      await setDoc(userRef, {
+        chaptersRead: increment(1),
+        createdAt: new Date().toISOString(),
+        platform: Platform.OS,
+      }, { merge: true });
+
+      console.log("Progresso salvo com sucesso para o user:", userKey);
     } catch (e) {
-      console.error("Erro ao salvar capítulo no iOS:", e);
+      console.error("Erro ao salvar no Firestore:", e);
     }
-  },
+}
 }));
+
+// Exemplo de estilos (não editados, apenas para contexto)
