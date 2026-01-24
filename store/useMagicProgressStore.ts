@@ -6,7 +6,7 @@ import { Platform } from 'react-native';
 
 interface MagicState {
   chaptersRead: number;
-  level: "Apprentice" | "Sorcerer" | "Archmage";
+  level: "Apprentice" | "Sorcerer" | "Wizard" | "Archmage";
   deviceId: string | null;
   initProgress: () => Promise<void>;
   addChapter: () => Promise<void>;
@@ -44,9 +44,13 @@ export const useMagicProgressStore = create<MagicState>((set, get) => ({
         const count = data.chaptersRead || 0;
         
         // Atualiza estado local com os dados da nuvem
-        let newLevel: "Apprentice" | "Sorcerer" | "Archmage" = "Apprentice";
-        if (count >= 50) newLevel = "Archmage";
-        else if (count >= 10) newLevel = "Sorcerer";
+        let newLevel: "Apprentice" | "Sorcerer" | "Wizard" | "Archmage" = "Apprentice";
+
+        // Define o nível baseado no count
+        if (count >= 100) newLevel = "Archmage";
+        else if (count >= 50) newLevel = "Wizard";
+        else if (count >= 10) newLevel = "Sorcerer"; 
+        else newLevel = "Apprentice";
 
         set({ chaptersRead: count, level: newLevel });
       } else {
@@ -71,10 +75,15 @@ export const useMagicProgressStore = create<MagicState>((set, get) => ({
     const newCount = chaptersRead + 1;
     
     // Update Otimista (Interface atualiza na hora)
-    let newLevel: "Apprentice" | "Sorcerer" | "Archmage" = "Apprentice";
-    if (newCount >= 50) newLevel = "Archmage";
-    else if (newCount >= 10) newLevel = "Sorcerer";
-    
+    let newLevel: "Apprentice" | "Sorcerer" | "Wizard" | "Archmage" = "Apprentice";
+     
+     
+      // Define o nível baseado no novo count
+      if (newCount >= 100) newLevel = "Archmage";
+      else if (newCount >= 50) newLevel = "Wizard";
+      else if (newCount >= 10) newLevel = "Sorcerer"; 
+      else newLevel = "Apprentice";
+
     set({ chaptersRead: newCount, level: newLevel });
 
     // Sincroniza com o Firestore em background

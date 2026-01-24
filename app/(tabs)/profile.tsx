@@ -18,7 +18,7 @@ import { AchievementModal } from "@/components/(achievements)";
 
 const { width } = Dimensions.get("window");
 
-// ================= Fade-In Animation for Achievements =================
+// ================= Fade-In Animation =================
 const FadeInItem = ({ children, delay, isFocused }: any) => {
   const animatedValue = useRef(new Animated.Value(0)).current;
 
@@ -60,67 +60,132 @@ const LEVEL_META = {
     icon: "✨",
     color: "#9CA3AF",
     title: "Apprentice",
+    min: 0,
     nextThreshold: 10,
   },
   Sorcerer: {
     icon: "🔮",
     color: "#8B5CF6",
     title: "Sorcerer",
+    min: 25,
     nextThreshold: 50,
+  },
+  Wizard: {
+    icon: "🪄",
+    color: "#3B82F6",
+    title: "Wizard",
+    min: 50,
+    nextThreshold: 100,
   },
   Archmage: {
     icon: "👑",
     color: "#FACC15",
     title: "Archmage",
-    nextThreshold: Infinity,
+    min: 100,
+    nextThreshold: 200,
   },
 };
 
 // ================= ACHIEVEMENTS =================
 const ACHIEVEMENTS = [
-  { id: 1, title: "Initiate", req: 1, icon: "🌱" },
-  { id: 2, title: "Bookworm", req: 5, icon: "📖" },
-  { id: 3, title: "Relentless", req: 15, icon: "🔥" },
-  { id: 4, title: "Spellbinder", req: 30, icon: "⚡" },
-  { id: 5, title: "Sage", req: 50, icon: "📚" },
-  { id: 6, title: "Legendary", req: 100, icon: "🏆" },
+  { id: 1, title: "Initiate", req: 1, icon: "🌱", secret: false },
+  { id: 2, title: "Bookworm", req: 5, icon: "📖", secret: false },
+  { id: 3, title: "Relentless", req: 15, icon: "🔥", secret: false },
+  { id: 4, title: "Spellbinder", req: 30, icon: "⚡", secret: false },
+  { id: 5, title: "Sage", req: 50, icon: "📚", secret: false },
+  { id: 6, title: "Legendary", req: 100, icon: "🏆", secret: false },
+
+  // Secret Achievements
+  {
+    id: 7,
+    title: "Hidden Apprentice",
+    icon: "🗝️",
+    secret: true,
+    req: 120,
+    condition: (c: number) => c >= 120,
+  },
+  {
+    id: 8,
+    title: "Lucky Reader",
+    icon: "🍀",
+    secret: true,
+    req: 140,
+    condition: (c: number) => c >= 140,
+  },
+  {
+    id: 9,
+    title: "Magic Milestone",
+    icon: "💫",
+    secret: true,
+    req: 160,
+    condition: (c: number) => c >= 160,
+  },
+  {
+    id: 10,
+    title: "Centurion",
+    icon: "🎖️",
+    secret: true,
+    req: 200,
+    condition: (c: number) => c >= 200,
+  },
 ];
 
 // ================= LOADING SPINNER =================
-// ================= LOADING SPINNER (APPLE STYLE) =================
 const LoadingSpinner = () => {
-  const rotation = useRef(new Animated.Value(0)).current;
+  const scaleAnims = [
+    useRef(new Animated.Value(1)).current,
+    useRef(new Animated.Value(1)).current,
+    useRef(new Animated.Value(1)).current,
+  ];
 
   useEffect(() => {
-    Animated.loop(
-      Animated.timing(rotation, {
-        toValue: 1,
-        duration: 1000,
-        easing: Easing.linear, // Essencial para movimento fluido
-        useNativeDriver: true,
-      }),
-    ).start();
-  }, []);
+    const animate = (anim: Animated.Value, delay: number) => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(anim, {
+            toValue: 1.6,
+            duration: 450,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: 450,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ]),
+      ).start();
+    };
 
-  const rotateInterpolate = rotation.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
+    scaleAnims.forEach((anim, index) => animate(anim, index * 150));
+  }, []);
 
   return (
     <View style={styles.loadingContainer}>
-      <Animated.View
-        style={[
-          styles.appleSpinner,
-          { transform: [{ rotate: rotateInterpolate }] },
-        ]}
-      />
+      <View style={{ flexDirection: "row", gap: 15, marginBottom: 25 }}>
+        {scaleAnims.map((anim, idx) => (
+          <Animated.View
+            key={idx}
+            style={[
+              styles.loadingCircle,
+              {
+                transform: [{ scale: anim }],
+                opacity: anim.interpolate({
+                  inputRange: [1, 1.6],
+                  outputRange: [0.6, 1],
+                }),
+              },
+            ]}
+          />
+        ))}
+      </View>
       <Text
-        fontSize={20}
-        color={Colors.dark.text} // Cinza suave típico da Apple
-        fontFamily="regular"
+        fontSize={18}
+        color={Colors.dark.text}
+        fontFamily="bold"
         title="Loading..."
-        style={{ marginTop: 20, letterSpacing: 0.5 }}
       />
     </View>
   );
@@ -133,59 +198,75 @@ export default function ProfileScreen() {
 
   const [loading, setLoading] = useState(true);
   const [activeAchievement, setActiveAchievement] = useState<any | null>(null);
-  const shownRef = useRef<Record<number, boolean>>({});
-  const progressAnim = useRef(new Animated.Value(0)).current;
+  const [unlockedIds, setUnlockedIds] = useState<Record<number, boolean>>({});
 
+  const shownAchievementIds = useRef<Set<number>>(new Set());
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  const MAX_CHAPTERS = 200;
+
+  const progressPercent = Math.min((chaptersRead / MAX_CHAPTERS) * 100, 100);
+
+  // 1. Carregar dados
   useEffect(() => {
     if (!isFocused) return;
     initProgress().then(() => setLoading(false));
   }, [isFocused]);
 
+  // 2. Desbloqueio e modal automático
   useEffect(() => {
-    if (!isFocused || loading) return;
+    if (loading || !isFocused) return;
 
-    const potentialUnlockeds = ACHIEVEMENTS.filter(
-      (a) => chaptersRead >= a.req && !shownRef.current[a.id],
-    );
-    if (potentialUnlockeds.length > 0) {
-      const latest = potentialUnlockeds.reduce((prev, curr) =>
-        prev.req > curr.req ? prev : curr,
-      );
-      potentialUnlockeds.forEach((a) => (shownRef.current[a.id] = true));
-      setActiveAchievement(latest);
+    let tempUnlocked: Record<number, boolean> = {};
+    let latestNewAchievement: any = null;
+
+    ACHIEVEMENTS.forEach((ach) => {
+      const unlocked =
+        ach.secret && ach.condition
+          ? ach.condition(chaptersRead)
+          : chaptersRead >= (ach.req || 0);
+
+      if (unlocked) {
+        tempUnlocked[ach.id] = true;
+        if (!shownAchievementIds.current.has(ach.id)) {
+          latestNewAchievement = ach;
+        }
+      }
+    });
+
+    setUnlockedIds(tempUnlocked);
+
+    if (latestNewAchievement) {
+      setActiveAchievement(latestNewAchievement);
+      shownAchievementIds.current.add(latestNewAchievement.id);
     }
-  }, [chaptersRead, isFocused, loading]);
+  }, [chaptersRead, loading, isFocused]);
 
-  const meta = LEVEL_META[level];
-  const targetThreshold = meta.nextThreshold;
-  const currentThreshold =
-    level === "Apprentice" ? 0 : level === "Sorcerer" ? 10 : 50;
-  const progressPercent = Math.min(
-    ((chaptersRead - currentThreshold) / (targetThreshold - currentThreshold)) *
-      100,
-    100,
-  );
-
+  // 3. Animação da barra
   useEffect(() => {
     Animated.timing(progressAnim, {
-      toValue: progressPercent,
-      duration: 800,
+      toValue: isNaN(progressPercent) ? 0 : progressPercent,
+      duration: 1000,
+      easing: Easing.out(Easing.exp),
       useNativeDriver: false,
     }).start();
   }, [progressPercent]);
 
+  const meta =
+    LEVEL_META[level as keyof typeof LEVEL_META] || LEVEL_META.Apprentice;
+
   if (loading) return <LoadingSpinner />;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        style={styles.container}
       >
         {/* Profile Card */}
         <View style={styles.card}>
           <View style={styles.avatarWrapper}>
-            <Text title="👤" fontSize={42} />
+            <Text title="👤" fontSize={40} />
           </View>
 
           <Text
@@ -197,10 +278,10 @@ export default function ProfileScreen() {
           />
 
           <View style={[styles.levelBadge, { borderColor: meta.color + "40" }]}>
-            <Text fontSize={14} fontFamily="regular" title={meta.icon} />
+            <Text fontSize={18} fontFamily="regular" title={meta.icon} />
             <Text
               fontFamily="bold"
-              fontSize={12}
+              fontSize={14}
               color={meta.color}
               title={meta.title.toUpperCase()}
             />
@@ -216,65 +297,63 @@ export default function ProfileScreen() {
               />
               <Text
                 fontSize={14}
-                fontFamily="regular"
                 color="#8E8E93"
+                fontFamily="regular"
                 title="Chapters"
               />
             </View>
+
             <View style={styles.divider} />
+
             <View style={styles.statItem}>
               <Text
                 fontFamily="bold"
                 fontSize={28}
                 color="#FFF"
-                title={String(
-                  ACHIEVEMENTS.filter((a) => chaptersRead >= a.req).length,
-                )}
+                title={String(Object.keys(unlockedIds).length)}
               />
               <Text
-                fontSize={14}
                 fontFamily="regular"
+                fontSize={14}
                 color="#8E8E93"
                 title="Badges"
               />
             </View>
           </View>
 
-          {level !== "Archmage" && (
-            <View style={styles.progressSection}>
-              <View style={styles.progressHeader}>
-                <Text
-                  fontSize={14}
-                  fontFamily="regular"
-                  color="#8E8E93"
-                  title="Level Progress"
-                />
-                <Text
-                  fontFamily="bold"
-                  fontSize={14}
-                  color={meta.color}
-                  title={`${chaptersRead}/${targetThreshold}`}
-                />
-              </View>
-              <View style={styles.progressBarContainer}>
-                <Animated.View
-                  style={[
-                    styles.progressBarFill,
-                    {
-                      width: progressAnim.interpolate({
-                        inputRange: [0, 100],
-                        outputRange: ["0%", "100%"],
-                      }),
-                      backgroundColor: meta.color,
-                    },
-                  ]}
-                />
-              </View>
+          <View style={styles.progressSection}>
+            <View style={styles.progressHeader}>
+              <Text
+                fontSize={14}
+                color="#8E8E93"
+                title="Journey Progress"
+                fontFamily="regular"
+              />
+              <Text
+                fontFamily="bold"
+                fontSize={14}
+                color={meta.color}
+                title={`${chaptersRead}/${MAX_CHAPTERS}`}
+              />
             </View>
-          )}
+            <View style={styles.progressBarContainer}>
+              <Animated.View
+                style={[
+                  styles.progressBarFill,
+                  {
+                    width: progressAnim.interpolate({
+                      inputRange: [0, 100],
+                      outputRange: ["0%", "100%"],
+                    }),
+                    backgroundColor: meta.color,
+                  },
+                ]}
+              />
+            </View>
+          </View>
         </View>
 
-        {/* Achievements */}
+        {/* Achievements Section */}
         <View style={styles.sectionHeader}>
           <Text
             fontFamily="bold"
@@ -286,19 +365,19 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.achievementsGrid}>
-          {ACHIEVEMENTS.map((item, index) => {
-            const isUnlocked = chaptersRead >= item.req;
+          {ACHIEVEMENTS.filter(
+            (item) => !item.secret || !!unlockedIds[item.id],
+          ).map((item, index) => {
+            const isUnlocked = !!unlockedIds[item.id];
             return (
               <FadeInItem
                 key={`${item.id}-${isFocused}`}
-                delay={index * 60}
+                delay={index * 50}
                 isFocused={isFocused}
               >
                 <TouchableOpacity
                   activeOpacity={0.7}
-                  onPress={() => {
-                    if (isUnlocked) setActiveAchievement(item);
-                  }}
+                  onPress={() => isUnlocked && setActiveAchievement(item)}
                   style={styles.achievementWrapper}
                 >
                   <View
@@ -307,18 +386,15 @@ export default function ProfileScreen() {
                       !isUnlocked && styles.lockedIcon,
                     ]}
                   >
-                    <Text
-                      fontSize={30}
-                      fontFamily="bold"
-                      title={isUnlocked ? item.icon : "🔒"}
-                    />
+                    <Text fontSize={28} title={isUnlocked ? item.icon : "🔒"} />
                   </View>
                   <Text
                     fontFamily="regular"
                     fontSize={14}
                     color={isUnlocked ? "#FFF" : "#48484A"}
                     title={item.title}
-                    style={{ marginTop: 8 }}
+                    style={{ marginTop: 8, textAlign: "center" }}
+                    numberOfLines={1}
                   />
                 </TouchableOpacity>
               </FadeInItem>
@@ -333,14 +409,17 @@ export default function ProfileScreen() {
           onClose={() => setActiveAchievement(null)}
         />
       )}
-    </SafeAreaView>
+    </>
   );
 }
 
-// ================= STYLES =================
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.dark.background },
-  scrollContent: { alignItems: "center", paddingTop: 30, paddingBottom: 50 },
+  container: {
+    flex: 1,
+    backgroundColor: Colors.dark.background,
+    paddingTop: 64,
+  },
+  scrollContent: { alignItems: "center", paddingTop: 30, paddingBottom: 120 },
   card: {
     width: width * 0.9,
     borderRadius: 28,
@@ -349,16 +428,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#1C1C1E",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
   },
   avatarWrapper: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: "#2C2C2E",
     justifyContent: "center",
     alignItems: "center",
@@ -392,23 +466,24 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   progressBarContainer: {
-    height: 6,
-    borderRadius: 3,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: "#38383A",
     overflow: "hidden",
   },
-  progressBarFill: { height: "100%", borderRadius: 3 },
+  progressBarFill: { height: "100%", borderRadius: 4 },
   sectionHeader: { width: width * 0.9, marginTop: 40, marginBottom: 20 },
   achievementsGrid: {
     width: width * 0.9,
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
+    gap: 12,
   },
   achievementWrapper: {
-    width: (width * 0.9 - 30) / 3,
+    width: (width * 0.9 - 24) / 3,
     alignItems: "center",
-    marginBottom: 25,
+    marginBottom: 20,
   },
   achievementIcon: {
     width: width * 0.22,
@@ -421,20 +496,21 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
   },
   lockedIcon: { backgroundColor: "#000", opacity: 0.4 },
-
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: Colors.dark.background,
   },
-  appleSpinner: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 3,
-    borderColor: "rgba(255, 255, 255, 0.1)", // Cor do fundo do anel
-    borderTopColor: "#8B5CF6", // Cor do "rastro" (seu roxo Sorcerer)
-    // Se quiser o rastro branco clássico, use #FFF
+  loadingCircle: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#8B5CF6",
+    shadowColor: "#8B5CF6",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 5,
+    elevation: 5,
   },
 });
