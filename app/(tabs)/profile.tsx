@@ -7,61 +7,48 @@ import {
   Dimensions,
   Animated,
 } from "react-native";
-import { useIsFocused } from "@react-navigation/native"; // Importado
+import { useIsFocused } from "@react-navigation/native";
 import Text from "@/components/text";
 import { Colors } from "@/constants/theme";
 import { useMagicProgressStore } from "@/store/useMagicProgressStore";
+import { AchievementModal } from "@/components/(achievements)";
 
-// Componente de Animação com suporte a Reset no Focus
-const FadeInItem = ({
-  children,
-  delay,
-  isFocused, // Recebe o estado de foco
-}: {
-  children: React.ReactNode;
-  delay: number;
-  isFocused: boolean;
-}) => {
+const { width } = Dimensions.get("window");
+
+// Animação de entrada refinada
+const FadeInItem = ({ children, delay, isFocused }: any) => {
   const animatedValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (isFocused) {
-      // Se a tela ganhou foco, reseta e inicia a animação
       animatedValue.setValue(0);
-      Animated.parallel([
-        Animated.timing(animatedValue, {
-          toValue: 1,
-          duration: 500,
-          delay: delay,
-          useNativeDriver: true,
-        }),
-        Animated.spring(animatedValue, {
-          toValue: 1,
-          friction: 8,
-          tension: 40,
-          delay: delay,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else {
-      // Se saiu da tela, volta para 0 para estar pronto para a próxima entrada
-      animatedValue.setValue(0);
+      Animated.spring(animatedValue, {
+        toValue: 1,
+        friction: 9,
+        tension: 40,
+        delay: delay,
+        useNativeDriver: true,
+      }).start();
     }
   }, [isFocused, delay]);
 
-  const animatedStyle = {
-    opacity: animatedValue,
-    transform: [
-      {
-        scale: animatedValue.interpolate({
-          inputRange: [0, 1],
-          outputRange: [0.7, 1],
-        }),
-      },
-    ],
-  };
-
-  return <Animated.View style={animatedStyle}>{children}</Animated.View>;
+  return (
+    <Animated.View
+      style={{
+        opacity: animatedValue,
+        transform: [
+          {
+            scale: animatedValue.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.85, 1],
+            }),
+          },
+        ],
+      }}
+    >
+      {children}
+    </Animated.View>
+  );
 };
 
 const LEVEL_META = {
@@ -95,37 +82,41 @@ const ACHIEVEMENTS = [
 ];
 
 export default function ProfileScreen() {
-  const isFocused = useIsFocused(); // Hook para detectar foco
+  const isFocused = useIsFocused();
   const { chaptersRead, level, initProgress } = useMagicProgressStore();
   const [loading, setLoading] = useState(true);
+  const [activeAchievement, setActiveAchievement] = useState<any | null>(null);
+  const shownRef = useRef<Record<number, boolean>>({});
 
   useEffect(() => {
-    const setup = async () => {
-      await initProgress();
-      setLoading(false);
-    };
-    setup();
+    initProgress().then(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (!isFocused || loading) return;
+    const potentialUnlockeds = ACHIEVEMENTS.filter(
+      (a) => chaptersRead >= a.req && !shownRef.current[a.id],
+    );
+    if (potentialUnlockeds.length > 0) {
+      const latest = potentialUnlockeds.reduce((prev, curr) =>
+        prev.req > curr.req ? prev : curr,
+      );
+      potentialUnlockeds.forEach((a) => (shownRef.current[a.id] = true));
+      setActiveAchievement(latest);
+    }
+  }, [chaptersRead, isFocused, loading]);
+
   const meta = LEVEL_META[level];
+  const targetThreshold = meta.nextThreshold;
   const currentThreshold =
     level === "Apprentice" ? 0 : level === "Sorcerer" ? 10 : 50;
-  const targetThreshold = meta.nextThreshold;
   const progressPercent = Math.min(
     ((chaptersRead - currentThreshold) / (targetThreshold - currentThreshold)) *
       100,
     100,
   );
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingCenter}>
-          <Text title="Loading Magic..." color="#FFF" fontFamily="regular" />
-        </View>
-      </SafeAreaView>
-    );
-  }
+  if (loading) return null;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -133,82 +124,83 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Main Profile Card */}
-        <View style={[styles.card, { shadowColor: meta.color }]}>
-          <View style={styles.avatarContainer}>
-            <Text title="👤" fontFamily="regular" fontSize={40} />
+        {/* Profile Card Estilo Apple */}
+        <View style={styles.card}>
+          <View style={styles.avatarWrapper}>
+            <Text title="👤" fontSize={42} />
           </View>
 
           <Text
             fontFamily="bold"
-            fontSize={22}
-            color={Colors.dark.text}
+            fontSize={24}
+            color="#FFF"
             title="Magic Reader"
+            style={{ letterSpacing: -0.5 }}
           />
 
-          <View
-            style={[styles.levelBadge, { backgroundColor: meta.color + "20" }]}
-          >
-            <Text fontSize={16} fontFamily="regular" title={meta.icon} />
+          <View style={[styles.levelBadge, { borderColor: meta.color + "40" }]}>
+            <Text fontSize={14} fontFamily="regular" title={meta.icon} />
             <Text
               fontFamily="bold"
-              fontSize={14}
+              fontSize={12}
               color={meta.color}
               title={meta.title.toUpperCase()}
             />
           </View>
 
+          {/* Stats Row */}
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <Text
                 fontFamily="bold"
-                fontSize={22}
+                fontSize={28}
                 color="#FFF"
                 title={String(chaptersRead)}
               />
               <Text
-                fontSize={12}
-                color="#9CA3AF"
-                title="CHAPTERS"
+                fontSize={14}
                 fontFamily="regular"
+                color="#8E8E93"
+                title="Chapters"
               />
             </View>
             <View style={styles.divider} />
             <View style={styles.statItem}>
               <Text
                 fontFamily="bold"
-                fontSize={22}
+                fontSize={28}
                 color="#FFF"
                 title={String(
                   ACHIEVEMENTS.filter((a) => chaptersRead >= a.req).length,
                 )}
               />
               <Text
-                fontSize={12}
-                color="#9CA3AF"
-                title="BADGES"
+                fontSize={14}
                 fontFamily="regular"
+                color="#8E8E93"
+                title="Badges"
               />
             </View>
           </View>
 
+          {/* Progress Bar */}
           {level !== "Archmage" && (
-            <View style={styles.progressContainer}>
+            <View style={styles.progressSection}>
               <View style={styles.progressHeader}>
                 <Text
+                  fontSize={14}
                   fontFamily="regular"
-                  fontSize={12}
-                  color="#9CA3AF"
+                  color="#8E8E93"
                   title="Level Progress"
                 />
                 <Text
-                  fontFamily="regular"
-                  fontSize={12}
+                  fontFamily="bold"
+                  fontSize={14}
                   color={meta.color}
                   title={`${chaptersRead}/${targetThreshold}`}
                 />
               </View>
-              <View style={styles.progressBarBg}>
+              <View style={styles.progressBarContainer}>
                 <View
                   style={[
                     styles.progressBarFill,
@@ -226,9 +218,10 @@ export default function ProfileScreen() {
         <View style={styles.sectionHeader}>
           <Text
             fontFamily="bold"
-            fontSize={22}
+            fontSize={20}
             color="#FFF"
             title="My Achievements"
+            style={{ letterSpacing: -0.5 }}
           />
         </View>
 
@@ -237,8 +230,8 @@ export default function ProfileScreen() {
             const isUnlocked = chaptersRead >= item.req;
             return (
               <FadeInItem
-                key={`${item.id}-${isFocused}`} // A key muda com o foco, reforçando a atualização
-                delay={index * 80}
+                key={`${item.id}-${isFocused}`}
+                delay={index * 60}
                 isFocused={isFocused}
               >
                 <View style={styles.achievementWrapper}>
@@ -249,7 +242,7 @@ export default function ProfileScreen() {
                     ]}
                   >
                     <Text
-                      fontSize={28}
+                      fontSize={30}
                       fontFamily="bold"
                       title={isUnlocked ? item.icon : "🔒"}
                     />
@@ -257,9 +250,9 @@ export default function ProfileScreen() {
                   <Text
                     fontFamily="regular"
                     fontSize={14}
-                    color={isUnlocked ? "#FFF" : "#666"}
+                    color={isUnlocked ? "#FFF" : "#48484A"}
                     title={item.title}
-                    style={{ marginTop: 6, textAlign: "center" }}
+                    style={{ marginTop: 8 }}
                   />
                 </View>
               </FadeInItem>
@@ -267,89 +260,108 @@ export default function ProfileScreen() {
           })}
         </View>
       </ScrollView>
+
+      {activeAchievement && (
+        <AchievementModal
+          achievement={activeAchievement}
+          onClose={() => setActiveAchievement(null)}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.dark.background },
-  loadingCenter: { flex: 1, justifyContent: "center", alignItems: "center" },
-  scrollContent: { alignItems: "center", paddingTop: 40, paddingBottom: 40 },
+  container: {
+    flex: 1,
+    backgroundColor: "#000", // Fundo preto puro para contraste Apple
+  },
+  scrollContent: {
+    alignItems: "center",
+    paddingTop: 30,
+    paddingBottom: 50,
+  },
   card: {
-    width: "90%",
-    borderRadius: 32,
+    width: width * 0.9,
+    borderRadius: 28,
     padding: 24,
     alignItems: "center",
-    backgroundColor: "#171717",
+    backgroundColor: "#1C1C1E", // Dark Gray Apple
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.3,
     shadowRadius: 20,
-    elevation: 15,
+    elevation: 10,
   },
-  avatarContainer: {
-    width: 100,
-    height: 100,
-    alignItems: "center",
+  avatarWrapper: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: "#2C2C2E",
     justifyContent: "center",
-    borderRadius: 50,
-    backgroundColor: "#262626",
-    borderWidth: 3,
-    borderColor: "rgba(255,255,255,0.05)",
+    alignItems: "center",
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
   },
   levelBadge: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 12,
     marginTop: 12,
-    gap: 8,
+    gap: 6,
+    borderWidth: 1,
+    backgroundColor: "rgba(255,255,255,0.03)",
   },
   statsRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    marginTop: 24,
+    marginTop: 30,
     width: "100%",
   },
-  statItem: { alignItems: "center", flex: 1 },
-  divider: { width: 1, height: 30, backgroundColor: "rgba(255,255,255,0.1)" },
-  progressContainer: { width: "100%", marginTop: 24 },
+  statItem: { flex: 1, alignItems: "center" },
+  divider: { width: 1, height: 35, backgroundColor: "#38383A" },
+  progressSection: { width: "100%", marginTop: 30 },
   progressHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  progressBarBg: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    overflow: "hidden",
-  },
-  progressBarFill: { height: "100%", borderRadius: 4 },
-  sectionHeader: { width: "90%", marginTop: 32, marginBottom: 16 },
-  achievementsGrid: {
-    width: "90%",
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "flex-start",
-    gap: 15,
-  },
-  achievementWrapper: {
-    width: (Dimensions.get("window").width * 0.9 - 45) / 4,
-    alignItems: "center",
     marginBottom: 10,
   },
+  progressBarContainer: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#38383A",
+    overflow: "hidden",
+  },
+  progressBarFill: { height: "100%", borderRadius: 3 },
+  sectionHeader: { width: width * 0.9, marginTop: 40, marginBottom: 20 },
+  achievementsGrid: {
+    width: width * 0.9,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
+  achievementWrapper: {
+    width: (width * 0.9 - 30) / 3, // 3 colunas para visual mais limpo
+    alignItems: "center",
+    marginBottom: 25,
+  },
   achievementIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: "#262626",
+    width: width * 0.22,
+    height: width * 0.22,
+    borderRadius: 22,
+    backgroundColor: "#1C1C1E",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
+    borderColor: "rgba(255,255,255,0.08)",
   },
-  lockedIcon: { opacity: 0.3, backgroundColor: "#121212" },
+  lockedIcon: {
+    backgroundColor: "#000",
+    opacity: 0.4,
+  },
 });

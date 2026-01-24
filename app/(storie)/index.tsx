@@ -45,6 +45,7 @@ import { BACKGROUND_TRACKS } from "@/constants/backgroundTracks";
 import { useStoriesStore } from "@/store/useStoriesStore";
 
 import { useMagicProgressStore } from "@/store/useMagicProgressStore";
+import { ChapterCompletedModal } from "@/components/(completed-chapter)";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -119,6 +120,8 @@ export default function StorieScreen() {
   });
 
   const [musicIndex, setMusicIndex] = useState(0);
+
+  const [showFinishModal, setShowFinishModal] = useState(false);
 
   //adicionar imagem de cada capitulo e o t
   const { pause, play, stop } = useLockScreenPlayer({
@@ -592,13 +595,31 @@ export default function StorieScreen() {
   );
 
   const handleFinishReading = useCallback(async () => {
-    if (activeSentenceIndex !== sentences.length - 1) return;
+    // Verificamos se chegou na última frase
+    if (activeSentenceIndex === sentences.length - 1) {
+      // Evita disparar o modal múltiplas vezes se o scroll continuar
+      const alreadySaved = await AsyncStorage.getItem(
+        `@chapter_finished_${storyId}_${currentIndex}`,
+      );
 
-    // Usuário chegou ao fim do capítulo
-    await addChapter();
+      if (alreadySaved) return;
 
-    alert("Chapter completed! Your magic power grows. ✨");
-  }, [activeSentenceIndex, sentences.length, addChapter]);
+      await addChapter();
+
+      await AsyncStorage.setItem(
+        `@chapter_finished_${storyId}_${currentIndex}`,
+        "true",
+      );
+
+      setShowFinishModal(true);
+    }
+  }, [
+    activeSentenceIndex,
+    sentences.length,
+    addChapter,
+    storyId,
+    currentIndex,
+  ]);
 
   /* =========================
      UI
@@ -757,6 +778,12 @@ export default function StorieScreen() {
           </ContainerStorie>
         </Animated.ScrollView>
       </Container>
+
+      <ChapterCompletedModal
+        visible={showFinishModal}
+        chapterNumber={Number(currentIndex) + 1}
+        onClose={() => setShowFinishModal(false)}
+      />
 
       <NextChapterButton
         storyId={String(storyId)}
