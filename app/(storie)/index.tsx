@@ -747,6 +747,7 @@ export default function StorieScreen() {
               useNativeDriver: false,
               listener: (e) => {
                 currentScrollY.current = e.nativeEvent.contentOffset.y;
+                //chamar ao final da lista de sentenças
                 handleFinishReading();
               },
             },
@@ -819,9 +820,19 @@ export default function StorieScreen() {
         storyId={String(storyId)}
         chapterIndex={Number(currentIndex)}
         currentPage={activeSentenceIndex} // para continuar do ponto exato
-        onClose={() => {
+        onClose={async () => {
           setShowFinishModal(false);
           // Avança para o próximo capítulo automaticamente se existir
+
+          //valida se o user e premium
+          const isPro = await AsyncStorage.getItem("@user_is_pro");
+
+          if (isPro !== "true") {
+            router.replace("/(subscribe)");
+
+            return;
+          }
+
           if (nextChapter) {
             goToNextChapter(nextIndex);
             router.replace({

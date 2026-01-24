@@ -7,6 +7,7 @@ import {
   Dimensions,
   Animated,
   TouchableOpacity,
+  Easing,
 } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 
@@ -85,24 +86,64 @@ const ACHIEVEMENTS = [
   { id: 6, title: "Legendary", req: 100, icon: "🏆" },
 ];
 
+// ================= LOADING SPINNER =================
+// ================= LOADING SPINNER (APPLE STYLE) =================
+const LoadingSpinner = () => {
+  const rotation = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(rotation, {
+        toValue: 1,
+        duration: 1000,
+        easing: Easing.linear, // Essencial para movimento fluido
+        useNativeDriver: true,
+      }),
+    ).start();
+  }, []);
+
+  const rotateInterpolate = rotation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  return (
+    <View style={styles.loadingContainer}>
+      <Animated.View
+        style={[
+          styles.appleSpinner,
+          { transform: [{ rotate: rotateInterpolate }] },
+        ]}
+      />
+      <Text
+        fontSize={20}
+        color={Colors.dark.text} // Cinza suave típico da Apple
+        fontFamily="regular"
+        title="Loading..."
+        style={{ marginTop: 20, letterSpacing: 0.5 }}
+      />
+    </View>
+  );
+};
+
 // ================= PROFILE SCREEN =================
 export default function ProfileScreen() {
   const isFocused = useIsFocused();
   const { chaptersRead, level, initProgress } = useMagicProgressStore();
+
   const [loading, setLoading] = useState(true);
   const [activeAchievement, setActiveAchievement] = useState<any | null>(null);
   const shownRef = useRef<Record<number, boolean>>({});
-
   const progressAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (!isFocused) return;
     initProgress().then(() => setLoading(false));
-  }, []);
+  }, [isFocused]);
 
   useEffect(() => {
     if (!isFocused || loading) return;
 
-    // Automatically show newly unlocked achievement modal
     const potentialUnlockeds = ACHIEVEMENTS.filter(
       (a) => chaptersRead >= a.req && !shownRef.current[a.id],
     );
@@ -125,7 +166,6 @@ export default function ProfileScreen() {
     100,
   );
 
-  // Animate progress bar
   useEffect(() => {
     Animated.timing(progressAnim, {
       toValue: progressPercent,
@@ -134,7 +174,7 @@ export default function ProfileScreen() {
     }).start();
   }, [progressPercent]);
 
-  if (loading) return null;
+  if (loading) return <LoadingSpinner />;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -142,7 +182,7 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* ================= Profile Card ================= */}
+        {/* Profile Card */}
         <View style={styles.card}>
           <View style={styles.avatarWrapper}>
             <Text title="👤" fontSize={42} />
@@ -156,7 +196,6 @@ export default function ProfileScreen() {
             style={{ letterSpacing: -0.5 }}
           />
 
-          {/* Level Badge */}
           <View style={[styles.levelBadge, { borderColor: meta.color + "40" }]}>
             <Text fontSize={14} fontFamily="regular" title={meta.icon} />
             <Text
@@ -167,7 +206,6 @@ export default function ProfileScreen() {
             />
           </View>
 
-          {/* Stats */}
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <Text
@@ -202,7 +240,6 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Progress Bar */}
           {level !== "Archmage" && (
             <View style={styles.progressSection}>
               <View style={styles.progressHeader}>
@@ -237,7 +274,7 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* Achievements Section */}
+        {/* Achievements */}
         <View style={styles.sectionHeader}>
           <Text
             fontFamily="bold"
@@ -260,9 +297,7 @@ export default function ProfileScreen() {
                 <TouchableOpacity
                   activeOpacity={0.7}
                   onPress={() => {
-                    if (isUnlocked) {
-                      setActiveAchievement(item); // Only open modal if unlocked
-                    }
+                    if (isUnlocked) setActiveAchievement(item);
                   }}
                   style={styles.achievementWrapper}
                 >
@@ -292,7 +327,6 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
 
-      {/* Achievement Modal */}
       {activeAchievement && (
         <AchievementModal
           achievement={activeAchievement}
@@ -305,15 +339,8 @@ export default function ProfileScreen() {
 
 // ================= STYLES =================
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.dark.background,
-  },
-  scrollContent: {
-    alignItems: "center",
-    paddingTop: 30,
-    paddingBottom: 50,
-  },
+  container: { flex: 1, backgroundColor: Colors.dark.background },
+  scrollContent: { alignItems: "center", paddingTop: 30, paddingBottom: 50 },
   card: {
     width: width * 0.9,
     borderRadius: 28,
@@ -393,8 +420,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
   },
-  lockedIcon: {
-    backgroundColor: "#000",
-    opacity: 0.4,
+  lockedIcon: { backgroundColor: "#000", opacity: 0.4 },
+
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: Colors.dark.background,
+  },
+  appleSpinner: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: "rgba(255, 255, 255, 0.1)", // Cor do fundo do anel
+    borderTopColor: "#8B5CF6", // Cor do "rastro" (seu roxo Sorcerer)
+    // Se quiser o rastro branco clássico, use #FFF
   },
 });
