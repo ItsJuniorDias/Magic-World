@@ -136,6 +136,8 @@ export default function StorieScreen() {
 
   const [showFinishModal, setShowFinishModal] = useState(false);
 
+  const [isLoadingNextChapter, setIsLoadingNextChapter] = useState(false);
+
   const [branchOptions, setBranchOptions] = useState<
     | { title: string; targetIndex: number; profile: AdventureProfileType }[]
     | null
@@ -422,6 +424,7 @@ export default function StorieScreen() {
     while (attempts > 0) {
       try {
         const result = await geminiModel.generateContent(prompt);
+
         return result.response.text();
       } catch (error: any) {
         if (error.toString().includes("503")) {
@@ -680,6 +683,7 @@ export default function StorieScreen() {
 
           // 2. Lógica de Ramificação - SOMENTE NO CAPÍTULO 2 (Index 1)
           if (Number(currentIndex) === 1) {
+            setIsLoadingNextChapter(true);
             const prompt = `
             Based on the ending of this story: "${sentences.slice(-3).join(" ")}", 
             generate two distinct emotional or action-driven choices for the final chapter with.
@@ -700,6 +704,8 @@ export default function StorieScreen() {
             console.log(parsedChoices, "PARSED CHOICES");
 
             setBranchOptions(parsedChoices);
+
+            setIsLoadingNextChapter(false);
           } else {
             setBranchOptions(null);
           }
@@ -982,6 +988,7 @@ export default function StorieScreen() {
       />
 
       <NextChapterButton
+        disable={isLoadingNextChapter}
         storyId={String(storyId)}
         currentIndex={Number(currentIndex)}
       />

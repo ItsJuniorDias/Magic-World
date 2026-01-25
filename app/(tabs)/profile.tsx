@@ -234,6 +234,8 @@ export default function ProfileScreen() {
     null,
   );
 
+  console.log(activeAchievement, "ACTIVE ACHIEVEMENT");
+
   const shownAchievementIds = useRef<Set<number>>(new Set());
   const progressAnim = useRef(new Animated.Value(0)).current;
   const MAX_CHAPTERS = 200;
@@ -478,9 +480,16 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
 
-      {activeAchievement && (
+      {!!activeAchievement && (
         <AchievementModal
-          achievement={activeAchievement}
+          achievement={{
+            id: activeAchievement.id,
+            title: activeAchievement.title,
+            icon: activeAchievement.icon,
+            description: activeAchievement.secret
+              ? "Secret Achievement Unlocked!"
+              : `Unlocked by reading ${activeAchievement.req} chapters!`,
+          }}
           onClose={() => setActiveAchievement(null)}
         />
       )}

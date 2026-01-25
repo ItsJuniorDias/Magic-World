@@ -44,6 +44,22 @@ export default function TabLayout() {
         />
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="quiz">
+        <Label
+          selectedStyle={{
+            color: Colors.light.tint,
+          }}
+        >
+          Quiz
+        </Label>
+
+        <Icon
+          sf={"wand.and.stars"}
+          drawable="ic_menu_preferences"
+          selectedColor={Colors.light.tint}
+        />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="profile">
         <Label
           selectedStyle={{

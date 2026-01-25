@@ -6,16 +6,18 @@ import { useStoriesStore } from "@/store/useStoriesStore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export function NextChapterButton({
+  disable,
   storyId,
   currentIndex = 0,
 }: {
+  disable: boolean;
   storyId: string;
   currentIndex: number;
 }) {
   const router = useRouter();
 
   const story = useStoriesStore((state) =>
-    state.stories.find((item) => item.id === storyId)
+    state.stories.find((item) => item.id === storyId),
   );
 
   if (!story) return null;
@@ -53,8 +55,16 @@ export function NextChapterButton({
   };
 
   return (
-    <TouchableOpacity style={styles.fab} onPress={handlePress}>
-      <FontAwesome6 name="arrow-right" size={20} color="#FFF" />
+    <TouchableOpacity
+      style={styles.fab}
+      onPress={handlePress}
+      disabled={disable}
+    >
+      {disable ? (
+        <FontAwesome6 name="spinner" size={24} color={Colors.dark.text} />
+      ) : (
+        <FontAwesome6 name="arrow-right" size={24} color={Colors.dark.text} />
+      )}
     </TouchableOpacity>
   );
 }
