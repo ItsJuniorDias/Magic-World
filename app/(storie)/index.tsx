@@ -51,6 +51,10 @@ import { ChapterCompletedModal } from "@/components/(completed-chapter)";
 import { getUserKey } from "@/services/getUserKey";
 
 import { useIsFocused } from "@react-navigation/native";
+import {
+  AdventureProfileType,
+  useAdventureProfileStore,
+} from "@/store/useAdventureProfileStore";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -88,6 +92,8 @@ export default function StorieScreen() {
     useLocalSearchParams();
 
   const { addChapter, initProgress, deviceId } = useMagicProgressStore();
+
+  const { calculateProfile } = useAdventureProfileStore();
 
   const router = useRouter();
 
@@ -131,8 +137,11 @@ export default function StorieScreen() {
   const [showFinishModal, setShowFinishModal] = useState(false);
 
   const [branchOptions, setBranchOptions] = useState<
-    { title: string; targetIndex: number }[] | null
+    | { title: string; targetIndex: number; profile: AdventureProfileType }[]
+    | null
   >(null);
+
+  console.log(branchOptions, "BRANCH OPTIONS");
 
   const [isSavingProgress, setIsSavingProgress] = useState(false);
 
@@ -651,7 +660,23 @@ export default function StorieScreen() {
 
           await addChapter(deviceId, String(storyId), Number(currentIndex));
 
-          console.log(Number(currentIndex), "CURRENT INDEX");
+          // 1. Preparar perfis aleatórios
+          const profileArray = [
+            "brave",
+            "clever",
+            "wild",
+            "wise",
+          ] as AdventureProfileType[];
+
+          const randomProfileOne =
+            profileArray[Math.floor(Math.random() * profileArray.length)];
+          const randomProfileTwo =
+            profileArray[Math.floor(Math.random() * profileArray.length)];
+
+          const AdventureProfileTypeOne = `"${randomProfileOne}"`;
+          const AdventureProfileTypeTwo = `"${randomProfileTwo}"`;
+
+          console.log({ AdventureProfileTypeOne, AdventureProfileTypeTwo });
 
           // 2. Lógica de Ramificação - SOMENTE NO CAPÍTULO 2 (Index 1)
           if (Number(currentIndex) === 1) {
@@ -660,8 +685,8 @@ export default function StorieScreen() {
             generate two distinct emotional or action-driven choices for the final chapter.
             Return ONLY a JSON array with this exact structure:
             [
-              {"title": "Short action title", "description": "Briefly what happens", "targetIndex": 2},
-              {"title": "Short emotional title", "description": "Briefly what happens", "targetIndex": 2}
+              {"title": "Short action title", "description": "Briefly what happens", "targetIndex": 1, profile: ${AdventureProfileTypeOne}},
+              {"title": "Short emotional title", "description": "Briefly what happens", "targetIndex": 2, profile: ${AdventureProfileTypeTwo}}
             ]
           `;
 
@@ -681,9 +706,34 @@ export default function StorieScreen() {
 
           // 3. Abre o modal (que agora terá as escolhas se for Cap 2)
           setShowFinishModal(true);
+
+          // 4. Se estivermos no Capítulo 3 (final), navega para o resultado do perfil
+          if (Number(currentIndex) === 2) {
+            // calcula o perfil final do usuário
+            const finalProfile = await calculateProfile();
+
+            const isViewed = await AsyncStorage.getItem(
+              "@adventure_profile_viewed",
+            );
+
+            if (isViewed === "true") {
+              router.replace({
+                pathname: "/(tabs)",
+              });
+              return;
+            }
+
+            await AsyncStorage.setItem("@adventure_profile_viewed", "true");
+
+            router.replace({
+              pathname: "/(profile-result-adventure)",
+              params: {
+                profile: finalProfile,
+              },
+            });
+          }
         } catch (error) {
           console.error("Erro ao finalizar capítulo ou gerar caminhos:", error);
-          // Fallback: se a IA falhar, não trava o app, apenas mostra o modal sem escolhas
           setBranchOptions(null);
           setShowFinishModal(true);
         } finally {
@@ -699,6 +749,8 @@ export default function StorieScreen() {
       showFinishModal,
       isSavingProgress,
       addChapter,
+      calculateProfile,
+      router,
     ],
   );
 

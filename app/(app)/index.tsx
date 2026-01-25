@@ -77,7 +77,7 @@ export default function OnboardingScreen() {
 
     loadNotification();
 
-    // saveProStatus(false);
+    // saveProStatus(true);
 
     // Platform-specific API keys
     const iosApiKey = "appl_UcIhNLORZZgNuPFDjVUoqawwHfK";
@@ -132,7 +132,10 @@ export default function OnboardingScreen() {
             title={`Turn the page, or rather, press play, and let the adventure begin.`}
           />
 
-          <Button onPress={() => router.push("/(tabs)")} activeOpacity={0.85}>
+          <Button
+            onPress={() => router.push("/(profile-adventure)")}
+            activeOpacity={0.85}
+          >
             <Text
               fontFamily="bold"
               fontSize={18}

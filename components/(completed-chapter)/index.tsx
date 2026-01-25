@@ -7,9 +7,15 @@ import { FontAwesome6 } from "@expo/vector-icons";
 import { GlassView } from "expo-glass-effect";
 import { LinearGradient } from "expo-linear-gradient";
 
+import {
+  AdventureProfileType,
+  useAdventureProfileStore,
+} from "@/store/useAdventureProfileStore";
+
 interface Choice {
   title: string;
   targetIndex: number;
+  profile?: AdventureProfileType;
 }
 
 interface Props {
@@ -25,6 +31,8 @@ export const ChapterCompletedModal = ({
   choices,
   onChoiceSelected,
 }: Props) => {
+  const addPoint = useAdventureProfileStore((s) => s.addPoint);
+
   return (
     <Modal visible={visible} transparent animationType="fade">
       <BlurView intensity={30} tint="dark" style={styles.container}>
@@ -64,7 +72,13 @@ export const ChapterCompletedModal = ({
               choices.map((choice, index) => (
                 <Pressable
                   key={index}
-                  onPress={() => onChoiceSelected?.(choice)}
+                  onPress={() => {
+                    if (choice.profile) {
+                      addPoint(choice.profile); // 👈 AQUI A MÁGICA
+                    }
+
+                    onChoiceSelected?.(choice);
+                  }}
                   style={({ pressed }) => [
                     styles.choiceButton,
                     { opacity: pressed ? 0.8 : 1 },
@@ -72,7 +86,7 @@ export const ChapterCompletedModal = ({
                 >
                   <GlassView style={styles.glassChoice} intensity={20}>
                     <Text
-                      fontFamily="semi-bold"
+                      fontFamily="regular"
                       fontSize={16}
                       color="#FFF"
                       title={choice.title}

@@ -479,7 +479,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "flex-start",
-    gap: 12,
+    gap: 8,
   },
   achievementWrapper: {
     width: (width * 0.9 - 24) / 3,

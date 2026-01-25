@@ -2,11 +2,11 @@ import React from "react";
 import { TextProps as RNTextProps } from "react-native";
 import { TextCustom } from "./styles";
 
-type FontLine = 12 | 14 | 16 | 18 | 20 | 22 | 24 | 28 | 32 | 40;
+type FontLine = 12 | 14 | 16 | 18 | 20 | 22 | 24 | 28 | 32 | 40 | 48 | 56 | 64;
 
 interface TextPropsCustom extends RNTextProps {
   title?: string | undefined | null | number; // aceitar números também, caso passe sem querer
-  fontFamily: "regular" | "bold" | "semi-bold";
+  fontFamily: "regular" | "bold";
   numberOfLines?: number;
   fontSize: FontLine;
   lineHeight?: FontLine;
