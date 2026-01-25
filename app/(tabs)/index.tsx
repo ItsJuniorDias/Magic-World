@@ -161,7 +161,7 @@ Characters may meet, influence events, or be connected by the same world or lege
 
 
 Story guidelines:
-Genre: mystery
+Genre: future
 Tone: Epic, immersive, mysterious
 Style: Saga narrative
 Audience: Children
@@ -184,7 +184,7 @@ Generate the story following a structured JSON format when requested.
 
 Structure:
 {
-  category: "mystery",
+  category: "future",
   title: "",
   thumbnail: "",
   views: 0,

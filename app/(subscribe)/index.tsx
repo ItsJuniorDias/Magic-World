@@ -15,6 +15,8 @@ import Purchases from "react-native-purchases";
 import AsyncStorage from "@react-native-async-storage/async-storage"; // 1. Importar
 import { useRouter } from "expo-router";
 
+import { logEvent } from "@/services/analytics";
+
 export default function SubscribeScreen() {
   const router = useRouter();
 
@@ -64,10 +66,23 @@ export default function SubscribeScreen() {
 
     try {
       setLoading(true);
+
+      logEvent("purchase_started", {
+        source: "subscribe_screen",
+        plan: selectedPackage.packageType === "MONTHLY" ? "monthly" : "annual",
+        package: selectedPackage.identifier,
+      });
+
       const purchase = await Purchases.purchasePackage(selectedPackage);
 
       // Verificando se a assinatura está ativa
       if (purchase.customerInfo.entitlements.active["Magic World Pro"]) {
+        logEvent("purchase_completed", {
+          plan:
+            selectedPackage.packageType === "MONTHLY" ? "monthly" : "annual",
+          package: selectedPackage.identifier,
+        });
+
         await saveProStatus(true); // 3. Salvar no storage
         Alert.alert("Success", "Subscription activated!");
         // Aqui você pode redirecionar o usuário: navigation.goBack();
@@ -75,7 +90,15 @@ export default function SubscribeScreen() {
         router.back();
       }
     } catch (error: any) {
-      if (!error.userCancelled) {
+      if (error.userCancelled) {
+        logEvent("purchase_cancelled", {
+          source: "subscribe_screen",
+          plan:
+            selectedPackage?.packageType === "MONTHLY" ? "monthly" : "annual",
+          package: selectedPackage?.identifier,
+          reason: "apple_sheet_closed",
+        });
+      } else {
         Alert.alert("Error", "An error occurred during purchase.");
       }
     } finally {
@@ -188,7 +211,14 @@ export default function SubscribeScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => {
+              logEvent("purchase_cancelled", {
+                source: "subscribe_screen",
+                reason: "maybe_later",
+              });
+
+              router.back();
+            }}
             style={{ marginTop: 12 }}
           >
             <Text
