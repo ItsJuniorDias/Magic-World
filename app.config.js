@@ -2,7 +2,7 @@ export default {
   expo: {
     name: "Magic World",
     slug: "magicworld",
-    version: "2.4.0",
+    version: "3.0.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "magicworld",

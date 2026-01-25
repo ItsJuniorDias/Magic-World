@@ -2,9 +2,11 @@ import { LinearGradient } from "expo-linear-gradient";
 import {
   TouchableOpacity,
   Animated,
+  Easing,
   StyleProp,
   ImageStyle,
   View, // Adicionado
+  StyleSheet,
 } from "react-native";
 import { FontAwesome6 } from "@expo/vector-icons";
 
@@ -46,11 +48,48 @@ export default function Card({
 }: CardProps) {
   const [localFavorite, setLocalFavorite] = useState(isFavorite);
 
+  const badgeOpacity = useRef(new Animated.Value(0)).current;
+  const badgeTranslate = useRef(new Animated.Value(-6)).current;
+  const badgeScale = useRef(new Animated.Value(1)).current;
+
   useEffect(() => {
     setLocalFavorite(isFavorite);
   }, [isFavorite]);
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(badgeOpacity, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.timing(badgeTranslate, {
+        toValue: 0,
+        duration: 400,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(badgeScale, {
+          toValue: 1.05,
+          duration: 1200,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(badgeScale, {
+          toValue: 1,
+          duration: 1200,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+  }, []);
 
   useEffect(() => {
     scaleAnim.setValue(1);
@@ -92,46 +131,27 @@ export default function Card({
     <CardContainer onPress={onPress} activeOpacity={0.85} variant={variant}>
       {/* BADGE PRO - DARK GLASS STYLE */}
       {isPro && variant !== "category" && (
-        <View
-          style={{
-            position: "absolute",
-            top: 12,
-            left: 12,
-            zIndex: 15,
-            flexDirection: "row",
-            alignItems: "center",
-            // Fundo preto translúcido (efeito fumê)
-            backgroundColor: "rgba(0, 0, 0, 0.55)",
-            paddingHorizontal: 10,
-            paddingVertical: 5,
-            borderRadius: 20,
-            // Borda fina para dar profundidade ao "vidro"
-            borderWidth: 1,
-            borderColor: "rgba(255, 255, 255, 0.1)",
-            // Sombra suave para destacar do fundo
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.3,
-            shadowRadius: 4,
-          }}
+        <Animated.View
+          style={[
+            styles.badgeOpacity,
+            {
+              opacity: badgeOpacity,
+              transform: [
+                { translateY: badgeTranslate },
+                { scale: badgeScale },
+              ],
+            },
+          ]}
         >
-          <FontAwesome6
-            name="crown"
-            size={10}
-            color="white" // Dourado para o ícone Pro
-            style={{ marginRight: 6 }}
-          />
+          <FontAwesome6 name="crown" size={10} color="#fff" />
           <Text
+            title="PREMIUM"
             fontFamily="bold"
             fontSize={12}
-            color="#FFFFFF"
-            title="PREMIUM"
-            style={{
-              letterSpacing: 1.2, // Estilo Apple clássico
-              textTransform: "uppercase",
-            }}
+            color="#fff"
+            style={{ marginLeft: 4 }}
           />
-        </View>
+        </Animated.View>
       )}
 
       {/* THUMBNAIL CONTAINER COM OVERFLOW HIDDEN */}
@@ -206,3 +226,27 @@ export default function Card({
     </CardContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  badgeOpacity: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    zIndex: 15,
+    flexDirection: "row",
+    alignItems: "center",
+    // Fundo preto translúcido (efeito fumê)
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    // Borda fina para dar profundidade ao "vidro"
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    // Sombra suave para destacar do fundo
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+});

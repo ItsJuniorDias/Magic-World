@@ -89,6 +89,7 @@ const AnimatedCard = React.memo(
           title={item.title}
           views={item.views}
           isFavorite={isFavorite}
+          isPro={item.isPro}
           onToggleFavorite={handleToggle}
           onPress={() => onPress(item.id)}
           imageStyle={{
@@ -140,6 +141,19 @@ export default function FavoriteScreen() {
 
   const navigateToStory = useCallback(
     async (storyId: string) => {
+      if (!stories.length) return;
+
+      const isPro = stories.find((s) => s.id === storyId)?.isPro;
+
+      if (isPro) {
+        const isUserPro = await AsyncStorage.getItem("@user_is_pro");
+
+        if (isUserPro !== "true") {
+          router.push("/(subscribe)");
+          return;
+        }
+      }
+
       const fullStory = stories.find((s) => s.id === storyId);
       if (!fullStory?.chapter?.length) return;
 
