@@ -682,7 +682,7 @@ export default function StorieScreen() {
           if (Number(currentIndex) === 1) {
             const prompt = `
             Based on the ending of this story: "${sentences.slice(-3).join(" ")}", 
-            generate two distinct emotional or action-driven choices for the final chapter.
+            generate two distinct emotional or action-driven choices for the final chapter with.
             Return ONLY a JSON array with this exact structure:
             [
               {"title": "Short action title", "description": "Briefly what happens", "targetIndex": 1, profile: ${AdventureProfileTypeOne}},
@@ -720,10 +720,10 @@ export default function StorieScreen() {
               router.replace({
                 pathname: "/(tabs)",
               });
+
+              await AsyncStorage.setItem("@adventure_profile_viewed", "true");
               return;
             }
-
-            await AsyncStorage.setItem("@adventure_profile_viewed", "true");
 
             router.replace({
               pathname: "/(profile-result-adventure)",
@@ -934,8 +934,9 @@ export default function StorieScreen() {
                 Previous context: "${sentences.join(" ")}"
                 The reader chose the path: "${choice.title}".
                 Provide a satisfying and immersive conclusion in English.
+                with approximately 300 words storie.
                 Return ONLY a JSON object: 
-                {"title": "The Final Destiny", "storie": "Your long story here..."}
+                {"title": "The Final Destiny", "storie": "Your short story here..."}
             `;
 
             try {

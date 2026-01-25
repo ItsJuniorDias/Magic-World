@@ -1,5 +1,12 @@
 import React, { useEffect, useRef } from "react";
-import { View, StyleSheet, Pressable, Animated, Easing } from "react-native";
+import {
+  View,
+  StyleSheet,
+  Pressable,
+  Animated,
+  Easing,
+  ScrollView,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Text from "@/components/text";
@@ -74,60 +81,89 @@ export default function AdventureProfileIntro() {
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      {/* Texto animado */}
-      <Animated.View
-        style={[
-          styles.content,
-          {
-            opacity: textOpacity,
-            transform: [{ translateY: textTranslateY }],
-          },
-        ]}
+      <ScrollView
+        contentContainerStyle={{ flexGrow: 1, justifyContent: "space-between" }}
       >
-        <Text
-          title="Your adventure is about to begin ✨"
-          fontFamily="bold"
-          fontSize={28}
-          color={Colors.dark.text}
-          style={{ letterSpacing: -0.5 }}
-        />
-
-        <Text
-          title="Every choice you make will shape your adventure style."
-          fontFamily="regular"
-          fontSize={16}
-          color={Colors.dark.text}
-        />
-
-        <Text
-          title="There are no right or wrong choices — only different paths."
-          fontFamily="regular"
-          fontSize={14}
-          color={Colors.dark.text}
-        />
-      </Animated.View>
-
-      {/* Botão animado */}
-      <Animated.View
-        style={{
-          opacity: buttonOpacity,
-          transform: [{ translateY: buttonTranslateY }, { scale: buttonScale }],
-        }}
-      >
-        <Pressable
-          style={styles.button}
-          onPress={handleContinue}
-          onPressIn={handlePressIn}
-          onPressOut={handlePressOut}
+        {/* Texto animado */}
+        <Animated.View
+          style={[
+            styles.content,
+            {
+              opacity: textOpacity,
+              transform: [{ translateY: textTranslateY }],
+            },
+          ]}
         >
           <Text
-            title="Start the adventure"
+            title="Your adventure is about to begin ✨"
             fontFamily="bold"
-            fontSize={16}
-            color="#FFF"
+            fontSize={28}
+            color={Colors.dark.text}
+            style={{ letterSpacing: -0.5 }}
           />
-        </Pressable>
-      </Animated.View>
+
+          <Text
+            title="Every choice you make will shape your adventure style."
+            fontFamily="regular"
+            fontSize={18}
+            color={Colors.dark.text}
+          />
+
+          <Text
+            title="There are no right or wrong choices — only different paths."
+            fontFamily="regular"
+            fontSize={16}
+            color={Colors.dark.text}
+          />
+
+          {/* Novo conteúdo */}
+          <Text
+            title="💡 Tip: Take your time to explore each option. Some paths may surprise you!"
+            fontFamily="regular"
+            fontSize={16}
+            color={Colors.dark.text}
+          />
+
+          <Text
+            title="🎯 Goal: Collect experiences, not points. Your journey is unique."
+            fontFamily="regular"
+            fontSize={16}
+            color={Colors.dark.text}
+          />
+
+          <Text
+            title="🌟 Hint: Look for hidden details along the way. They can unlock secrets."
+            fontFamily="regular"
+            fontSize={16}
+            color={Colors.dark.text}
+          />
+        </Animated.View>
+
+        {/* Botão animado */}
+        <Animated.View
+          style={{
+            opacity: buttonOpacity,
+            transform: [
+              { translateY: buttonTranslateY },
+              { scale: buttonScale },
+            ],
+          }}
+        >
+          <Pressable
+            style={styles.button}
+            onPress={handleContinue}
+            onPressIn={handlePressIn}
+            onPressOut={handlePressOut}
+          >
+            <Text
+              title="Start the adventure"
+              fontFamily="bold"
+              fontSize={18}
+              color="#FFF"
+            />
+          </Pressable>
+        </Animated.View>
+      </ScrollView>
     </View>
   );
 }
@@ -136,7 +172,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.dark.background,
-    justifyContent: "space-between",
     padding: 24,
   },
   content: {

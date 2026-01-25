@@ -78,6 +78,8 @@ export default function OnboardingScreen() {
       await Notifications.getPermissionsAsync();
 
       await loadProfile();
+
+      // await AsyncStorage.setItem("@adventure_profile_viewed", "false");
     };
 
     load();
