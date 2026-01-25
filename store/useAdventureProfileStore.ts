@@ -40,23 +40,25 @@ export const useAdventureProfileStore = create<AdventureProfileState>(
       try {
         const iosId = await Application.getIosIdForVendorAsync();
 
+
         if (!iosId) {
-              console.error("Não foi possível obter o iOS Device ID");
-              return
-          }
+            console.error("Não foi possível obter o iOS Device ID");
+            return
+        }
 
         const userRef = doc(db, "users", iosId);
         const docSnap = await getDoc(userRef);
 
         if (docSnap.exists()) {
           const data = docSnap.data();
+
           set({
-            points: data.points || initialPoints,
-            profile: data.adventureProfile || null,
+            profile: data.profile || null,
           });
         } else {
           // Cria documento padrão se não existir
-          await setDoc(userRef, { points: initialPoints, adventureProfile: null });
+          await setDoc(userRef, { points: initialPoints, profile: null });
+          
           set({ points: initialPoints, profile: null });
         }
       } catch (error) {

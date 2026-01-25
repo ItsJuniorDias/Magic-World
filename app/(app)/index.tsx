@@ -15,12 +15,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLikedStore } from "@/store/useLikedStore";
 
 import * as Notifications from "expo-notifications";
+import { useAdventureProfileStore } from "@/store/useAdventureProfileStore";
 
 const { height } = Dimensions.get("window");
 
 export default function OnboardingScreen() {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const translateYAnim = useRef(new Animated.Value(0)).current;
+
+  const { loadProfile } = useAdventureProfileStore();
 
   const router = useRouter();
 
@@ -71,11 +74,13 @@ export default function OnboardingScreen() {
   useEffect(() => {
     init();
 
-    const loadNotification = async () => {
+    const load = async () => {
       await Notifications.getPermissionsAsync();
+
+      await loadProfile();
     };
 
-    loadNotification();
+    load();
 
     // saveProStatus(true);
 

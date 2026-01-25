@@ -2,7 +2,6 @@ import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   Dimensions,
   Animated,
@@ -15,6 +14,10 @@ import Text from "@/components/text";
 import { Colors } from "@/constants/theme";
 import { useMagicProgressStore } from "@/store/useMagicProgressStore";
 import { AchievementModal } from "@/components/(achievements)";
+import {
+  useAdventureProfileStore,
+  AdventureProfileType,
+} from "@/store/useAdventureProfileStore";
 
 const { width } = Dimensions.get("window");
 
@@ -94,8 +97,6 @@ const ACHIEVEMENTS = [
   { id: 4, title: "Spellbinder", req: 30, icon: "⚡", secret: false },
   { id: 5, title: "Sage", req: 50, icon: "📚", secret: false },
   { id: 6, title: "Legendary", req: 100, icon: "🏆", secret: false },
-
-  // Secret Achievements
   {
     id: 7,
     title: "Hidden Apprentice",
@@ -130,6 +131,33 @@ const ACHIEVEMENTS = [
   },
 ];
 
+// ================= PROFILE CONTENT =================
+const PROFILE_CONTENT: Record<
+  AdventureProfileType,
+  { title: string; description: string; emoji: string }
+> = {
+  brave: {
+    title: "Brave Adventurer",
+    description: "You face challenges head-on and never back down.",
+    emoji: "🛡️",
+  },
+  clever: {
+    title: "Clever Explorer",
+    description: "You solve problems with wit, strategy, and a sharp mind.",
+    emoji: "💡",
+  },
+  wild: {
+    title: "Wild Spirit",
+    description: "You follow your instincts and embrace unpredictable paths.",
+    emoji: "🪶",
+  },
+  wise: {
+    title: "Wise Guardian",
+    description: "You observe, reflect, and choose carefully before acting.",
+    emoji: "📖",
+  },
+};
+
 // ================= LOADING SPINNER =================
 const LoadingSpinner = () => {
   const scaleAnims = [
@@ -158,7 +186,6 @@ const LoadingSpinner = () => {
         ]),
       ).start();
     };
-
     scaleAnims.forEach((anim, index) => animate(anim, index * 150));
   }, []);
 
@@ -196,9 +223,16 @@ export default function ProfileScreen() {
   const isFocused = useIsFocused();
   const { chaptersRead, level, initProgress } = useMagicProgressStore();
 
+  const { profile } = useAdventureProfileStore();
+
+  console.log(profile, "PROFILE");
+
   const [loading, setLoading] = useState(true);
   const [activeAchievement, setActiveAchievement] = useState<any | null>(null);
   const [unlockedIds, setUnlockedIds] = useState<Record<number, boolean>>({});
+  const [profileData, setProfileData] = useState<typeof PROFILE_CONTENT | null>(
+    null,
+  );
 
   const shownAchievementIds = useRef<Set<number>>(new Set());
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -206,14 +240,27 @@ export default function ProfileScreen() {
 
   const progressPercent = Math.min((chaptersRead / MAX_CHAPTERS) * 100, 100);
 
-  // 1. Carregar dados
+  // ================= Load Progress & Profile =================
   useEffect(() => {
     if (!isFocused) return;
 
-    initProgress().then(() => setLoading(false));
-  }, [isFocused]);
+    const loadData = async () => {
+      setLoading(true);
+      await initProgress();
 
-  // 2. Desbloqueio e modal automático
+      if (profile) {
+        setProfileData(PROFILE_CONTENT[profile]);
+      } else {
+        setProfileData(null);
+      }
+
+      setLoading(false);
+    };
+
+    loadData();
+  }, [isFocused, profile]);
+
+  // ================= Achievements Unlock =================
   useEffect(() => {
     if (loading || !isFocused) return;
 
@@ -225,24 +272,21 @@ export default function ProfileScreen() {
         ach.secret && ach.condition
           ? ach.condition(chaptersRead)
           : chaptersRead >= (ach.req || 0);
-
       if (unlocked) {
         tempUnlocked[ach.id] = true;
-        if (!shownAchievementIds.current.has(ach.id)) {
+        if (!shownAchievementIds.current.has(ach.id))
           latestNewAchievement = ach;
-        }
       }
     });
 
     setUnlockedIds(tempUnlocked);
-
     if (latestNewAchievement) {
       setActiveAchievement(latestNewAchievement);
       shownAchievementIds.current.add(latestNewAchievement.id);
     }
   }, [chaptersRead, loading, isFocused]);
 
-  // 3. Animação da barra
+  // ================= Progress Bar Animation =================
   useEffect(() => {
     Animated.timing(progressAnim, {
       toValue: isNaN(progressPercent) ? 0 : progressPercent,
@@ -266,18 +310,48 @@ export default function ProfileScreen() {
       >
         {/* Profile Card */}
         <View style={styles.card}>
-          <View style={styles.avatarWrapper}>
-            <Text title="👤" fontSize={40} />
-          </View>
+          {/* Avatar */}
 
-          <Text
-            fontFamily="bold"
-            fontSize={24}
-            color="#FFF"
-            title="Magic Reader"
-            style={{ letterSpacing: -0.5 }}
-          />
+          {/* Adventure Profile */}
+          {profileData && !loading ? (
+            <View style={{ marginTop: 24, alignItems: "center" }}>
+              <Text fontSize={48} title={profileData.emoji} />
+              <Text
+                fontFamily="bold"
+                fontSize={22}
+                color="#FFF"
+                title={profileData.title}
+                style={{ marginTop: 8 }}
+              />
+              <Text
+                fontFamily="regular"
+                fontSize={14}
+                color="rgba(255,255,255,0.7)"
+                title={profileData.description}
+                style={{
+                  marginTop: 4,
+                  textAlign: "center",
+                  maxWidth: width * 0.8,
+                }}
+              />
+            </View>
+          ) : (
+            <>
+              <View style={styles.avatarWrapper}>
+                <Text title="👤" fontSize={40} />
+              </View>
 
+              <Text
+                fontFamily="bold"
+                fontSize={24}
+                color="#FFF"
+                title="Magic Reader"
+                style={{ letterSpacing: -0.5 }}
+              />
+            </>
+          )}
+
+          {/* Level Badge */}
           <View style={[styles.levelBadge, { borderColor: meta.color + "40" }]}>
             <Text fontSize={18} fontFamily="regular" title={meta.icon} />
             <Text
@@ -288,6 +362,7 @@ export default function ProfileScreen() {
             />
           </View>
 
+          {/* Stats Row */}
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <Text
@@ -303,9 +378,7 @@ export default function ProfileScreen() {
                 title="Chapters"
               />
             </View>
-
             <View style={styles.divider} />
-
             <View style={styles.statItem}>
               <Text
                 fontFamily="bold"
@@ -322,6 +395,7 @@ export default function ProfileScreen() {
             </View>
           </View>
 
+          {/* Progress Section */}
           <View style={styles.progressSection}>
             <View style={styles.progressHeader}>
               <Text
@@ -414,6 +488,7 @@ export default function ProfileScreen() {
   );
 }
 
+// ================= STYLES =================
 const styles = StyleSheet.create({
   container: {
     flex: 1,
