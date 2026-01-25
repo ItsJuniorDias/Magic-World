@@ -716,21 +716,22 @@ export default function StorieScreen() {
               "@adventure_profile_viewed",
             );
 
+            console.log(isViewed, "IS VIEWED");
+
             if (isViewed === "true") {
+              router.replace({
+                pathname: "/(profile-result-adventure)",
+                params: {
+                  profile: finalProfile,
+                },
+              });
+
+              await AsyncStorage.setItem("@adventure_profile_viewed", "false");
+            } else {
               router.replace({
                 pathname: "/(tabs)",
               });
-
-              await AsyncStorage.setItem("@adventure_profile_viewed", "true");
-              return;
             }
-
-            router.replace({
-              pathname: "/(profile-result-adventure)",
-              params: {
-                profile: finalProfile,
-              },
-            });
           }
         } catch (error) {
           console.error("Erro ao finalizar capítulo ou gerar caminhos:", error);

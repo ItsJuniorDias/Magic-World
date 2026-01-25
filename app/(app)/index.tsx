@@ -23,7 +23,7 @@ export default function OnboardingScreen() {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const translateYAnim = useRef(new Animated.Value(0)).current;
 
-  const { loadProfile } = useAdventureProfileStore();
+  const { loadProfile, profile } = useAdventureProfileStore();
 
   const router = useRouter();
 
@@ -79,7 +79,9 @@ export default function OnboardingScreen() {
 
       await loadProfile();
 
-      // await AsyncStorage.setItem("@adventure_profile_viewed", "false");
+      if (!profile) {
+        await AsyncStorage.setItem("@adventure_profile_viewed", "true");
+      }
     };
 
     load();
