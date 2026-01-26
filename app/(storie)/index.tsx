@@ -7,7 +7,7 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useRef, useState, useEffect, useMemo, useCallback, use } from "react";
+import { useRef, useState, useEffect, useMemo, useCallback } from "react";
 
 import * as Application from "expo-application";
 
@@ -38,6 +38,7 @@ import TrackPlayer, {
   Event,
   State,
   useTrackPlayerEvents,
+  RepeatMode,
 } from "react-native-track-player";
 
 import { useLockScreenPlayer } from "@/hooks/LockScreenPlayer";
@@ -143,25 +144,15 @@ export default function StorieScreen() {
     | null
   >(null);
 
-  console.log(branchOptions, "BRANCH OPTIONS");
-
   const [isSavingProgress, setIsSavingProgress] = useState(false);
-
-  console.log(deviceId, "DEVICE ID");
 
   useEffect(() => {
     if (!isFocused) return;
-
     if (deviceId) return;
-
     initProgress().then(() => {});
   }, [isFocused, deviceId, initProgress]);
 
-  // useEffect(() => {
-  //   getUserKey().then((key) => setUserKey(key));
-  // }, []);
-
-  //adicionar imagem de cada capitulo e o t
+  // Hook do player
   const { pause, play, stop } = useLockScreenPlayer({
     title: String(title),
     artist: "Magic World",
@@ -171,10 +162,49 @@ export default function StorieScreen() {
     currentIndex: Number(currentIndex),
   });
 
-  const notifyPaywall = async () => {
-    // 1. pedir permissão
-    const { status } = await Notifications.getPermissionsAsync();
+  // Garante o Loop da música ao iniciar
+  useEffect(() => {
+    const setupLoop = async () => {
+      // Define modo de repetição para a música tocar em loop sem parar a leitura
+      await TrackPlayer.setRepeatMode(RepeatMode.Track);
+    };
+    setupLoop();
+  }, [musicIndex]);
 
+  // --- SALVA E RECUPERA PROGRESSO ---
+
+  const saveReadingProgress = async (
+    chapterIndex: number,
+    sentenceIndex: number,
+    scrollYPos: number,
+  ) => {
+    try {
+      await AsyncStorage.setItem(
+        `@reading_progress_${storyId}_${chapterIndex}`,
+        JSON.stringify({ sentenceIndex, scrollYPos }),
+      );
+    } catch (e) {
+      console.error("Erro ao salvar progresso:", e);
+    }
+  };
+
+  const getReadingProgress = async (chapterIndex: number) => {
+    try {
+      const value = await AsyncStorage.getItem(
+        `@reading_progress_${storyId}_${chapterIndex}`,
+      );
+      if (!value) return null;
+      return JSON.parse(value) as { sentenceIndex: number; scrollYPos: number };
+    } catch (e) {
+      console.error("Erro ao recuperar progresso:", e);
+      return null;
+    }
+  };
+
+  // ----------------------------------
+
+  const notifyPaywall = async () => {
+    const { status } = await Notifications.getPermissionsAsync();
     let finalStatus = status;
 
     if (status !== "granted") {
@@ -182,49 +212,32 @@ export default function StorieScreen() {
       finalStatus = permission.status;
     }
 
-    if (finalStatus !== "granted") {
-      console.log("Notification permission not granted");
-      return;
-    }
+    if (finalStatus !== "granted") return;
 
-    // 2. disparar notificação
     await Notifications.scheduleNotificationAsync({
       content: {
         title: "Next Chapter Locked 🔒",
         body: "Subscribe to access the next chapter.",
         sound: true,
       },
-      trigger: null, // imediato
+      trigger: null,
     });
   };
 
   const handleNextChapter = async (forcedIndex?: number) => {
-    // 1. Checar paywall
+    // 🔥 VERIFICAÇÃO DE SEGURANÇA
     const isPro = await AsyncStorage.getItem("@user_is_pro");
 
-    // Consideramos Pro se o valor for "true" (ajuste conforme seu salvamento)
     if (isPro !== "true") {
-      // sem acesso → pausa tudo
       await pauseAllAudio();
-
-      // dispara notificação local
       await notifyPaywall();
-
-      // Opcional: Redirecionar para tela de assinatura
-      // router.push("/(subscribe)");
       return;
     } else {
-      // 2. Determinar qual capítulo carregar
-      // Se forcedIndex existir (escolha do usuário), usa ele. Senão, usa o nextIndex padrão.
       const targetIndex = forcedIndex ?? nextIndex;
       const targetChapter = (story as any)?.chapter?.[targetIndex];
 
-      if (!targetChapter) {
-        console.log("Próximo capítulo não encontrado");
-        return;
-      }
+      if (!targetChapter) return;
 
-      // 3. Limpar estados de áudio e fala atuais
       speakSessionRef.current += 1;
       lastSentenceIndexRef.current = 0;
 
@@ -234,7 +247,6 @@ export default function StorieScreen() {
       setIsPlay(false);
       setActiveSentenceIndex(-1);
 
-      // 4. Navegar para o novo capítulo
       router.replace({
         pathname: "/(storie)",
         params: {
@@ -247,30 +259,28 @@ export default function StorieScreen() {
         },
       });
 
-      // 5. Configurar TrackPlayer para a nova trilha
       await TrackPlayer.reset();
-
       await TrackPlayer.add({
         id: targetIndex.toString(),
         url: BACKGROUND_TRACKS[musicIndex].uri,
-        title: String(targetChapter.title), // Título do novo capítulo
+        title: String(targetChapter.title),
         artist: "Magic World",
         artwork: targetChapter.thumbnail,
       });
-
+      // Garante loop na próxima música também
+      await TrackPlayer.setRepeatMode(RepeatMode.Track);
       await TrackPlayer.play();
     }
   };
+
   /* =========================
      TRACKPLAYER EVENTS
   ========================== */
 
   const pauseAllAudio = useCallback(async () => {
     speakSessionRef.current += 1;
-
     Speech.stop();
     await pause();
-
     setIsPlay(false);
   }, []);
 
@@ -283,6 +293,7 @@ export default function StorieScreen() {
       Event.RemotePrevious,
     ],
     async (event) => {
+      // Com RepeatMode.Track, este evento raramente dispara, mas deixamos como fallback
       if (event.type === Event.PlaybackQueueEnded) {
         await TrackPlayer.seekTo(0);
         await play();
@@ -290,7 +301,7 @@ export default function StorieScreen() {
 
       if (event.type === Event.RemotePlay) {
         await play();
-        handleSpeak();
+        handleSpeak(true); // Resume reading
       }
 
       if (event.type === Event.RemotePause) {
@@ -298,20 +309,15 @@ export default function StorieScreen() {
       }
 
       if (event.type === Event.RemotePrevious) {
-        // quando clico no botão e voltar quero a começe do zero tanto a musica quando a voz
         const isPlaying = (await TrackPlayer.getState()) === State.Playing;
-
         await TrackPlayer.seekTo(0);
-
         if (isPlaying) {
           await TrackPlayer.play();
         }
-
-        handleSpeak(true); // resume speech from beginning
-
-        // scroll to top
-
+        // Reseta o progresso para o início
+        lastSentenceIndexRef.current = 0;
         scrollRef.current?.scrollTo({ y: 0, animated: true });
+        handleSpeak(false); // Reinicia a fala do zero
       }
 
       if (event.type === Event.RemoteNext) {
@@ -327,7 +333,6 @@ export default function StorieScreen() {
 
   useEffect(() => {
     if (!isTranslating) return;
-
     Animated.loop(
       Animated.sequence([
         Animated.timing(skeletonAnim, {
@@ -374,13 +379,41 @@ export default function StorieScreen() {
     return translatedText.storie.split(/(?<=[.!?])\s+/).filter(Boolean);
   }, [translatedText.storie]);
 
+  // Recupera progresso ao montar ou iniciar autoplay
   useEffect(() => {
-    if (autoPlay === "true") {
-      setTimeout(() => {
-        handleSpeak();
-      }, 800);
-    }
-  }, [autoPlay]);
+    const initReading = async () => {
+      // Tenta recuperar progresso
+      const progress = await getReadingProgress(Number(currentIndex));
+
+      if (progress) {
+        // Se houver progresso, configura os refs para continuar de onde parou
+        lastSentenceIndexRef.current = progress.sentenceIndex;
+
+        // Pequeno delay para garantir que o layout carregou antes de rolar
+        setTimeout(() => {
+          scrollRef.current?.scrollTo({
+            y: progress.scrollYPos,
+            animated: false,
+          });
+        }, 500);
+
+        if (autoPlay === "true") {
+          setTimeout(() => {
+            handleSpeak(true); // Passa true para retomar
+          }, 800);
+        }
+      } else {
+        // Se não houver progresso, começa do início
+        if (autoPlay === "true") {
+          setTimeout(() => {
+            handleSpeak();
+          }, 800);
+        }
+      }
+    };
+
+    initReading();
+  }, [autoPlay, currentIndex]);
 
   /* =========================
      HEADER ANIMATIONS
@@ -418,13 +451,10 @@ export default function StorieScreen() {
       Return only the translated text.
       Text: "${text}"
     `;
-
     let attempts = 3;
-
     while (attempts > 0) {
       try {
         const result = await geminiModel.generateContent(prompt);
-
         return result.response.text();
       } catch (error: any) {
         if (error.toString().includes("503")) {
@@ -435,22 +465,18 @@ export default function StorieScreen() {
         }
       }
     }
-
     Alert.alert(
       "Translation unavailable",
       "The translation service is overloaded. Please try again later.",
     );
-
     return text;
   }
 
   async function handleTranslateAll(lang: string) {
     setIsTranslating(true);
-
     try {
       const newTitle = await translateText(String(title), lang);
       const newStorie = await translateText(String(storie), lang);
-
       setTranslatedText({
         title: newTitle,
         storie: newStorie,
@@ -465,14 +491,12 @@ export default function StorieScreen() {
   ========================== */
   const renderContextMenu = () => {
     const map = ["en", "es", "pt", "fr", "zh", "hi"];
-
     const musicOptions = BACKGROUND_TRACKS.map((t) => t.title);
 
     return (
       <Host style={{ width: 48, height: 48 }}>
         <ContextMenu>
           <ContextMenu.Items>
-            {/* 🌍 TRANSLATE */}
             <Picker
               label="Translate"
               options={[
@@ -490,8 +514,6 @@ export default function StorieScreen() {
                 handleTranslateAll(map[index]);
               }}
             />
-
-            {/* 🎵 AMBIENT MUSIC */}
             <Picker
               label="Ambient Sound"
               options={musicOptions}
@@ -499,12 +521,11 @@ export default function StorieScreen() {
               selectedIndex={musicIndex}
               onOptionSelected={async ({ nativeEvent: { index } }) => {
                 setMusicIndex(index);
-
                 await TrackPlayer.stop();
+                // A música será reiniciada pelo hook ou lógica externa, mas importante garantir loop
               }}
             />
           </ContextMenu.Items>
-
           <ContextMenu.Trigger>
             <GlassView style={styles.glassButton} isInteractive>
               <FontAwesome6
@@ -527,22 +548,21 @@ export default function StorieScreen() {
     if (isPlay && !resume) {
       speakSessionRef.current += 1;
       Speech.stop();
-
       await TrackPlayer.pause();
       setIsPlay(false);
       setActiveSentenceIndex(-1);
       return;
     }
 
-    // Inicia do zero
     if (!sentences.length) return;
 
     speakSessionRef.current += 1;
     const sessionId = speakSessionRef.current;
 
     setIsPlay(true);
-    setActiveSentenceIndex(0);
 
+    // Garante que o TrackPlayer toque em Loop
+    await TrackPlayer.setRepeatMode(RepeatMode.Track);
     await TrackPlayer.play();
 
     const langCode = franc(translatedText.storie as string);
@@ -556,7 +576,11 @@ export default function StorieScreen() {
         hin: "hi-IN",
       }[langCode] ?? "en-US";
 
+    // Determina o índice inicial: se resume é true, usa o último salvo/ref
     let index = resume ? lastSentenceIndexRef.current : 0;
+
+    // Proteção caso o index salvo seja maior que o tamanho do texto (ex: tradução mudou tamanho)
+    if (index >= sentences.length) index = 0;
 
     setActiveSentenceIndex(index);
 
@@ -564,17 +588,21 @@ export default function StorieScreen() {
       if (speakSessionRef.current !== sessionId) return;
 
       if (index >= sentences.length) {
+        // Fim da história
+        // Não pausamos a música imediatamente se o user quiser ficar ouvindo,
+        // mas o comportamento padrão é finalizar a leitura.
         TrackPlayer.pause();
         setIsPlay(false);
-        // mantém última frase destacada
-
         handleFinishReading();
+        AsyncStorage.removeItem(`@reading_progress_${storyId}_${currentIndex}`);
         return;
       }
 
       setActiveSentenceIndex(index);
-
       lastSentenceIndexRef.current = index;
+
+      // 🔹 Salva progresso a cada sentença iniciada
+      saveReadingProgress(Number(currentIndex), index, currentScrollY.current);
 
       Speech.speak(sentences[index], {
         volume: 1.0,
@@ -587,20 +615,31 @@ export default function StorieScreen() {
           index += 1;
 
           if (index >= sentences.length) {
-            handleFinishReading(true); // Fim da leitura por voz
+            handleFinishReading(true);
+            AsyncStorage.removeItem(
+              `@reading_progress_${storyId}_${currentIndex}`,
+            );
           } else {
             speakNext();
           }
         },
         onStopped: () => {
+          // Callback disparado quando Speech.stop() é chamado manualmente.
           if (speakSessionRef.current !== sessionId) return;
+
           TrackPlayer.pause();
           setIsPlay(false);
           setActiveSentenceIndex(-1);
+
+          // Salva onde parou
+          saveReadingProgress(
+            Number(currentIndex),
+            index,
+            currentScrollY.current,
+          );
         },
       });
     };
-
     speakNext();
   };
 
@@ -621,6 +660,7 @@ export default function StorieScreen() {
   }, [activeSentenceIndex, isPlay]);
 
   const handlePlayPress = async () => {
+    // Verifica se já existe progresso para retomar ou começa do zero
     const hasSeen = await AsyncStorage.getItem("@guided_reading_seen");
 
     if (!hasSeen) {
@@ -629,15 +669,18 @@ export default function StorieScreen() {
       return;
     }
 
-    handleSpeak();
+    // Se estiver pausado e tivermos um indice salvo > 0, retomamos (resume=true)
+    if (!isPlay && lastSentenceIndexRef.current > 0) {
+      handleSpeak(true);
+    } else {
+      handleSpeak(false);
+    }
   };
 
   const stopAllAudio = async () => {
     speakSessionRef.current += 1;
-
     Speech.stop();
     await TrackPlayer.pause();
-
     setIsPlay(false);
     setActiveSentenceIndex(-1);
   };
@@ -663,7 +706,6 @@ export default function StorieScreen() {
 
           await addChapter(deviceId, String(storyId), Number(currentIndex));
 
-          // 1. Preparar perfis aleatórios
           const profileArray = [
             "brave",
             "clever",
@@ -679,9 +721,6 @@ export default function StorieScreen() {
           const AdventureProfileTypeOne = `"${randomProfileOne}"`;
           const AdventureProfileTypeTwo = `"${randomProfileTwo}"`;
 
-          console.log({ AdventureProfileTypeOne, AdventureProfileTypeTwo });
-
-          // 2. Lógica de Ramificação - SOMENTE NO CAPÍTULO 2 (Index 1)
           if (Number(currentIndex) === 1) {
             setIsLoadingNextChapter(true);
             const prompt = `
@@ -697,32 +736,22 @@ export default function StorieScreen() {
             const result = await geminiModel.generateContent(prompt);
             const responseText = result.response.text();
 
-            // Limpeza de Markdown do JSON
             const cleanJson = responseText.replace(/```json|```/g, "").trim();
             const parsedChoices = JSON.parse(cleanJson);
 
-            console.log(parsedChoices, "PARSED CHOICES");
-
             setBranchOptions(parsedChoices);
-
             setIsLoadingNextChapter(false);
           } else {
             setBranchOptions(null);
           }
 
-          // 3. Abre o modal (que agora terá as escolhas se for Cap 2)
           setShowFinishModal(true);
 
-          // 4. Se estivermos no Capítulo 3 (final), navega para o resultado do perfil
           if (Number(currentIndex) === 2) {
-            // calcula o perfil final do usuário
             const finalProfile = await calculateProfile();
-
             const isViewed = await AsyncStorage.getItem(
               "@adventure_profile_viewed",
             );
-
-            console.log(isViewed, "IS VIEWED");
 
             if (isViewed === "true") {
               router.replace({
@@ -731,7 +760,6 @@ export default function StorieScreen() {
                   profile: finalProfile,
                 },
               });
-
               await AsyncStorage.setItem("@adventure_profile_viewed", "false");
             } else {
               router.replace({
@@ -740,7 +768,7 @@ export default function StorieScreen() {
             }
           }
         } catch (error) {
-          console.error("Erro ao finalizar capítulo ou gerar caminhos:", error);
+          console.error("Erro ao finalizar capítulo:", error);
           setBranchOptions(null);
           setShowFinishModal(true);
         } finally {
@@ -760,10 +788,6 @@ export default function StorieScreen() {
       router,
     ],
   );
-
-  // useEffect(() => {
-  //   handleFinishReading(true);
-  // }, []);
 
   /* =========================
      UI
@@ -930,9 +954,18 @@ export default function StorieScreen() {
         chapterIndex={Number(currentIndex)}
         choices={branchOptions}
         onChoiceSelected={async (choice: any) => {
+          // 🔥 CORREÇÃO: VERIFICA SE É PRO ANTES DE GERAR CAPÍTULO COM IA
+          const isPro = await AsyncStorage.getItem("@user_is_pro");
+
+          if (isPro !== "true") {
+            setShowFinishModal(false);
+            await pauseAllAudio();
+            await notifyPaywall();
+            return;
+          }
+
           setShowFinishModal(false);
 
-          // Se estamos no Capítulo 2 e o usuário escolheu o caminho
           if (Number(currentIndex) === 1) {
             setIsTranslating(true);
 
@@ -948,21 +981,18 @@ export default function StorieScreen() {
 
             try {
               const result = await geminiModel.generateContent(finalePrompt);
-
-              // Remove possíveis blocos de código e parse para JSON
               const data = JSON.parse(
                 result.response.text().replace(/```json|```/g, ""),
               );
 
-              // Navega para a terceira tela com o texto gerado
               router.replace({
                 pathname: "/(storie)",
                 params: {
                   storie: data.storie,
                   title: data.title,
-                  thumbnail: story?.chapter[2].thumbnail, // você pode substituir por nova imagem se quiser
+                  thumbnail: story?.chapter[2].thumbnail,
                   storyId: storyId,
-                  currentIndex: 2, // Capítulo 3
+                  currentIndex: 2,
                   autoPlay: "true",
                 },
               });
@@ -975,14 +1005,11 @@ export default function StorieScreen() {
               setIsTranslating(false);
             }
           } else {
-            // Para outros capítulos, apenas avança normalmente
             handleNextChapter(choice.targetIndex);
           }
         }}
         onClose={async () => {
           setShowFinishModal(false);
-
-          // Se não houver opções de branching, apenas vai para o próximo capítulo
           if (!branchOptions) await handleNextChapter();
         }}
       />
@@ -991,6 +1018,7 @@ export default function StorieScreen() {
         disable={isLoadingNextChapter}
         storyId={String(storyId)}
         currentIndex={Number(currentIndex)}
+        onPress={() => handleNextChapter()} // Garante que o clique manual também passe pela verificação
       />
 
       <GuidedReadingModal
@@ -998,7 +1026,7 @@ export default function StorieScreen() {
         onClose={async () => {
           setShowGuidedModal(false);
           await TrackPlayer.pause();
-          handleSpeak();
+          handleSpeak(true); // Retoma se tiver salvo
         }}
       />
     </>
