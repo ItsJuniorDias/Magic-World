@@ -329,8 +329,6 @@ Structure:
             await incrementStoryViews(item.id);
           }
 
-          console.log(item.isPro, "IS PRO?");
-
           const hasPro = await AsyncStorage.getItem("@user_is_pro");
 
           if (item.isPro === true && hasPro !== "true") {

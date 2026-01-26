@@ -15,7 +15,7 @@ import Purchases from "react-native-purchases";
 import AsyncStorage from "@react-native-async-storage/async-storage"; // 1. Importar
 import { useRouter } from "expo-router";
 
-import { logEvent } from "@/services/analytics";
+import { logEvent } from "@/services/analyticsHelper";
 
 export default function SubscribeScreen() {
   const router = useRouter();
@@ -67,7 +67,7 @@ export default function SubscribeScreen() {
     try {
       setLoading(true);
 
-      logEvent("purchase_started", {
+      await logEvent("purchase_started", {
         source: "subscribe_screen",
         plan: selectedPackage.packageType === "MONTHLY" ? "monthly" : "annual",
         package: selectedPackage.identifier,
@@ -77,7 +77,8 @@ export default function SubscribeScreen() {
 
       // Verificando se a assinatura está ativa
       if (purchase.customerInfo.entitlements.active["Magic World Pro"]) {
-        logEvent("purchase_completed", {
+        await logEvent("purchase_successful", {
+          source: "subscribe_screen",
           plan:
             selectedPackage.packageType === "MONTHLY" ? "monthly" : "annual",
           package: selectedPackage.identifier,
@@ -91,7 +92,7 @@ export default function SubscribeScreen() {
       }
     } catch (error: any) {
       if (error.userCancelled) {
-        logEvent("purchase_cancelled", {
+        await logEvent("purchase_cancelled", {
           source: "subscribe_screen",
           plan:
             selectedPackage?.packageType === "MONTHLY" ? "monthly" : "annual",
@@ -211,8 +212,8 @@ export default function SubscribeScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => {
-              logEvent("purchase_cancelled", {
+            onPress={async () => {
+              await logEvent("purchase_cancelled", {
                 source: "subscribe_screen",
                 reason: "maybe_later",
               });
