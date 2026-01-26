@@ -11,8 +11,6 @@ export async function registerForPushNotifications() {
 
   let finalStatus = existingStatus;
 
-  console.log(finalStatus, "FINAL STATUS");
-
   
   if (existingStatus !== "granted") {
     const { status } = await Notifications.requestPermissionsAsync();
@@ -23,10 +21,6 @@ export async function registerForPushNotifications() {
     return null;
   }
 
-  console.log(
-  "PROJECT ID:",
-  Constants.expoConfig?.extra?.eas?.projectId
-);
 
   try {
    const tokenData = await Notifications.getExpoPushTokenAsync({
