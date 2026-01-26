@@ -17,11 +17,12 @@ export function AchievementModal({
   achievement: {
     id: number;
     title: string;
+    subtitle?: string;
     description?: string;
     icon?: string;
     correctCount?: number;
     totalQuestions?: number;
-    [key: string]: any; // para aceitar campos extras
+    [key: string]: any;
   };
   onClose: () => void;
 }) {
@@ -51,6 +52,7 @@ export function AchievementModal({
 
   let icon = achievement?.icon || "😢";
   let mainTitle = achievement?.title || "New Achievement!";
+  let subtitle = achievement?.subtitle || "";
   let description = achievement?.description || "";
 
   if (percent === 100) {
@@ -71,7 +73,7 @@ export function AchievementModal({
     description =
       achievement?.description ||
       `You answered ${correctCount} out of ${totalQuestions} correctly. Keep practicing!`;
-  } else {
+  } else if (achievement?.correctCount !== undefined) {
     icon = achievement?.icon || "😢";
     mainTitle = achievement?.title || "Better Luck Next Time!";
     description =
@@ -79,12 +81,13 @@ export function AchievementModal({
       `You answered ${correctCount} out of ${totalQuestions} correctly. Try again!`;
   }
 
-  // ================= RENDER EXTRA FIELDS =================
+  // ================= EXTRA FIELDS =================
   const extraFields = Object.entries(achievement).filter(
     ([key]) =>
       ![
         "id",
         "title",
+        "subtitle",
         "description",
         "icon",
         "correctCount",
@@ -103,11 +106,12 @@ export function AchievementModal({
           },
         ]}
       >
-        {/* Ícone com leve glow */}
+        {/* Icon */}
         <View style={styles.iconContainer}>
           <Text fontSize={64} title={icon} />
         </View>
 
+        {/* Title */}
         <Text
           fontFamily="bold"
           fontSize={24}
@@ -116,7 +120,19 @@ export function AchievementModal({
           style={styles.mainTitle}
         />
 
-        {!extraFields.length ? (
+        {/* Subtitle */}
+        {!!subtitle && (
+          <Text
+            fontFamily="regular"
+            fontSize={16}
+            color="#A1A1AA"
+            title={subtitle}
+            style={styles.subtitle}
+          />
+        )}
+
+        {/* Description */}
+        {!!description && !extraFields.length && (
           <Text
             fontFamily="regular"
             fontSize={16}
@@ -124,20 +140,21 @@ export function AchievementModal({
             title={description}
             style={styles.subTitle}
           />
-        ) : null}
+        )}
 
-        {/* Renderizando campos extras dinamicamente */}
+        {/* Extra fields (dynamic) */}
         {extraFields.map(([key, value]) => (
           <Text
             key={key}
             fontSize={14}
             fontFamily="regular"
             color="#D1D1D6"
-            title={`${key}: ${value}`}
+            title={`${value}`}
             style={{ marginBottom: 6 }}
           />
         ))}
 
+        {/* Button */}
         <Pressable
           style={({ pressed }) => [
             styles.modalButton,
@@ -155,6 +172,7 @@ export function AchievementModal({
   );
 }
 
+// ================= STYLES =================
 const styles = StyleSheet.create({
   modalOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -189,7 +207,14 @@ const styles = StyleSheet.create({
   mainTitle: {
     textAlign: "center",
     letterSpacing: -0.5,
-    marginBottom: 8,
+    marginBottom: 6,
+  },
+
+  subtitle: {
+    textAlign: "center",
+    marginBottom: 14,
+    color: "#A1A1AA",
+    letterSpacing: -0.3,
   },
 
   subTitle: {

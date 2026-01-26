@@ -18,6 +18,8 @@ import {
   useAdventureProfileStore,
   AdventureProfileType,
 } from "@/store/useAdventureProfileStore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { SecretLevelBadge } from "@/components/(secret-level-badge)";
 
 const { width } = Dimensions.get("window");
 
@@ -91,18 +93,61 @@ const LEVEL_META = {
 
 // ================= ACHIEVEMENTS =================
 const ACHIEVEMENTS = [
-  { id: 1, title: "Initiate", req: 1, icon: "🌱", secret: false },
-  { id: 2, title: "Bookworm", req: 5, icon: "📖", secret: false },
-  { id: 3, title: "Relentless", req: 15, icon: "🔥", secret: false },
-  { id: 4, title: "Spellbinder", req: 30, icon: "⚡", secret: false },
-  { id: 5, title: "Sage", req: 50, icon: "📚", secret: false },
-  { id: 6, title: "Legendary", req: 100, icon: "🏆", secret: false },
+  {
+    id: 1,
+    title: "Initiate",
+    req: 1,
+    icon: "🌱",
+    secret: false,
+    description: "Every journey begins with a single step.",
+  },
+  {
+    id: 2,
+    title: "Bookworm",
+    req: 5,
+    icon: "📖",
+    secret: false,
+    description: "Curiosity grows with every page you turn.",
+  },
+  {
+    id: 3,
+    title: "Relentless",
+    req: 15,
+    icon: "🔥",
+    secret: false,
+    description: "You kept going when stopping was easier.",
+  },
+  {
+    id: 4,
+    title: "Spellbinder",
+    req: 30,
+    icon: "⚡",
+    secret: false,
+    description: "Words have power, and you have learned to wield them.",
+  },
+  {
+    id: 5,
+    title: "Sage",
+    req: 50,
+    icon: "📚",
+    secret: false,
+    description: "Knowledge accumulates, wisdom emerges.",
+  },
+  {
+    id: 6,
+    title: "Legendary",
+    req: 100,
+    icon: "🏆",
+    secret: false,
+    description: "Your dedication has become the stuff of legends.",
+  },
   {
     id: 7,
     title: "Hidden Apprentice",
     icon: "🗝️",
     secret: true,
     req: 120,
+    description: "You noticed what others overlooked.",
     condition: (c: number) => c >= 120,
   },
   {
@@ -111,6 +156,7 @@ const ACHIEVEMENTS = [
     icon: "🍀",
     secret: true,
     req: 140,
+    description: "Chance favors those who keep reading.",
     condition: (c: number) => c >= 140,
   },
   {
@@ -119,6 +165,7 @@ const ACHIEVEMENTS = [
     icon: "💫",
     secret: true,
     req: 160,
+    description: "A quiet moment where progress becomes magic.",
     condition: (c: number) => c >= 160,
   },
   {
@@ -127,7 +174,80 @@ const ACHIEVEMENTS = [
     icon: "🎖️",
     secret: true,
     req: 200,
+    description: "Few reach this far. You did.",
     condition: (c: number) => c >= 200,
+  },
+  {
+    id: 11,
+    title: "Birthday Magic",
+    icon: "🎂",
+    secret: true,
+    req: 0,
+    description: "Some days carry a little extra magic.",
+    condition: () => {
+      const today = new Date();
+      return today.getDate() === 20 && today.getMonth() === 7; // August 20
+    },
+  },
+  {
+    id: 12,
+    title: "Early Bird",
+    icon: "🌅",
+    secret: true,
+    req: 0,
+    description: "You were awake before the world noticed.",
+    condition: () => {
+      const hour = new Date().getHours();
+      return hour >= 5 && hour < 7;
+    },
+  },
+  {
+    id: 13,
+    title: "Night Owl",
+    icon: "🌙",
+    secret: true,
+    req: 0,
+    description: "You kept reading while others slept.",
+    condition: () => {
+      const hour = new Date().getHours();
+      return hour >= 0 && hour < 3;
+    },
+  },
+  {
+    id: 14,
+    title: "Carnaval Reader",
+    icon: "🎭",
+    secret: true,
+    req: 0,
+    description: "Even festivities could not pull you away.",
+    condition: () => {
+      const today = new Date();
+      return today.getDate() === 13 && today.getMonth() === 1; // February 13
+    },
+  },
+  {
+    id: 15,
+    title: "Festive Spirit",
+    icon: "🎄",
+    secret: true,
+    req: 0,
+    description: "Stories found their place among the celebrations.",
+    condition: () => {
+      const today = new Date();
+      return today.getDate() === 25 && today.getMonth() === 11; // December 25
+    },
+  },
+  {
+    id: 16,
+    title: "The One Who Persisted",
+    icon: "🕯️",
+    secret: true,
+    req: 0,
+    description:
+      "Some paths reveal themselves only to those who do not give up.",
+    condition: () => {
+      return false; // unlocked manually via SecretLevelBadge
+    },
   },
 ];
 
@@ -229,12 +349,11 @@ export default function ProfileScreen() {
 
   const [loading, setLoading] = useState(true);
   const [activeAchievement, setActiveAchievement] = useState<any | null>(null);
+
   const [unlockedIds, setUnlockedIds] = useState<Record<number, boolean>>({});
   const [profileData, setProfileData] = useState<typeof PROFILE_CONTENT | null>(
     null,
   );
-
-  console.log(activeAchievement, "ACTIVE ACHIEVEMENT");
 
   const shownAchievementIds = useRef<Set<number>>(new Set());
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -242,19 +361,45 @@ export default function ProfileScreen() {
 
   const progressPercent = Math.min((chaptersRead / MAX_CHAPTERS) * 100, 100);
 
+  // ================= Load Unlocked Achievements from AsyncStorage =================
+  const loadUnlockedAchievements = async () => {
+    try {
+      const stored = await AsyncStorage.getItem("@unlocked_achievements");
+      if (stored) {
+        setUnlockedIds(JSON.parse(stored));
+      }
+    } catch (err) {
+      console.error("Failed to load achievements:", err);
+    }
+  };
+
+  const saveUnlockedAchievements = async (data: Record<number, boolean>) => {
+    try {
+      await AsyncStorage.setItem(
+        "@unlocked_achievements",
+        JSON.stringify(data),
+      );
+    } catch (err) {
+      console.error("Failed to save achievements:", err);
+    }
+  };
+
   // ================= Load Progress & Profile =================
   useEffect(() => {
     if (!isFocused) return;
 
     const loadData = async () => {
       setLoading(true);
+
+      // Inicializa progresso
       await initProgress();
 
-      if (profile) {
-        setProfileData(PROFILE_CONTENT[profile]);
-      } else {
-        setProfileData(null);
-      }
+      // Carrega achievements salvos
+      await loadUnlockedAchievements();
+
+      // Profile
+      if (profile) setProfileData(PROFILE_CONTENT[profile]);
+      else setProfileData(null);
 
       setLoading(false);
     };
@@ -262,29 +407,40 @@ export default function ProfileScreen() {
     loadData();
   }, [isFocused, profile]);
 
-  // ================= Achievements Unlock =================
+  // ================= Unlock Achievements =================
+
   useEffect(() => {
     if (loading || !isFocused) return;
 
-    let tempUnlocked: Record<number, boolean> = {};
+    let tempUnlocked: Record<number, boolean> = { ...unlockedIds };
     let latestNewAchievement: any = null;
 
-    ACHIEVEMENTS.forEach((ach) => {
-      const unlocked =
-        ach.secret && ach.condition
-          ? ach.condition(chaptersRead)
-          : chaptersRead >= (ach.req || 0);
-      if (unlocked) {
-        tempUnlocked[ach.id] = true;
-        if (!shownAchievementIds.current.has(ach.id))
-          latestNewAchievement = ach;
+    ACHIEVEMENTS.forEach((achievement) => {
+      const isUnlocked = achievement.condition
+        ? achievement.condition(chaptersRead)
+        : chaptersRead >= achievement.req;
+
+      if (isUnlocked) {
+        // Marca como desbloqueado
+        tempUnlocked[achievement.id] = true;
+
+        // Se ainda não mostramos modal
+        if (!shownAchievementIds.current.has(achievement.id)) {
+          latestNewAchievement = achievement;
+          shownAchievementIds.current.add(achievement.id);
+        }
       }
     });
 
+    // Atualiza estado e salva no AsyncStorage
     setUnlockedIds(tempUnlocked);
+    saveUnlockedAchievements(tempUnlocked);
+
+    // Mostra modal do último achievement recém desbloqueado
     if (latestNewAchievement) {
-      setActiveAchievement(latestNewAchievement);
-      shownAchievementIds.current.add(latestNewAchievement.id);
+      setTimeout(() => {
+        setActiveAchievement(latestNewAchievement);
+      }, 500);
     }
   }, [chaptersRead, loading, isFocused]);
 
@@ -303,6 +459,25 @@ export default function ProfileScreen() {
 
   if (loading) return <LoadingSpinner />;
 
+  const unlockAchievementById = (id: number) => {
+    if (unlockedIds[id]) return;
+
+    const updated = {
+      ...unlockedIds,
+      [id]: true,
+    };
+
+    setUnlockedIds(updated);
+    saveUnlockedAchievements(updated);
+
+    const achievement = ACHIEVEMENTS.find((a) => a.id === id);
+    if (achievement) {
+      setTimeout(() => {
+        setActiveAchievement(achievement);
+      }, 300);
+    }
+  };
+
   return (
     <>
       <ScrollView
@@ -318,6 +493,7 @@ export default function ProfileScreen() {
           {profileData && !loading ? (
             <View style={{ marginTop: 24, alignItems: "center" }}>
               <Text fontSize={48} title={profileData.emoji} />
+
               <Text
                 fontFamily="bold"
                 fontSize={22}
@@ -354,15 +530,26 @@ export default function ProfileScreen() {
           )}
 
           {/* Level Badge */}
-          <View style={[styles.levelBadge, { borderColor: meta.color + "40" }]}>
-            <Text fontSize={18} fontFamily="regular" title={meta.icon} />
-            <Text
-              fontFamily="bold"
-              fontSize={14}
-              color={meta.color}
-              title={meta.title.toUpperCase()}
-            />
-          </View>
+          <SecretLevelBadge
+            onSecretUnlocked={() => {
+              console.log("🕯️ SECRET PATH UNLOCKED");
+              // aqui depois ligamos store / modal / lore
+
+              unlockAchievementById(16);
+            }}
+          >
+            <View
+              style={[styles.levelBadge, { borderColor: meta.color + "40" }]}
+            >
+              <Text fontSize={18} fontFamily="regular" title={meta.icon} />
+              <Text
+                fontFamily="bold"
+                fontSize={14}
+                color={meta.color}
+                title={meta.title.toUpperCase()}
+              />
+            </View>
+          </SecretLevelBadge>
 
           {/* Stats Row */}
           <View style={styles.statsRow}>
@@ -485,6 +672,7 @@ export default function ProfileScreen() {
           achievement={{
             id: activeAchievement.id,
             title: activeAchievement.title,
+            subtitle: activeAchievement.description,
             icon: activeAchievement.icon,
             description: activeAchievement.secret
               ? "Secret Achievement Unlocked!"
@@ -504,7 +692,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark.background,
     paddingTop: 64,
   },
-  scrollContent: { alignItems: "center", paddingTop: 30, paddingBottom: 60 },
+  scrollContent: { alignItems: "center", paddingTop: 30, paddingBottom: 90 },
   card: {
     width: width * 0.9,
     borderRadius: 28,
