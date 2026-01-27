@@ -20,12 +20,13 @@ const games = [
     route: "/(memory-game)",
     description: "Match the pairs and train your memory in a fun way!",
   },
+  //viajem no espaço tipo subway surf mas no espaço com uma nave desviando de asteroides
   {
     id: "endless-runner",
-    title: "Endless Runner",
-    emoji: "🏃‍♂️",
+    title: "Space Runner",
+    emoji: "🚀",
     route: "/(endless-runner)",
-    description: "Run as far as you can and avoid obstacles!",
+    description: "Navigate your spaceship through endless asteroids!",
   },
 ];
 
@@ -59,10 +60,11 @@ export default function GamesHub() {
             {/* Emoji */}
             <Text
               fontFamily="bold"
-              fontSize={42}
+              fontSize={40}
               color={Colors.light.text}
               title={game.emoji}
             />
+
             {/* Info */}
             <View style={styles.info}>
               <Text

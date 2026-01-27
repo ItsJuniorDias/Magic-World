@@ -56,11 +56,11 @@ const randomRange = (min: number, max: number) =>
   Math.random() * (max - min) + min;
 const BG_MUSIC_URL =
   "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3";
-
 const LEVEL_COLORS = [0xff00ff, 0x00ffff, 0xffff00, 0x00ff00, 0xff0055];
 
 export default function FantasyRunnerEndGame() {
   const { width } = useWindowDimensions();
+  // Começamos como false para exibir o loader
   const [isLoaded, setIsLoaded] = useState(false);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
@@ -72,9 +72,11 @@ export default function FantasyRunnerEndGame() {
   const starsRef = useRef<THREE.Points | null>(null);
   const gridRef = useRef<THREE.GridHelper | null>(null);
   const explosionRef = useRef<THREE.Group | null>(null);
-  const fogRef = useRef<THREE.Fog | null>(null);
+  const moonRef = useRef<THREE.Group | null>(null);
+  const phoenixRef = useRef<THREE.Group | null>(null);
 
-  const obstaclesRef = useRef<THREE.Mesh[]>([]);
+  // Alterado para suportar os grupos do GLTF
+  const obstaclesRef = useRef<THREE.Object3D[]>([]);
   const shieldMeshRef = useRef<THREE.Mesh | null>(null);
   const heartRef = useRef<THREE.Mesh | null>(null);
   const coinRef = useRef<THREE.Mesh | null>(null);
@@ -129,9 +131,6 @@ export default function FantasyRunnerEndGame() {
     if (playerRef.current) {
       playerRef.current.position.set(0, 1, 0);
       playerRef.current.visible = true;
-
-      // --- CORREÇÃO AQUI ---
-      // Resetar para (0,0,0) garante que ela olhe pra frente
       playerRef.current.rotation.set(0, 0, 0);
     }
     if (explosionRef.current) explosionRef.current.visible = false;
@@ -160,9 +159,7 @@ export default function FantasyRunnerEndGame() {
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x020205);
-    const fog = new THREE.Fog(0x020205, 15, 75);
-    scene.fog = fog;
-    fogRef.current = fog;
+    scene.fog = new THREE.Fog(0x020205, 15, 90);
 
     const camera = new THREE.PerspectiveCamera(75, w / h, 0.1, 1000);
     camera.position.set(0, 5, 12);
@@ -189,71 +186,112 @@ export default function FantasyRunnerEndGame() {
     scene.add(stars);
     starsRef.current = stars;
 
-    // --- NAVE ---
+    // --- GRID ---
+    const grid = new THREE.GridHelper(300, 70, 0xff00ff, 0x110022);
+    scene.add(grid);
+    gridRef.current = grid;
+
+    // --- CARREGAMENTO DE ASSETS ---
     const loader = new GLTFLoader();
+
+    // Helper para carregar via Promise
+    const loadModel = (uri: string) =>
+      new Promise<THREE.Group>((resolve, reject) => {
+        loader.load(uri, (gltf) => resolve(gltf.scene), undefined, reject);
+      });
 
     try {
       const shipAsset = Asset.fromModule(
         require("../../assets/models/craft_speederA.glb"),
       );
-      await shipAsset.downloadAsync();
-
-      if (!shipAsset.uri) throw new Error("Asset localUri undefined");
-
-      loader.load(
-        shipAsset.uri,
-        (gltf) => {
-          const model = gltf.scene;
-          model.scale.set(1, 1, 1);
-
-          // Rotação inicial corrigida
-          model.rotation.y = 0;
-
-          // Centralização
-          const box = new THREE.Box3().setFromObject(model);
-          const center = box.getCenter(new THREE.Vector3());
-          model.position.sub(center);
-
-          const playerGroup = new THREE.Group();
-          playerGroup.add(model);
-          playerGroup.position.set(0, 1, 0);
-
-          const shield = new THREE.Mesh(
-            new THREE.SphereGeometry(2.0, 32, 32),
-            new THREE.MeshBasicMaterial({
-              color: 0x00ffff,
-              transparent: true,
-              opacity: 0.2,
-              wireframe: true,
-            }),
-          );
-          shield.visible = false;
-          playerGroup.add(shield);
-          shieldMeshRef.current = shield;
-
-          scene.add(playerGroup);
-          playerRef.current = playerGroup;
-        },
-        undefined,
-        (error) => {
-          console.error("ERRO NO GLTFLoader:", error);
-        },
+      const asteroidAsset = Asset.fromModule(
+        require("../../assets/models/asteroid_low_poly.glb"),
       );
+      const moonAsset = Asset.fromModule(
+        require("../../assets/models/moon_planet.glb"),
+      );
+      const phoenixAsset = Asset.fromModule(
+        require("../../assets/models/planet_of_phoenix.glb"),
+      );
+
+      await Promise.all([
+        shipAsset.downloadAsync(),
+        asteroidAsset.downloadAsync(),
+        moonAsset.downloadAsync(),
+        phoenixAsset.downloadAsync(),
+      ]);
+
+      // Carregar todos simultaneamente
+      const [shipModel, asteroidModel, moonModel, phoenixModel] =
+        await Promise.all([
+          loadModel(shipAsset.uri!),
+          loadModel(asteroidAsset.uri!),
+          loadModel(moonAsset.uri!),
+          loadModel(phoenixAsset.uri!),
+        ]);
+
+      // 1. Configurar Nave
+      const box = new THREE.Box3().setFromObject(shipModel);
+      const center = box.getCenter(new THREE.Vector3());
+      shipModel.position.sub(center);
+      const playerGroup = new THREE.Group();
+      playerGroup.add(shipModel);
+      playerGroup.position.set(0, 1, 0);
+
+      const shield = new THREE.Mesh(
+        new THREE.SphereGeometry(2.0, 32, 32),
+        new THREE.MeshBasicMaterial({
+          color: 0x00ffff,
+          transparent: true,
+          opacity: 0.2,
+          wireframe: true,
+        }),
+      );
+      shield.visible = false;
+      playerGroup.add(shield);
+      shieldMeshRef.current = shield;
+      scene.add(playerGroup);
+      playerRef.current = playerGroup;
+
+      // 2. Os dois planetas sempre ficaram posicioandos ao fundo rotacioanando
+      const moonGroup = new THREE.Group();
+      moonGroup.add(moonModel);
+      moonGroup.position.set(-10, 5, -50);
+      moonGroup.scale.set(4, 4, 4);
+      scene.add(moonGroup);
+      moonRef.current = moonGroup;
+
+      const phoenixGroup = new THREE.Group();
+      phoenixGroup.add(phoenixModel);
+      phoenixGroup.position.set(8, 7, -80);
+      phoenixGroup.scale.set(3, 3, 3);
+      scene.add(phoenixGroup);
+      phoenixRef.current = phoenixGroup;
+
+      // 3. Configurar Meteoros (Obstáculos)
+      const obstacles: THREE.Object3D[] = [];
+      for (let i = 0; i < 8; i++) {
+        const obs = asteroidModel.clone();
+        obs.scale.set(0.1, 0.1, 0.1);
+
+        obs.rotation.set(
+          Math.random() * Math.PI,
+          Math.random() * Math.PI,
+          Math.random() * Math.PI,
+        );
+        obs.position.set(randomRange(-6, 6), 0.8, -i * 15 - 30);
+        scene.add(obs);
+        obstacles.push(obs);
+      }
+      obstaclesRef.current = obstacles;
+
+      // SÓ AGORA liberamos a tela
+      setIsLoaded(true);
     } catch (e) {
-      console.error("ERRO GERAL:", e);
-      const g = new THREE.Group();
-      g.add(
-        new THREE.Mesh(
-          new THREE.BoxGeometry(1, 1, 1),
-          new THREE.MeshBasicMaterial({ color: "red" }),
-        ),
-      );
-      g.position.y = 1;
-      scene.add(g);
-      playerRef.current = g;
+      console.error("FALHA NO CARREGAMENTO:", e);
     }
 
-    // --- EXPLOSÃO ---
+    // --- EXPLOSÃO E ITENS (Mantidos) ---
     const explosionGroup = new THREE.Group();
     for (let i = 0; i < 25; i++) {
       const p = new THREE.Mesh(
@@ -273,26 +311,6 @@ export default function FantasyRunnerEndGame() {
     scene.add(explosionGroup);
     explosionRef.current = explosionGroup;
 
-    // --- GRID ---
-    const grid = new THREE.GridHelper(300, 70, 0xff00ff, 0x110022);
-    scene.add(grid);
-    gridRef.current = grid;
-
-    // OBSTÁCULOS
-    const obstacles: THREE.Mesh[] = [];
-    const obsMat = new THREE.MeshStandardMaterial({
-      color: 0xff3344,
-      emissive: 0x330000,
-    });
-    for (let i = 0; i < 8; i++) {
-      const obj = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.3, 1.3), obsMat);
-      obj.position.set(randomRange(-6, 6), 0.65, -i * 15 - 30);
-      scene.add(obj);
-      obstacles.push(obj);
-    }
-    obstaclesRef.current = obstacles;
-
-    // ITENS
     const heart = new THREE.Mesh(
       new THREE.SphereGeometry(0.5, 12, 12),
       new THREE.MeshStandardMaterial({ color: 0x00ff00, emissive: 0x003300 }),
@@ -300,6 +318,7 @@ export default function FantasyRunnerEndGame() {
     heart.position.set(0, 0.8, -100);
     scene.add(heart);
     heartRef.current = heart;
+
     const coin = new THREE.Mesh(
       new THREE.TorusGeometry(0.4, 0.1, 12, 24),
       new THREE.MeshStandardMaterial({ color: 0xffff00 }),
@@ -308,6 +327,7 @@ export default function FantasyRunnerEndGame() {
     coin.position.set(2, 0.8, -120);
     scene.add(coin);
     coinRef.current = coin;
+
     const shieldItem = new THREE.Mesh(
       new THREE.OctahedronGeometry(0.6),
       new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x006666 }),
@@ -325,18 +345,17 @@ export default function FantasyRunnerEndGame() {
         speedRef.current += 0.00005;
 
         if (starsRef.current) starsRef.current.scale.z = 1 + speed * 2;
-
-        const currentLevel = Math.floor(score / 1000) % LEVEL_COLORS.length;
-        const targetColor = new THREE.Color(LEVEL_COLORS[currentLevel]);
-        if (gridRef.current)
-          (gridRef.current.material as THREE.LineBasicMaterial).color.lerp(
-            targetColor,
-            0.05,
-          );
+        if (moonRef.current) moonRef.current.rotation.y += 0.002;
+        if (phoenixRef.current) phoenixRef.current.rotation.y += 0.001;
 
         if (gridRef.current) {
           gridRef.current.position.z += speed;
           if (gridRef.current.position.z > 4.2) gridRef.current.position.z = 0;
+          const currentLevel = Math.floor(score / 1000) % LEVEL_COLORS.length;
+          (gridRef.current.material as THREE.LineBasicMaterial).color.lerp(
+            new THREE.Color(LEVEL_COLORS[currentLevel]),
+            0.05,
+          );
         }
 
         if (playerRef.current) {
@@ -347,9 +366,10 @@ export default function FantasyRunnerEndGame() {
           if (shieldMeshRef.current?.visible)
             shieldMeshRef.current.rotation.y += 0.05;
 
-          obstacles.forEach((obj) => {
+          obstaclesRef.current.forEach((obj) => {
             obj.position.z += speed;
-            if (ship.position.distanceTo(obj.position) < 1.4) {
+            obj.rotation.x += 0.01;
+            if (ship.position.distanceTo(obj.position) < 1.2) {
               if (shieldMeshRef.current?.visible) {
                 shieldMeshRef.current.visible = false;
                 setHasShield(false);
@@ -362,9 +382,6 @@ export default function FantasyRunnerEndGame() {
                     ship.visible = false;
                     explosionGroup.position.copy(ship.position);
                     explosionGroup.visible = true;
-                    explosionGroup.children.forEach((p) =>
-                      p.position.set(0, 0, 0),
-                    );
                     setIsGameOver(true);
                     bgmRef.current?.stopAsync();
                     return 0;
@@ -398,11 +415,9 @@ export default function FantasyRunnerEndGame() {
           });
         }
       } else if (explosionGroup.visible) {
-        explosionGroup.children.forEach((p: any) => {
-          p.position.add(p.userData.velocity);
-          p.rotation.x += 0.1;
-          p.rotation.y += 0.1;
-        });
+        explosionGroup.children.forEach((p: any) =>
+          p.position.add(p.userData.velocity),
+        );
       }
 
       if (cameraShakeRef.current > 0) {
@@ -418,7 +433,6 @@ export default function FantasyRunnerEndGame() {
     };
 
     animate();
-    setIsLoaded(true);
   };
 
   return (
@@ -434,23 +448,13 @@ export default function FantasyRunnerEndGame() {
         <Text
           title={`BEST: ${highScore}`}
           fontSize={14}
-          fontFamily="regular"
           style={{ color: "#00ffff", opacity: 0.6 }}
         />
         <Text
           title={`LIVES: ${"❤️".repeat(lives)}`}
           fontSize={18}
-          fontFamily="regular"
           style={{ marginTop: 5 }}
         />
-        {hasShield && (
-          <Text
-            title="🛡️ SHIELD READY"
-            fontSize={14}
-            fontFamily="regular"
-            style={{ color: "#00ffff", marginTop: 5 }}
-          />
-        )}
       </View>
       {isGameOver && (
         <View style={styles.overlay}>
@@ -473,6 +477,12 @@ export default function FantasyRunnerEndGame() {
       {!isLoaded && (
         <View style={styles.loader}>
           <ActivityIndicator size="large" color="#00ffff" />
+          <Text
+            title="LOADING..."
+            fontSize={14}
+            fontFamily="bold"
+            style={{ color: "#00ffff", marginTop: 10 }}
+          />
         </View>
       )}
     </View>
@@ -506,5 +516,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#020205",
     justifyContent: "center",
     alignItems: "center",
+    zIndex: 999,
   },
 });
