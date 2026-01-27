@@ -64,17 +64,18 @@ export default function FantasyRunnerEndGame() {
   const flamesRef = useRef<THREE.Mesh[]>([]);
   const heartRef = useRef<THREE.Mesh | null>(null);
   const coinRef = useRef<THREE.Mesh | null>(null);
-
-  // REFERÊNCIAS SPACE WAVE
   const shieldMeshRef = useRef<THREE.Mesh | null>(null);
   const shieldItemRef = useRef<THREE.Group | null>(null);
 
   const gameActive = useRef(true);
   const speedRef = useRef(0.35);
   const panX = useRef(0);
+  const scoreCounter = useRef(0);
   const bgmRef = useRef<Audio.Sound | null>(null);
   const cameraShakeRef = useRef(0);
   const activeShield = useRef(false);
+
+  const STAR_COUNT = 800;
 
   useEffect(() => {
     Animated.timing(progressAnim, {
@@ -108,6 +109,11 @@ export default function FantasyRunnerEndGame() {
     };
   }, []);
 
+  const updateScore = (points: number) => {
+    scoreCounter.current += points;
+    setScore(scoreCounter.current);
+  };
+
   const randomizePlanetColor = (
     planetGroup: THREE.Group | THREE.Object3D | null,
   ) => {
@@ -125,7 +131,7 @@ export default function FantasyRunnerEndGame() {
   };
 
   const triggerDamageEffect = () => {
-    cameraShakeRef.current = 1.3;
+    cameraShakeRef.current = 1.5;
     damageOpacity.setValue(0.7);
     Animated.timing(damageOpacity, {
       toValue: 0,
@@ -135,6 +141,7 @@ export default function FantasyRunnerEndGame() {
   };
 
   const restartGame = () => {
+    scoreCounter.current = 0;
     setScore(0);
     setLives(3);
     setHasShield(false);
@@ -145,13 +152,21 @@ export default function FantasyRunnerEndGame() {
     gameActive.current = true;
     if (playerRef.current) {
       playerRef.current.position.set(0, 1, 0);
+      playerRef.current.rotation.set(0, 0, 0);
       playerRef.current.visible = true;
     }
     if (shieldMeshRef.current) shieldMeshRef.current.visible = false;
     if (explosionRef.current) explosionRef.current.visible = false;
-    obstaclesRef.current.forEach((obj, i) =>
-      obj.position.set(randomRange(-6, 6), 0.8, -i * 15 - 30),
-    );
+    obstaclesRef.current.forEach((obj, i) => {
+      obj.position.set(randomRange(-6, 6), 0.8, -i * 15 - 30);
+      const s = randomRange(0.06, 0.12);
+      obj.scale.set(
+        s * randomRange(0.8, 1.2),
+        s * randomRange(0.8, 1.2),
+        s * randomRange(0.8, 1.2),
+      );
+      (obj as any).hitRadius = s * 14; // Re-calcula raio de colisão no reset
+    });
     bgmRef.current?.playFromPositionAsync(0);
   };
 
@@ -170,54 +185,36 @@ export default function FantasyRunnerEndGame() {
     renderer.setSize(w, h);
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x020205);
-    scene.fog = new THREE.Fog(0x020205, 10, 160);
+    scene.fog = new THREE.Fog(0x020205, 10, 200);
 
     const camera = new THREE.PerspectiveCamera(75, w / h, 0.1, 1000);
     camera.position.set(0, 5, 12);
-    camera.lookAt(0, 1, 0);
 
-    scene.add(new THREE.AmbientLight(0xffffff, 2));
-    const sun = new THREE.DirectionalLight(0xffffff, 3);
+    scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+    const sun = new THREE.DirectionalLight(0xffffff, 4);
     sun.position.set(5, 15, 10);
     scene.add(sun);
 
-    // ESTRELAS
     const starGeo = new THREE.BufferGeometry();
-    const starPos = new Float32Array(2000 * 3);
-    for (let i = 0; i < 2000 * 3; i++) starPos[i] = (Math.random() - 0.5) * 400;
+    const starPos = new Float32Array(STAR_COUNT * 3);
+    for (let i = 0; i < STAR_COUNT; i++) {
+      starPos[i * 3] = (Math.random() - 0.5) * 400;
+      starPos[i * 3 + 1] = (Math.random() - 0.5) * 400;
+      starPos[i * 3 + 2] = Math.random() * -600;
+    }
     starGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
     const stars = new THREE.Points(
       starGeo,
       new THREE.PointsMaterial({
         color: 0xffffff,
-        size: 0.2,
+        size: 0.7,
         transparent: true,
+        opacity: 0.8,
+        sizeAttenuation: true,
       }),
     );
     scene.add(stars);
     starsRef.current = stars;
-
-    // GALÁXIAS
-    const galGroup = new THREE.Group();
-    for (let i = 0; i < 5; i++) {
-      const gGeo = new THREE.SphereGeometry(randomRange(5, 10), 16, 16);
-      const gMat = new THREE.MeshBasicMaterial({
-        color: PLANET_PALETTE[i % PLANET_PALETTE.length].base,
-        transparent: true,
-        opacity: 0.15,
-        blending: THREE.AdditiveBlending,
-      });
-      const galaxy = new THREE.Mesh(gGeo, gMat);
-      galaxy.position.set(
-        randomRange(-60, 60),
-        randomRange(20, 40),
-        randomRange(-150, -250),
-      );
-      galaxy.scale.set(1.5, 0.2, 1);
-      galGroup.add(galaxy);
-    }
-    scene.add(galGroup);
-    galaxiesRef.current = galGroup;
 
     const loader = new GLTFLoader();
     try {
@@ -250,8 +247,6 @@ export default function FantasyRunnerEndGame() {
       models.ship.position.sub(shipCenter);
       shipContainer.add(models.ship);
 
-      // --- ESCUDO RETRO SPACE WAVE ---
-      // Icosaedro Wireframe Brilhante
       const sGeo = new THREE.IcosahedronGeometry(1.8, 1);
       const sMat = new THREE.MeshBasicMaterial({
         color: 0x00ffff,
@@ -265,12 +260,13 @@ export default function FantasyRunnerEndGame() {
       shipContainer.add(shieldMesh);
       shieldMeshRef.current = shieldMesh;
 
-      const flameGeo = new THREE.ConeGeometry(0.08, 0.7, 8);
-      flameGeo.rotateX(-Math.PI / 2);
+      const flameGeo = new THREE.ConeGeometry(0.1, 0.8, 8).rotateX(
+        -Math.PI / 2,
+      );
       const flameMat = new THREE.MeshBasicMaterial({
-        color: 0xff6600,
+        color: 0xff4400,
         transparent: true,
-        opacity: 0.8,
+        opacity: 0.9,
         blending: THREE.AdditiveBlending,
       });
       const lF = new THREE.Mesh(flameGeo, flameMat.clone());
@@ -287,57 +283,72 @@ export default function FantasyRunnerEndGame() {
 
       for (let i = 0; i < 8; i++) {
         const obs = models.ast.clone();
-        obs.scale.set(0.12, 0.12, 0.12);
+        obs.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            (child as THREE.Mesh).material = new THREE.MeshStandardMaterial({
+              color: 0x444444,
+              roughness: 0.85,
+              metalness: 0.2,
+            });
+          }
+        });
+
+        const baseScale = randomRange(0.06, 0.12);
+        obs.scale.set(
+          baseScale * randomRange(0.8, 1.3),
+          baseScale * randomRange(0.8, 1.3),
+          baseScale * randomRange(0.8, 1.3),
+        );
+
         obs.position.set(randomRange(-6, 6), 0.8, -i * 15 - 30);
+        (obs as any).rotationSpeed = (0.04 / baseScale) * 0.01;
+
+        // --- COLISÃO AUMENTADA ---
+        // hitRadius baseado no tamanho visual, multiplicado por um fator de sensibilidade
+        (obs as any).hitRadius = baseScale * 14.5;
+
         scene.add(obs);
         obstaclesRef.current.push(obs);
       }
 
-      // CORAÇÃO
-      const heart = new THREE.Mesh(
+      heartRef.current = new THREE.Mesh(
         new THREE.IcosahedronGeometry(0.4, 0),
         new THREE.MeshStandardMaterial({ color: 0xff0066, emissive: 0x440022 }),
       );
-      heart.position.set(0, 0.8, -100);
-      scene.add(heart);
-      heartRef.current = heart;
+      heartRef.current.position.set(0, 0.8, -100);
+      scene.add(heartRef.current);
 
-      // MOEDA
-      const coin = new THREE.Mesh(
+      coinRef.current = new THREE.Mesh(
         new THREE.TorusGeometry(0.35, 0.08, 12, 32),
         new THREE.MeshStandardMaterial({ color: 0xffcc00, emissive: 0x664400 }),
       );
-      coin.position.set(2, 0.8, -120);
-      scene.add(coin);
-      coinRef.current = coin;
+      coinRef.current.position.set(2, 0.8, -120);
+      scene.add(coinRef.current);
 
-      // --- ITEM ESCUDO RETRO (Cubo Neon) ---
-      const shieldGroup = new THREE.Group();
-      const sItemGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
-      const sItemMat = new THREE.MeshBasicMaterial({
-        color: 0x00ffff,
-        wireframe: true,
-      });
-      const sItemCore = new THREE.Mesh(
-        new THREE.BoxGeometry(0.3, 0.3, 0.3),
-        new THREE.MeshBasicMaterial({ color: 0x00ffff }),
+      const sItem = new THREE.Group();
+      sItem.add(
+        new THREE.Mesh(
+          new THREE.BoxGeometry(0.6, 0.6, 0.6),
+          new THREE.MeshBasicMaterial({ color: 0x00ffff, wireframe: true }),
+        ),
+        new THREE.Mesh(
+          new THREE.BoxGeometry(0.3, 0.3, 0.3),
+          new THREE.MeshBasicMaterial({ color: 0x00ffff }),
+        ),
       );
-      shieldGroup.add(new THREE.Mesh(sItemGeo, sItemMat), sItemCore);
-      shieldGroup.position.set(randomRange(-6, 6), 0.8, -180);
-      scene.add(shieldGroup);
-      shieldItemRef.current = shieldGroup;
+      sItem.position.set(randomRange(-6, 6), 0.8, -180);
+      scene.add(sItem);
+      shieldItemRef.current = sItem;
 
       models.moon.scale.set(4, 4, 4);
       models.moon.position.set(-25, 12, -80);
-      randomizePlanetColor(models.moon);
-      scene.add(models.moon);
       moonRef.current = models.moon;
+      scene.add(models.moon);
 
       models.phx.scale.set(5, 5, 5);
       models.phx.position.set(25, 15, -130);
-      randomizePlanetColor(models.phx);
-      scene.add(models.phx);
       phoenixRef.current = models.phx;
+      scene.add(models.phx);
 
       setIsLoaded(true);
     } catch (e) {
@@ -366,36 +377,48 @@ export default function FantasyRunnerEndGame() {
       requestAnimationFrame(animate);
 
       if (gameActive.current && playerRef.current) {
-        const speed = speedRef.current;
-        speedRef.current += 0.00004;
+        const difficultyFactor = 1 + (scoreCounter.current / 1000) * 0.2;
+        const currentSpeed = speedRef.current * difficultyFactor;
+        speedRef.current += 0.00002;
 
         if (starsRef.current) {
-          starsRef.current.position.z += speed * 0.5;
-          if (starsRef.current.position.z > 100)
-            starsRef.current.position.z = 0;
-        }
-        if (galaxiesRef.current) {
-          galaxiesRef.current.position.z += speed * 0.1;
-          if (galaxiesRef.current.position.z > 100)
-            galaxiesRef.current.position.z = 0;
-          galaxiesRef.current.rotation.y += 0.001;
+          const positions = starsRef.current.geometry.attributes.position
+            .array as Float32Array;
+          const warpMultiplier = 14 * difficultyFactor;
+          for (let i = 0; i < STAR_COUNT; i++) {
+            positions[i * 3 + 2] += currentSpeed * warpMultiplier;
+            if (positions[i * 3 + 2] > 15) {
+              positions[i * 3 + 2] = -600;
+              positions[i * 3] = (Math.random() - 0.5) * 400;
+              positions[i * 3 + 1] = (Math.random() - 0.5) * 400;
+            }
+          }
+          starsRef.current.geometry.attributes.position.needsUpdate = true;
         }
 
-        playerRef.current.position.x +=
-          (panX.current - playerRef.current.position.x) * 0.12;
-        playerRef.current.rotation.z =
-          (playerRef.current.position.x - panX.current) * 0.3;
+        const prevX = playerRef.current.position.x;
+        playerRef.current.position.x += (panX.current - prevX) * 0.12;
+        const deltaX = playerRef.current.position.x - prevX;
+        playerRef.current.rotation.z = -deltaX * 2.5;
+        playerRef.current.rotation.y = deltaX * 0.8;
 
-        // COLISÃO OBSTÁCULOS
         obstaclesRef.current.forEach((obs) => {
-          obs.position.z += speed;
-          obs.rotation.x += 0.02;
-          if (playerRef.current!.position.distanceTo(obs.position) < 1.3) {
+          obs.position.z += currentSpeed;
+          const rSpeed = (obs as any).rotationSpeed || 0.02;
+          obs.rotation.x += rSpeed * difficultyFactor;
+          obs.rotation.y += rSpeed * 0.5;
+
+          // --- LÓGICA DE COLISÃO REALISTA (AUMENTADA) ---
+          // Agora usamos o hitRadius individual de cada meteoro
+          const distance = playerRef.current!.position.distanceTo(obs.position);
+          const collisionThreshold = (obs as any).hitRadius || 1.2;
+
+          if (distance < collisionThreshold) {
             if (activeShield.current) {
               activeShield.current = false;
               setHasShield(false);
               if (shieldMeshRef.current) shieldMeshRef.current.visible = false;
-              cameraShakeRef.current = 0.8;
+              cameraShakeRef.current = 1.0;
             } else {
               triggerDamageEffect();
               setLives((l) => {
@@ -407,6 +430,13 @@ export default function FantasyRunnerEndGame() {
                   );
                   explosionRef.current!.visible = true;
                   setIsGameOver(true);
+                  if (scoreCounter.current > highScore) {
+                    AsyncStorage.setItem(
+                      "@high_score",
+                      scoreCounter.current.toString(),
+                    );
+                    setHighScore(scoreCounter.current);
+                  }
                   return 0;
                 }
                 return l - 1;
@@ -414,82 +444,85 @@ export default function FantasyRunnerEndGame() {
             }
             obs.position.z = -120;
           }
+
           if (obs.position.z > 15) {
             obs.position.z = -120;
             obs.position.x = randomRange(-7, 7);
-            setScore((s) => s + 10);
+            const newBase = randomRange(0.06, 0.12);
+            obs.scale.set(
+              newBase * randomRange(0.8, 1.3),
+              newBase * randomRange(0.8, 1.3),
+              newBase * randomRange(0.8, 1.3),
+            );
+            (obs as any).rotationSpeed = (0.04 / newBase) * 0.01;
+            (obs as any).hitRadius = newBase * 14.5; // Atualiza raio na reciclagem
+            updateScore(10);
           }
         });
 
-        // ITENS E RECOMPENSAS
-        const items = [
-          { ref: heartRef.current, type: "HEART" },
-          { ref: coinRef.current, type: "COIN" },
-          { ref: shieldItemRef.current, type: "SHIELD" },
-        ];
-
-        items.forEach((itemObj, i) => {
-          const item = itemObj.ref;
-          if (!item) return;
-          item.position.z += speed;
-          item.rotation.y += 0.04;
-          item.position.y = 0.8 + Math.sin(Date.now() * 0.005 + i) * 0.2;
-
-          if (playerRef.current!.position.distanceTo(item.position) < 1.4) {
-            if (itemObj.type === "HEART") setLives((l) => Math.min(l + 1, 3));
-            if (itemObj.type === "COIN")
-              setScore((s) => s + 250 + Math.floor(speed * 500));
-            if (itemObj.type === "SHIELD") {
-              activeShield.current = true;
-              setHasShield(true);
-              if (shieldMeshRef.current) shieldMeshRef.current.visible = true;
+        // ITENS
+        [heartRef.current, coinRef.current, shieldItemRef.current].forEach(
+          (item) => {
+            if (!item) return;
+            item.position.z += currentSpeed;
+            item.rotation.y += 0.04;
+            if (playerRef.current!.position.distanceTo(item.position) < 1.4) {
+              if (item === heartRef.current)
+                setLives((l) => Math.min(l + 1, 3));
+              if (item === coinRef.current) updateScore(250);
+              if (item === shieldItemRef.current) {
+                activeShield.current = true;
+                setHasShield(true);
+                if (shieldMeshRef.current) shieldMeshRef.current.visible = true;
+              }
+              item.position.z = -randomRange(150, 250);
+              item.position.x = randomRange(-6, 6);
             }
-            item.position.z = -randomRange(150, 250);
-            item.position.x = randomRange(-6, 6);
-          }
-          if (item.position.z > 15) {
-            item.position.z = -randomRange(150, 250);
-            item.position.x = randomRange(-6, 6);
-          }
+            if (item.position.z > 15) {
+              item.position.z = -randomRange(150, 250);
+              item.position.x = randomRange(-6, 6);
+            }
+          },
+        );
+
+        flamesRef.current.forEach((f, i) => {
+          const pulse = 1 + Math.sin(Date.now() * 0.03 + i) * 0.3;
+          f.scale.set(
+            pulse * (0.8 + difficultyFactor * 0.2),
+            pulse * (0.8 + difficultyFactor * 0.2),
+            pulse * (1.5 + difficultyFactor * 1.0),
+          );
+          (f.material as THREE.MeshBasicMaterial).color.setHex(
+            difficultyFactor > 2 ? 0x00ffff : 0xff4400,
+          );
         });
 
-        // ANIMAÇÃO ESCUDO (GRID PULSANTE)
-        if (shieldMeshRef.current && shieldMeshRef.current.visible) {
-          shieldMeshRef.current.rotation.y += 0.02;
-          shieldMeshRef.current.rotation.x += 0.01;
-          const pulse = 1.0 + Math.sin(Date.now() * 0.01) * 0.1;
-          shieldMeshRef.current.scale.set(pulse, pulse, pulse);
+        if (shieldMeshRef.current?.visible) {
+          shieldMeshRef.current.rotation.y += 0.05;
+          const sPulse = 1.0 + Math.sin(Date.now() * 0.01) * 0.1;
+          shieldMeshRef.current.scale.set(sPulse, sPulse, sPulse);
         }
 
         if (moonRef.current) {
-          moonRef.current.position.z += speed * 0.15;
+          moonRef.current.position.z += currentSpeed * 0.15;
           if (moonRef.current.position.z > 40) {
             moonRef.current.position.z = -140;
             randomizePlanetColor(moonRef.current);
           }
         }
         if (phoenixRef.current) {
-          phoenixRef.current.position.z += speed * 0.1;
+          phoenixRef.current.position.z += currentSpeed * 0.1;
           if (phoenixRef.current.position.z > 40) {
             phoenixRef.current.position.z = -180;
             randomizePlanetColor(phoenixRef.current);
           }
         }
-
-        flamesRef.current.forEach((f, i) => {
-          const s = 1 + Math.sin(Date.now() * 0.03 + i) * 0.3;
-          f.scale.set(s, s, s * 1.8);
-        });
-      } else if (explosionRef.current?.visible) {
-        explosionRef.current.children.forEach((p: any) =>
-          p.position.add(p.velocity),
-        );
       }
 
       if (cameraShakeRef.current > 0) {
         camera.position.x = (Math.random() - 0.5) * cameraShakeRef.current;
         camera.position.y = 5 + (Math.random() - 0.5) * cameraShakeRef.current;
-        cameraShakeRef.current *= 0.88;
+        cameraShakeRef.current *= 0.9;
       } else {
         camera.position.set(0, 5, 12);
       }
@@ -521,7 +554,6 @@ export default function FantasyRunnerEndGame() {
           fontFamily="bold"
           style={styles.neonText}
         />
-
         <Text
           fontFamily="regular"
           title={`BEST: ${highScore}`}
@@ -531,12 +563,16 @@ export default function FantasyRunnerEndGame() {
         <View
           style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}
         >
-          <Text title={`${"❤️".repeat(lives)}`} fontSize={18} />
+          <Text
+            fontFamily="regular"
+            title={`${"❤️".repeat(lives)}`}
+            fontSize={18}
+          />
           {hasShield && (
             <View style={styles.shieldBadge}>
               <Text
                 title="🛡️ GRID ACTIVE"
-                fontSize={10}
+                fontSize={12}
                 fontFamily="bold"
                 style={{ color: "#00ffff" }}
               />
@@ -551,11 +587,7 @@ export default function FantasyRunnerEndGame() {
             title="GAME OVER"
             fontSize={40}
             fontFamily="bold"
-            style={{
-              color: "#ff00ff",
-              textShadowColor: "#ff00ff",
-              textShadowRadius: 20,
-            }}
+            style={styles.gameOverText}
           />
           <TouchableOpacity style={styles.btn} onPress={restartGame}>
             <Text
@@ -565,10 +597,9 @@ export default function FantasyRunnerEndGame() {
               style={{ color: "#000" }}
             />
           </TouchableOpacity>
-
           <TouchableOpacity style={styles.btn} onPress={() => router.back()}>
             <Text
-              title="BACK TO HUB"
+              title="BACK"
               fontSize={20}
               fontFamily="bold"
               style={{ color: "#000" }}
@@ -581,7 +612,7 @@ export default function FantasyRunnerEndGame() {
         <View style={styles.loader}>
           <Text
             title="LOADING ..."
-            fontSize={16}
+            fontSize={18}
             fontFamily="bold"
             style={{ color: "#00ffff", marginBottom: 20 }}
           />
@@ -627,6 +658,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     zIndex: 100,
+  },
+  gameOverText: {
+    color: "#ff00ff",
+    textShadowColor: "#ff00ff",
+    textShadowRadius: 20,
   },
   btn: {
     backgroundColor: "#00ffff",
