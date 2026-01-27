@@ -3,10 +3,9 @@ import {
   View,
   PanResponder,
   useWindowDimensions,
-  PixelRatio,
-  ActivityIndicator,
   StyleSheet,
   TouchableOpacity,
+  Animated,
 } from "react-native";
 import { GLView } from "expo-gl";
 import * as THREE from "three";
@@ -15,8 +14,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Text from "@/components/text";
 import { Asset } from "expo-asset";
 import { GLTFLoader } from "three-stdlib";
-import addCraters from "@/utils/addCraters";
-import { Colors } from "@/constants/theme";
 import { router } from "expo-router";
 
 // --- POLYFILLS ---
@@ -40,36 +37,52 @@ const PLANET_PALETTE = [
   { base: 0xff00ff, emissive: 0x440044 },
   { base: 0x00ff00, emissive: 0x004400 },
   { base: 0xffff00, emissive: 0x444400 },
+  { base: 0xff6600, emissive: 0x442200 },
+  { base: 0x6600ff, emissive: 0x220044 },
 ];
-
-const BG_MUSIC_URL =
-  "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3";
 
 export default function FantasyRunnerEndGame() {
   const { width } = useWindowDimensions();
   const [isLoaded, setIsLoaded] = useState(false);
+  const [loadProgress, setLoadProgress] = useState(0);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
   const [isGameOver, setIsGameOver] = useState(false);
   const [lives, setLives] = useState(3);
+  const [hasShield, setHasShield] = useState(false);
+
+  const damageOpacity = useRef(new Animated.Value(0)).current;
+  const progressAnim = useRef(new Animated.Value(0)).current;
 
   const playerRef = useRef<THREE.Group | null>(null);
   const starsRef = useRef<THREE.Points | null>(null);
+  const galaxiesRef = useRef<THREE.Group | null>(null);
   const moonRef = useRef<THREE.Group | null>(null);
   const phoenixRef = useRef<THREE.Group | null>(null);
   const obstaclesRef = useRef<THREE.Object3D[]>([]);
   const explosionRef = useRef<THREE.Group | null>(null);
   const flamesRef = useRef<THREE.Mesh[]>([]);
-
-  // Itens de Recompensa
   const heartRef = useRef<THREE.Mesh | null>(null);
   const coinRef = useRef<THREE.Mesh | null>(null);
+
+  // REFERÊNCIAS SPACE WAVE
+  const shieldMeshRef = useRef<THREE.Mesh | null>(null);
+  const shieldItemRef = useRef<THREE.Group | null>(null);
 
   const gameActive = useRef(true);
   const speedRef = useRef(0.35);
   const panX = useRef(0);
   const bgmRef = useRef<Audio.Sound | null>(null);
   const cameraShakeRef = useRef(0);
+  const activeShield = useRef(false);
+
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: loadProgress,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }, [loadProgress]);
 
   useEffect(() => {
     async function init() {
@@ -81,8 +94,10 @@ export default function FantasyRunnerEndGame() {
           playsInSilentModeIOS: true,
         });
         const { sound } = await Audio.Sound.createAsync(
-          { uri: BG_MUSIC_URL },
-          { shouldPlay: true, isLooping: true, volume: 0.25 },
+          {
+            uri: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
+          },
+          { shouldPlay: true, isLooping: true, volume: 0.2 },
         );
         bgmRef.current = sound;
       } catch (e) {}
@@ -93,7 +108,9 @@ export default function FantasyRunnerEndGame() {
     };
   }, []);
 
-  const randomizePlanetColor = (planetGroup: THREE.Group | null) => {
+  const randomizePlanetColor = (
+    planetGroup: THREE.Group | THREE.Object3D | null,
+  ) => {
     if (!planetGroup) return;
     const colorPair =
       PLANET_PALETTE[Math.floor(Math.random() * PLANET_PALETTE.length)];
@@ -107,9 +124,21 @@ export default function FantasyRunnerEndGame() {
     });
   };
 
+  const triggerDamageEffect = () => {
+    cameraShakeRef.current = 1.3;
+    damageOpacity.setValue(0.7);
+    Animated.timing(damageOpacity, {
+      toValue: 0,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+  };
+
   const restartGame = () => {
     setScore(0);
     setLives(3);
+    setHasShield(false);
+    activeShield.current = false;
     setIsGameOver(false);
     speedRef.current = 0.35;
     panX.current = 0;
@@ -118,14 +147,8 @@ export default function FantasyRunnerEndGame() {
       playerRef.current.position.set(0, 1, 0);
       playerRef.current.visible = true;
     }
+    if (shieldMeshRef.current) shieldMeshRef.current.visible = false;
     if (explosionRef.current) explosionRef.current.visible = false;
-
-    // Reset Itens
-    if (heartRef.current)
-      heartRef.current.position.set(randomRange(-5, 5), 0.8, -100);
-    if (coinRef.current)
-      coinRef.current.position.set(randomRange(-5, 5), 0.8, -120);
-
     obstaclesRef.current.forEach((obj, i) =>
       obj.position.set(randomRange(-6, 6), 0.8, -i * 15 - 30),
     );
@@ -145,254 +168,317 @@ export default function FantasyRunnerEndGame() {
     const { drawingBufferWidth: w, drawingBufferHeight: h } = gl;
     const renderer = new THREE.WebGLRenderer({ context: gl, antialias: true });
     renderer.setSize(w, h);
-
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x020205);
-    scene.fog = new THREE.Fog(0x020205, 10, 130);
+    scene.fog = new THREE.Fog(0x020205, 10, 160);
 
     const camera = new THREE.PerspectiveCamera(75, w / h, 0.1, 1000);
     camera.position.set(0, 5, 12);
     camera.lookAt(0, 1, 0);
 
-    scene.add(new THREE.AmbientLight(0xffffff, 1.8));
-    const sun = new THREE.DirectionalLight(0xffffff, 2.5);
+    scene.add(new THREE.AmbientLight(0xffffff, 2));
+    const sun = new THREE.DirectionalLight(0xffffff, 3);
     sun.position.set(5, 15, 10);
     scene.add(sun);
 
-    // Estrelas
+    // ESTRELAS
     const starGeo = new THREE.BufferGeometry();
-    const starPos = new Float32Array(1200 * 3);
-    for (let i = 0; i < 1200 * 3; i++) starPos[i] = (Math.random() - 0.5) * 150;
+    const starPos = new Float32Array(2000 * 3);
+    for (let i = 0; i < 2000 * 3; i++) starPos[i] = (Math.random() - 0.5) * 400;
     starGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
     const stars = new THREE.Points(
       starGeo,
-      new THREE.PointsMaterial({ color: 0xffffff, size: 0.12 }),
+      new THREE.PointsMaterial({
+        color: 0xffffff,
+        size: 0.2,
+        transparent: true,
+      }),
     );
     scene.add(stars);
     starsRef.current = stars;
 
+    // GALÁXIAS
+    const galGroup = new THREE.Group();
+    for (let i = 0; i < 5; i++) {
+      const gGeo = new THREE.SphereGeometry(randomRange(5, 10), 16, 16);
+      const gMat = new THREE.MeshBasicMaterial({
+        color: PLANET_PALETTE[i % PLANET_PALETTE.length].base,
+        transparent: true,
+        opacity: 0.15,
+        blending: THREE.AdditiveBlending,
+      });
+      const galaxy = new THREE.Mesh(gGeo, gMat);
+      galaxy.position.set(
+        randomRange(-60, 60),
+        randomRange(20, 40),
+        randomRange(-150, -250),
+      );
+      galaxy.scale.set(1.5, 0.2, 1);
+      galGroup.add(galaxy);
+    }
+    scene.add(galGroup);
+    galaxiesRef.current = galGroup;
+
     const loader = new GLTFLoader();
     try {
-      const assets = {
-        ship: Asset.fromModule(
-          require("../../assets/models/craft_speederA.glb"),
-        ),
-        asteroid: Asset.fromModule(
-          require("../../assets/models/asteroid_low_poly.glb"),
-        ),
-        moon: Asset.fromModule(require("../../assets/models/moon_planet.glb")),
-        phoenix: Asset.fromModule(
-          require("../../assets/models/planet_of_phoenix.glb"),
-        ),
-      };
-      await Promise.all(Object.values(assets).map((a) => a.downloadAsync()));
+      const assetsList = [
+        { id: "ship", mod: require("../../assets/models/craft_speederA.glb") },
+        {
+          id: "ast",
+          mod: require("../../assets/models/asteroid_low_poly.glb"),
+        },
+        { id: "moon", mod: require("../../assets/models/moon_planet.glb") },
+        {
+          id: "phx",
+          mod: require("../../assets/models/planet_of_phoenix.glb"),
+        },
+      ];
 
-      const [shipData, asteroidData, moonData, phoenixData] = await Promise.all(
-        [
-          loader.loadAsync(assets.ship.uri),
-          loader.loadAsync(assets.asteroid.uri),
-          loader.loadAsync(assets.moon.uri),
-          loader.loadAsync(assets.phoenix.uri),
-        ],
-      );
+      const models: any = {};
+      for (let i = 0; i < assetsList.length; i++) {
+        const asset = Asset.fromModule(assetsList[i].mod);
+        await asset.downloadAsync();
+        const gltf = await loader.loadAsync(asset.uri!);
+        models[assetsList[i].id] = gltf.scene;
+        setLoadProgress((i + 1) / assetsList.length);
+      }
 
-      // --- CONFIGURAÇÃO DA NAVE (COM PIVÔ CORRIGIDO) ---
-      const shipModel = shipData.scene;
-      const shipBox = new THREE.Box3().setFromObject(shipModel);
+      const shipBox = new THREE.Box3().setFromObject(models.ship);
       const shipSize = shipBox.getSize(new THREE.Vector3());
       const shipCenter = shipBox.getCenter(new THREE.Vector3());
-
       const shipContainer = new THREE.Group();
-      shipModel.position.sub(shipCenter);
-      shipContainer.add(shipModel);
+      models.ship.position.sub(shipCenter);
+      shipContainer.add(models.ship);
 
-      // Chamas
-      const flameGeo = new THREE.ConeGeometry(0.08, 0.6, 8);
+      // --- ESCUDO RETRO SPACE WAVE ---
+      // Icosaedro Wireframe Brilhante
+      const sGeo = new THREE.IcosahedronGeometry(1.8, 1);
+      const sMat = new THREE.MeshBasicMaterial({
+        color: 0x00ffff,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.6,
+        blending: THREE.AdditiveBlending,
+      });
+      const shieldMesh = new THREE.Mesh(sGeo, sMat);
+      shieldMesh.visible = false;
+      shipContainer.add(shieldMesh);
+      shieldMeshRef.current = shieldMesh;
+
+      const flameGeo = new THREE.ConeGeometry(0.08, 0.7, 8);
       flameGeo.rotateX(-Math.PI / 2);
       const flameMat = new THREE.MeshBasicMaterial({
-        color: 0xff4400,
+        color: 0xff6600,
         transparent: true,
         opacity: 0.8,
         blending: THREE.AdditiveBlending,
       });
+      const lF = new THREE.Mesh(flameGeo, flameMat.clone());
+      const rF = new THREE.Mesh(flameGeo, flameMat.clone());
+      lF.position.set(-shipSize.x * 0.22, -0.05, shipSize.z / 2);
+      rF.position.set(shipSize.x * 0.22, -0.05, shipSize.z / 2);
+      shipContainer.add(lF, rF);
+      flamesRef.current = [lF, rF];
 
-      const leftFlame = new THREE.Mesh(flameGeo, flameMat.clone());
-      const rightFlame = new THREE.Mesh(flameGeo, flameMat.clone());
+      const pGroup = new THREE.Group();
+      pGroup.add(shipContainer);
+      scene.add(pGroup);
+      playerRef.current = pGroup;
 
-      const rearZ = shipSize.z / 2;
-      const posX = shipSize.x * 0.22;
-      const posY = -shipSize.y * 0.1;
-
-      leftFlame.position.set(-posX, posY, rearZ);
-      rightFlame.position.set(posX, posY, rearZ);
-
-      shipContainer.add(leftFlame, rightFlame);
-      flamesRef.current = [leftFlame, rightFlame];
-
-      const playerGroup = new THREE.Group();
-      playerGroup.add(shipContainer);
-      playerGroup.position.set(0, 1, 0);
-      scene.add(playerGroup);
-      playerRef.current = playerGroup;
-
-      // Obstáculos
-      const asteroidMaterial = new THREE.MeshStandardMaterial({
-        color: 0x666666,
-      });
-      const obstacles: THREE.Object3D[] = [];
       for (let i = 0; i < 8; i++) {
-        const obs = asteroidData.scene.clone();
+        const obs = models.ast.clone();
         obs.scale.set(0.12, 0.12, 0.12);
-        obs.traverse((c: any) => {
-          if (c.isMesh) c.material = asteroidMaterial;
-        });
         obs.position.set(randomRange(-6, 6), 0.8, -i * 15 - 30);
         scene.add(obs);
-        obstacles.push(obs);
+        obstaclesRef.current.push(obs);
       }
-      obstaclesRef.current = obstacles;
 
-      // Planetas (Parallax)
-      const moon = moonData.scene;
-      moon.position.set(-25, 12, -70);
-      moon.scale.set(4, 4, 4);
-      scene.add(moon);
-      moonRef.current = moon;
+      // CORAÇÃO
+      const heart = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.4, 0),
+        new THREE.MeshStandardMaterial({ color: 0xff0066, emissive: 0x440022 }),
+      );
+      heart.position.set(0, 0.8, -100);
+      scene.add(heart);
+      heartRef.current = heart;
 
-      const phoenix = phoenixData.scene;
-      phoenix.position.set(25, 18, -120);
-      phoenix.scale.set(5, 5, 5);
-      scene.add(phoenix);
-      phoenixRef.current = phoenix;
+      // MOEDA
+      const coin = new THREE.Mesh(
+        new THREE.TorusGeometry(0.35, 0.08, 12, 32),
+        new THREE.MeshStandardMaterial({ color: 0xffcc00, emissive: 0x664400 }),
+      );
+      coin.position.set(2, 0.8, -120);
+      scene.add(coin);
+      coinRef.current = coin;
+
+      // --- ITEM ESCUDO RETRO (Cubo Neon) ---
+      const shieldGroup = new THREE.Group();
+      const sItemGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
+      const sItemMat = new THREE.MeshBasicMaterial({
+        color: 0x00ffff,
+        wireframe: true,
+      });
+      const sItemCore = new THREE.Mesh(
+        new THREE.BoxGeometry(0.3, 0.3, 0.3),
+        new THREE.MeshBasicMaterial({ color: 0x00ffff }),
+      );
+      shieldGroup.add(new THREE.Mesh(sItemGeo, sItemMat), sItemCore);
+      shieldGroup.position.set(randomRange(-6, 6), 0.8, -180);
+      scene.add(shieldGroup);
+      shieldItemRef.current = shieldGroup;
+
+      models.moon.scale.set(4, 4, 4);
+      models.moon.position.set(-25, 12, -80);
+      randomizePlanetColor(models.moon);
+      scene.add(models.moon);
+      moonRef.current = models.moon;
+
+      models.phx.scale.set(5, 5, 5);
+      models.phx.position.set(25, 15, -130);
+      randomizePlanetColor(models.phx);
+      scene.add(models.phx);
+      phoenixRef.current = models.phx;
 
       setIsLoaded(true);
     } catch (e) {
       console.error(e);
     }
 
-    // --- SISTEMA DE ITENS (RECOMPENSAS) ---
-    const heart = new THREE.Mesh(
-      new THREE.SphereGeometry(0.4, 12, 12),
-      new THREE.MeshStandardMaterial({ color: 0x00ff00, emissive: 0x003300 }),
-    );
-    heart.position.set(randomRange(-5, 5), 0.8, -100);
-    scene.add(heart);
-    heartRef.current = heart;
-
-    const coin = new THREE.Mesh(
-      new THREE.TorusGeometry(0.3, 0.08, 12, 24),
-      new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0x444400 }),
-    );
-    coin.rotation.x = Math.PI / 2;
-    coin.position.set(randomRange(-5, 5), 0.8, -120);
-    scene.add(coin);
-    coinRef.current = coin;
-
-    // Explosão
-    const explosionGroup = new THREE.Group();
+    const expG = new THREE.Group();
     for (let i = 0; i < 20; i++) {
       const p = new THREE.Mesh(
         new THREE.BoxGeometry(0.2, 0.2, 0.2),
-        new THREE.MeshBasicMaterial({ color: 0x00ffff }),
+        new THREE.MeshBasicMaterial({ color: 0xff4400 }),
       );
       (p as any).velocity = new THREE.Vector3(
-        randomRange(-0.4, 0.4),
-        randomRange(-0.4, 0.4),
-        randomRange(-0.4, 0.4),
+        randomRange(-0.5, 0.5),
+        randomRange(-0.5, 0.5),
+        randomRange(-0.5, 0.5),
       );
-      explosionGroup.add(p);
+      expG.add(p);
     }
-    explosionGroup.visible = false;
-    scene.add(explosionGroup);
-    explosionRef.current = explosionGroup;
+    expG.visible = false;
+    scene.add(expG);
+    explosionRef.current = expG;
 
     const animate = () => {
       if (!gl) return;
       requestAnimationFrame(animate);
 
-      if (gameActive.current) {
+      if (gameActive.current && playerRef.current) {
         const speed = speedRef.current;
-        speedRef.current += 0.00005;
+        speedRef.current += 0.00004;
 
-        // Movimento Nave
-        if (playerRef.current) {
-          playerRef.current.position.x +=
-            (panX.current - playerRef.current.position.x) * 0.12;
-          playerRef.current.rotation.z =
-            (playerRef.current.position.x - panX.current) * 0.3;
+        if (starsRef.current) {
+          starsRef.current.position.z += speed * 0.5;
+          if (starsRef.current.position.z > 100)
+            starsRef.current.position.z = 0;
+        }
+        if (galaxiesRef.current) {
+          galaxiesRef.current.position.z += speed * 0.1;
+          if (galaxiesRef.current.position.z > 100)
+            galaxiesRef.current.position.z = 0;
+          galaxiesRef.current.rotation.y += 0.001;
+        }
 
-          const shipPos = playerRef.current.position;
+        playerRef.current.position.x +=
+          (panX.current - playerRef.current.position.x) * 0.12;
+        playerRef.current.rotation.z =
+          (playerRef.current.position.x - panX.current) * 0.3;
 
-          // Colisão Obstáculos
-          obstaclesRef.current.forEach((obs) => {
-            obs.position.z += speed;
-            obs.rotation.x += 0.01;
-            if (shipPos.distanceTo(obs.position) < 1.3) {
-              cameraShakeRef.current = 0.6;
+        // COLISÃO OBSTÁCULOS
+        obstaclesRef.current.forEach((obs) => {
+          obs.position.z += speed;
+          obs.rotation.x += 0.02;
+          if (playerRef.current!.position.distanceTo(obs.position) < 1.3) {
+            if (activeShield.current) {
+              activeShield.current = false;
+              setHasShield(false);
+              if (shieldMeshRef.current) shieldMeshRef.current.visible = false;
+              cameraShakeRef.current = 0.8;
+            } else {
+              triggerDamageEffect();
               setLives((l) => {
                 if (l <= 1) {
                   gameActive.current = false;
                   playerRef.current!.visible = false;
-                  explosionGroup.position.copy(shipPos);
-                  explosionGroup.visible = true;
+                  explosionRef.current!.position.copy(
+                    playerRef.current!.position,
+                  );
+                  explosionRef.current!.visible = true;
                   setIsGameOver(true);
                   return 0;
                 }
                 return l - 1;
               });
-              obs.position.z = -100;
-              obs.position.x = randomRange(-6, 6);
             }
-            if (obs.position.z > 15) {
-              obs.position.z = -100;
-              obs.position.x = randomRange(-7, 7);
-              setScore((s) => s + 10);
-            }
-          });
+            obs.position.z = -120;
+          }
+          if (obs.position.z > 15) {
+            obs.position.z = -120;
+            obs.position.x = randomRange(-7, 7);
+            setScore((s) => s + 10);
+          }
+        });
 
-          // Lógica dos Itens (Coração e Moeda)
-          [heart, coin].forEach((item) => {
-            item.position.z += speed;
-            item.rotation.y += 0.05;
+        // ITENS E RECOMPENSAS
+        const items = [
+          { ref: heartRef.current, type: "HEART" },
+          { ref: coinRef.current, type: "COIN" },
+          { ref: shieldItemRef.current, type: "SHIELD" },
+        ];
 
-            if (shipPos.distanceTo(item.position) < 1.4) {
-              if (item === heart) setLives((l) => Math.min(l + 1, 3));
-              if (item === coin) setScore((s) => s + 150);
-              item.position.z = -150;
-              item.position.x = randomRange(-6, 6);
-            }
+        items.forEach((itemObj, i) => {
+          const item = itemObj.ref;
+          if (!item) return;
+          item.position.z += speed;
+          item.rotation.y += 0.04;
+          item.position.y = 0.8 + Math.sin(Date.now() * 0.005 + i) * 0.2;
 
-            if (item.position.z > 15) {
-              item.position.z = -150;
-              item.position.x = randomRange(-6, 6);
+          if (playerRef.current!.position.distanceTo(item.position) < 1.4) {
+            if (itemObj.type === "HEART") setLives((l) => Math.min(l + 1, 3));
+            if (itemObj.type === "COIN")
+              setScore((s) => s + 250 + Math.floor(speed * 500));
+            if (itemObj.type === "SHIELD") {
+              activeShield.current = true;
+              setHasShield(true);
+              if (shieldMeshRef.current) shieldMeshRef.current.visible = true;
             }
-          });
+            item.position.z = -randomRange(150, 250);
+            item.position.x = randomRange(-6, 6);
+          }
+          if (item.position.z > 15) {
+            item.position.z = -randomRange(150, 250);
+            item.position.x = randomRange(-6, 6);
+          }
+        });
+
+        // ANIMAÇÃO ESCUDO (GRID PULSANTE)
+        if (shieldMeshRef.current && shieldMeshRef.current.visible) {
+          shieldMeshRef.current.rotation.y += 0.02;
+          shieldMeshRef.current.rotation.x += 0.01;
+          const pulse = 1.0 + Math.sin(Date.now() * 0.01) * 0.1;
+          shieldMeshRef.current.scale.set(pulse, pulse, pulse);
         }
 
-        // Parallax Planetas
         if (moonRef.current) {
-          moonRef.current.position.z += speed * 0.2;
-          moonRef.current.rotation.y += 0.002;
+          moonRef.current.position.z += speed * 0.15;
           if (moonRef.current.position.z > 40) {
             moonRef.current.position.z = -140;
             randomizePlanetColor(moonRef.current);
           }
         }
         if (phoenixRef.current) {
-          phoenixRef.current.position.z += speed * 0.15;
-          phoenixRef.current.rotation.y -= 0.001;
+          phoenixRef.current.position.z += speed * 0.1;
           if (phoenixRef.current.position.z > 40) {
             phoenixRef.current.position.z = -180;
             randomizePlanetColor(phoenixRef.current);
           }
         }
 
-        // Flicker das Chamas
         flamesRef.current.forEach((f, i) => {
-          const s = 1 + Math.sin(Date.now() * 0.02 + i) * 0.2;
-          f.scale.set(s, s, s * 1.6);
-          (f.material as THREE.MeshBasicMaterial).opacity =
-            0.6 + Math.random() * 0.4;
+          const s = 1 + Math.sin(Date.now() * 0.03 + i) * 0.3;
+          f.scale.set(s, s, s * 1.8);
         });
       } else if (explosionRef.current?.visible) {
         explosionRef.current.children.forEach((p: any) =>
@@ -400,11 +486,10 @@ export default function FantasyRunnerEndGame() {
         );
       }
 
-      // Camera Shake
       if (cameraShakeRef.current > 0) {
         camera.position.x = (Math.random() - 0.5) * cameraShakeRef.current;
         camera.position.y = 5 + (Math.random() - 0.5) * cameraShakeRef.current;
-        cameraShakeRef.current *= 0.9;
+        cameraShakeRef.current *= 0.88;
       } else {
         camera.position.set(0, 5, 12);
       }
@@ -418,6 +503,16 @@ export default function FantasyRunnerEndGame() {
   return (
     <View style={styles.container} {...panResponder.panHandlers}>
       <GLView style={{ flex: 1 }} onContextCreate={onContextCreate} />
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            backgroundColor: "red",
+            opacity: damageOpacity,
+            pointerEvents: "none",
+          },
+        ]}
+      />
 
       <View style={styles.hud}>
         <Text
@@ -426,45 +521,57 @@ export default function FantasyRunnerEndGame() {
           fontFamily="bold"
           style={styles.neonText}
         />
+
         <Text
           fontFamily="regular"
           title={`BEST: ${highScore}`}
-          fontSize={14}
-          style={{ color: "#00ffff", opacity: 0.6 }}
-        />
-        <Text
-          fontFamily="regular"
-          title={`LIVES: ${"❤️".repeat(lives)}`}
           fontSize={18}
-          style={{ color: "#fff", marginTop: 5 }}
+          color="#00ffff"
         />
+        <View
+          style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}
+        >
+          <Text title={`${"❤️".repeat(lives)}`} fontSize={18} />
+          {hasShield && (
+            <View style={styles.shieldBadge}>
+              <Text
+                title="🛡️ GRID ACTIVE"
+                fontSize={10}
+                fontFamily="bold"
+                style={{ color: "#00ffff" }}
+              />
+            </View>
+          )}
+        </View>
       </View>
 
       {isGameOver && (
         <View style={styles.overlay}>
           <Text
-            title="SYSTEM FAILURE"
-            fontSize={35}
+            title="GAME OVER"
+            fontSize={40}
             fontFamily="bold"
-            style={{ color: "#ff0055" }}
+            style={{
+              color: "#ff00ff",
+              textShadowColor: "#ff00ff",
+              textShadowRadius: 20,
+            }}
           />
           <TouchableOpacity style={styles.btn} onPress={restartGame}>
             <Text
-              title="REBOOT"
+              title="RETRY"
               fontSize={20}
               fontFamily="bold"
               style={{ color: "#000" }}
             />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.btn, { backgroundColor: "#333" }]}
-            onPress={() => router.back()}
-          >
+
+          <TouchableOpacity style={styles.btn} onPress={() => router.back()}>
             <Text
-              title="QUIT"
-              fontSize={18}
+              title="BACK TO HUB"
+              fontSize={20}
               fontFamily="bold"
-              style={{ color: "#fff" }}
+              style={{ color: "#000" }}
             />
           </TouchableOpacity>
         </View>
@@ -472,13 +579,25 @@ export default function FantasyRunnerEndGame() {
 
       {!isLoaded && (
         <View style={styles.loader}>
-          <ActivityIndicator size="large" color="#00ffff" />
           <Text
+            title="LOADING ..."
+            fontSize={16}
             fontFamily="bold"
-            title="LOADING..."
-            fontSize={14}
-            style={{ color: "#00ffff", marginTop: 10 }}
+            style={{ color: "#00ffff", marginBottom: 20 }}
           />
+          <View style={styles.progressBarContainer}>
+            <Animated.View
+              style={[
+                styles.progressBarFill,
+                {
+                  width: progressAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ["0%", "100%"],
+                  }),
+                },
+              ]}
+            />
+          </View>
         </View>
       )}
     </View>
@@ -487,11 +606,20 @@ export default function FantasyRunnerEndGame() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#020205" },
-  hud: { position: "absolute", top: 50, left: 25, zIndex: 10 },
+  hud: { position: "absolute", top: 55, left: 25, zIndex: 10 },
   neonText: {
     color: "#00ffff",
     textShadowColor: "#00ffff",
     textShadowRadius: 15,
+  },
+  shieldBadge: {
+    marginLeft: 12,
+    backgroundColor: "rgba(0, 255, 255, 0.1)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 2,
+    borderWidth: 1,
+    borderColor: "#00ffff",
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
@@ -502,10 +630,10 @@ const styles = StyleSheet.create({
   },
   btn: {
     backgroundColor: "#00ffff",
-    paddingHorizontal: 50,
-    paddingVertical: 15,
-    borderRadius: 30,
-    marginTop: 25,
+    paddingHorizontal: 40,
+    paddingVertical: 12,
+    borderRadius: 4,
+    marginTop: 20,
   },
   loader: {
     ...StyleSheet.absoluteFillObject,
@@ -514,4 +642,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     zIndex: 999,
   },
+  progressBarContainer: {
+    width: "70%",
+    height: 4,
+    backgroundColor: "rgba(0, 255, 255, 0.1)",
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  progressBarFill: { height: "100%", backgroundColor: "#00ffff" },
 });
