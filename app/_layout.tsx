@@ -80,6 +80,21 @@ export default function RootLayout() {
               options={{ headerShown: false }}
             />
 
+            <Stack.Screen
+              name="(quiz)/index"
+              options={{ headerShown: false }}
+            />
+
+            <Stack.Screen
+              name="(memory-game)/index"
+              options={{ headerShown: false }}
+            />
+
+            <Stack.Screen
+              name="(endless-runner)/index"
+              options={{ headerShown: false }}
+            />
+
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           </Stack>
           <StatusBar style="auto" />

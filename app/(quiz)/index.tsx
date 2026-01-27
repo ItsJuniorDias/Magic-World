@@ -7,6 +7,7 @@ import {
   Easing,
   ScrollView,
   TouchableWithoutFeedback,
+  Pressable,
 } from "react-native";
 import Text from "@/components/text";
 import { Colors } from "@/constants/theme";
@@ -15,6 +16,9 @@ import { useAdventureProfileStore } from "@/store/useAdventureProfileStore";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import QuizSkeleton from "@/components/(quiz-skeleton)";
 import { StatusBar } from "expo-status-bar";
+import { GlassView } from "expo-glass-effect";
+import { FontAwesome6 } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 
 const genAI = new GoogleGenerativeAI(
   process.env.EXPO_PUBLIC_GOOGLE_API_KEY || "",
@@ -26,9 +30,9 @@ export const geminiModel = genAI.getGenerativeModel({
 
 const { width } = Dimensions.get("window");
 
-// ================= QUIZ SCREEN =================
 export default function QuizScreen() {
   const { profile } = useAdventureProfileStore();
+  const router = useRouter();
 
   const [questions, setQuestions] = useState<any[] | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -39,30 +43,30 @@ export default function QuizScreen() {
   const [showFinalModal, setShowFinalModal] = useState(false);
 
   const avatarAnim = useRef(new Animated.Value(1)).current;
-  const optionAnimValues = useRef<Animated.Value[]>([]).current;
+  const optionAnimValues = useRef<Animated.Value[]>([]);
 
-  // ================= GEMINI GENERATION =================
+  // ================= FETCH QUIZ QUESTIONS =================
   useEffect(() => {
     async function fetchQuestions() {
       const prompt = `
-      Generate 5 fantasy/magic themed quiz questions.
-      Each question should have:
-      - question text
-      - 4 options
-      - correct answer
-      - rewardChapters (number)
-      - badgeId (number)
-      Format as JSON array:
-      [
-        {
-          "id": 1,
-          "question": "...",
-          "options": ["..","..","..",".."],
-          "answer": "...",
-          "rewardChapters": 2,
-          "badgeId": 1
-        }
-      ]
+        Generate 5 fantasy/magic themed quiz questions.
+        Each question should have:
+        - question text
+        - 4 options
+        - correct answer
+        - rewardChapters (number)
+        - badgeId (number)
+        Format as JSON array:
+        [
+          {
+            "id": 1,
+            "question": "...",
+            "options": ["..","..","..",".."],
+            "answer": "...",
+            "rewardChapters": 2,
+            "badgeId": 1
+          }
+        ]
       `;
 
       try {
@@ -77,10 +81,10 @@ export default function QuizScreen() {
 
         setQuestions(parsed);
 
-        // Inicializa animações
-        parsed[0].options.forEach(() => {
-          optionAnimValues.push(new Animated.Value(0));
-        });
+        // Initialize option animations
+        optionAnimValues.current = parsed[0].options.map(
+          () => new Animated.Value(0),
+        );
       } catch (err) {
         console.error("Error generating quiz:", err);
       }
@@ -91,11 +95,12 @@ export default function QuizScreen() {
 
   const question = questions ? questions[currentIndex] : null;
 
-  // ================= ANIMATE CARDS ENTRANCE =================
+  // ================= ANIMATE OPTIONS ENTRANCE =================
   useEffect(() => {
     if (!question) return;
+
     question.options.forEach((_: any, i: number) => {
-      Animated.timing(optionAnimValues[i], {
+      Animated.timing(optionAnimValues.current[i], {
         toValue: 1,
         duration: 500,
         delay: i * 100,
@@ -105,7 +110,7 @@ export default function QuizScreen() {
     });
   }, [currentIndex, question]);
 
-  // ================= AVATAR POP =================
+  // ================= AVATAR POP ANIMATION =================
   const triggerAvatarPop = () => {
     avatarAnim.setValue(0.8);
     Animated.spring(avatarAnim, {
@@ -124,12 +129,13 @@ export default function QuizScreen() {
     setSelectedOption(option);
 
     if (correct) triggerAvatarPop();
+
     setQuizResults((prev) => [...prev, { questionId: question.id, correct }]);
 
-    // Animate other cards away
+    // Animate other options away
     question.options.forEach((_: any, i: number) => {
       if (i !== index) {
-        Animated.timing(optionAnimValues[i], {
+        Animated.timing(optionAnimValues.current[i], {
           toValue: 0,
           duration: 300,
           easing: Easing.out(Easing.exp),
@@ -140,8 +146,9 @@ export default function QuizScreen() {
 
     setTimeout(() => {
       setSelectedOption(null);
+
       if (currentIndex < (questions?.length || 0) - 1) {
-        optionAnimValues.forEach((v) => v.setValue(0));
+        optionAnimValues.current.forEach((v) => v.setValue(0));
         setCurrentIndex(currentIndex + 1);
       } else {
         setShowFinalModal(true);
@@ -155,12 +162,11 @@ export default function QuizScreen() {
     setShowFinalModal(false);
     setCurrentIndex(0);
     setQuizResults([]);
-    optionAnimValues.forEach((v) => v.setValue(0));
+    optionAnimValues.current.forEach((v) => v.setValue(0));
   };
 
   // ================= RENDER =================
   if (!questions) {
-    // Skeleton while loading
     return (
       <View style={styles.container}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -175,7 +181,21 @@ export default function QuizScreen() {
       <StatusBar animated style="light" />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Avatar */}
+        {/* BACK BUTTON INSIDE SCROLL */}
+        <Pressable
+          style={styles.backButtonWrapperScroll}
+          onPress={() => router.back()}
+        >
+          <GlassView style={styles.glassButton} isInteractive>
+            <FontAwesome6
+              name="chevron-left"
+              size={22}
+              color={Colors.dark.text}
+            />
+          </GlassView>
+        </Pressable>
+
+        {/* AVATAR */}
         <Animated.Text
           style={{
             fontSize: 60,
@@ -187,7 +207,7 @@ export default function QuizScreen() {
           {profile ? "🧙‍♂️" : "👤"}
         </Animated.Text>
 
-        {/* Question */}
+        {/* QUESTION */}
         <Text
           fontSize={22}
           fontFamily="bold"
@@ -196,26 +216,25 @@ export default function QuizScreen() {
           style={{ textAlign: "center", marginBottom: 24 }}
         />
 
-        {/* Options */}
+        {/* OPTIONS */}
         {question.options.map((option: string, i: number) => {
           const isSelected = selectedOption === option;
           const correct = option === question.answer;
 
-          const borderColor =
-            isSelected && correct
+          const borderColor = isSelected
+            ? correct
               ? "#22C55E"
-              : isSelected && !correct
-                ? "#EF4444"
-                : "#303033";
+              : "#EF4444"
+            : "#303033";
 
           const shadowOpacity = isSelected ? 0.35 : 0.15;
 
-          const translateY = optionAnimValues[i].interpolate({
+          const translateY = optionAnimValues.current[i].interpolate({
             inputRange: [0, 1],
             outputRange: [50, 0],
           });
 
-          const opacity = optionAnimValues[i];
+          const opacity = optionAnimValues.current[i];
 
           return (
             <TouchableWithoutFeedback
@@ -248,7 +267,7 @@ export default function QuizScreen() {
           );
         })}
 
-        {/* Progress Bar */}
+        {/* PROGRESS BAR */}
         <View style={styles.progressContainer}>
           <View style={styles.progressBackground} />
           <Animated.View
@@ -257,7 +276,7 @@ export default function QuizScreen() {
         </View>
       </ScrollView>
 
-      {/* Final Quiz Modal */}
+      {/* FINAL MODAL */}
       {showFinalModal && (
         <AchievementModal
           achievement={{
@@ -266,16 +285,15 @@ export default function QuizScreen() {
             correctCount: quizResults.filter((r) => r.correct).length,
             totalQuestions: questions.length,
             icon: (() => {
-              const correctCount = quizResults.filter((r) => r.correct).length;
-              const total = questions.length;
-              const percent = (correctCount / total) * 100;
-
-              if (percent === 100) return "🏆"; // Perfeito!
-              if (percent >= 80) return "🙂"; // Quase lá
-              if (percent >= 50) return "⚠️"; // Precisa melhorar
-              if (percent >= 25) return "😟"; // Ruim
-
-              return "😢"; // Ruim
+              const percent =
+                (quizResults.filter((r) => r.correct).length /
+                  questions.length) *
+                100;
+              if (percent === 100) return "🏆";
+              if (percent >= 80) return "🙂";
+              if (percent >= 50) return "⚠️";
+              if (percent >= 25) return "😟";
+              return "😢";
             })(),
             description: `You answered ${quizResults.filter((r) => r.correct).length} out of ${questions.length} correctly!`,
           }}
@@ -286,7 +304,6 @@ export default function QuizScreen() {
   );
 }
 
-// ================= STYLES =================
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -297,6 +314,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 40,
     alignItems: "center",
+  },
+  backButtonWrapperScroll: {
+    alignSelf: "flex-start",
+    marginBottom: 24,
+  },
+  glassButton: {
+    height: 48,
+    width: 48,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 48,
   },
   optionCard: {
     width: width * 0.8,
@@ -325,27 +353,4 @@ const styles = StyleSheet.create({
     backgroundColor: "#38383A",
   },
   progressFill: { height: "100%", backgroundColor: "#8B5CF6", borderRadius: 5 },
-
-  // ================= SKELETON =================
-  skeletonAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#2C2C2E",
-    marginBottom: 20,
-  },
-  skeletonQuestion: {
-    width: width * 0.8,
-    height: 24,
-    borderRadius: 8,
-    backgroundColor: "#2C2C2E",
-    marginBottom: 24,
-  },
-  skeletonOption: {
-    width: width * 0.8,
-    height: 50,
-    borderRadius: 16,
-    backgroundColor: "#2C2C2E",
-    marginBottom: 16,
-  },
 });
