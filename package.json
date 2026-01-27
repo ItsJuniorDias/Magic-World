@@ -22,6 +22,7 @@
     "@react-three/fiber": "^9.5.0",
     "@tanstack/react-query": "^5.90.16",
     "@types/three": "^0.182.0",
+    "base-64": "^1.0.0",
     "expo": "~54.0.30",
     "expo-asset": "^12.0.12",
     "expo-av": "^16.0.8",

@@ -95,6 +95,16 @@ export default function RootLayout() {
               options={{ headerShown: false }}
             />
 
+            <Stack.Screen
+              name="(terms-eula)/index"
+              options={{ headerShown: false }}
+            />
+
+            <Stack.Screen
+              name="(privacy-policy)/index"
+              options={{ headerShown: false }}
+            />
+
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           </Stack>
           <StatusBar style="auto" />

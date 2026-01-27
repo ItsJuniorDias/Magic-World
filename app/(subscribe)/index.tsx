@@ -239,13 +239,7 @@ export default function SubscribeScreen() {
               marginTop: 16,
             }}
           >
-            <TouchableOpacity
-              onPress={() =>
-                Linking.openURL(
-                  "https://www.notion.so/Privacy-Policy-Magic-World-2ef0df0a2e7980419154c247e66372c5?source=copy_link",
-                )
-              }
-            >
+            <TouchableOpacity onPress={() => router.push("/(privacy-policy)")}>
               <Text
                 title="Privacy Policy"
                 fontSize={14}
@@ -263,15 +257,9 @@ export default function SubscribeScreen() {
               style={{ marginHorizontal: 6 }}
             />
 
-            <TouchableOpacity
-              onPress={() =>
-                Linking.openURL(
-                  "https://www.notion.so/Terms-of-Use-Magic-World-2e10df0a2e7980d7b48bdcf36fef33a5?source=copy_link",
-                )
-              }
-            >
+            <TouchableOpacity onPress={() => router.push("/(terms-eula)")}>
               <Text
-                title="Terms of Use"
+                title="Terms of Use (EULA)"
                 fontFamily="regular"
                 fontSize={14}
                 color="#8E8E93"
