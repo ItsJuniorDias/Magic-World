@@ -372,7 +372,7 @@
 				);
 				INFOPLIST_FILE = magicworld/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Magic World";
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -406,7 +406,7 @@
 				DEVELOPMENT_TEAM = 968FPR7Y35;
 				INFOPLIST_FILE = magicworld/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Magic World";
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

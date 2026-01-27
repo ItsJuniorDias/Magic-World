@@ -6,20 +6,6 @@ import Text from "@/components/text";
 import { StatusBar } from "expo-status-bar";
 
 const games = [
-  {
-    id: "quiz",
-    title: "Quiz Challenge",
-    emoji: "❓",
-    route: "/(quiz)",
-    description: "Test your knowledge with quick and fun questions!",
-  },
-  {
-    id: "memory",
-    title: "Memory Challenge",
-    emoji: "🧠",
-    route: "/(memory-game)",
-    description: "Match the pairs and train your memory in a fun way!",
-  },
   //viajem no espaço tipo subway surf mas no espaço com uma nave desviando de asteroides
   {
     id: "endless-runner",
@@ -27,6 +13,15 @@ const games = [
     emoji: "🚀",
     route: "/(endless-runner)",
     description: "Navigate your spaceship through endless asteroids!",
+  },
+  // estilo Hollow Knight, jogo de plataforma com espada e magia
+  {
+    id: "platformer-adventure",
+    title: "Knight's Quest",
+    emoji: "🗡️",
+    route: "/(platformer-adventure)",
+    description:
+      "Embark on a magical platforming adventure with sword and sorcery!",
   },
 ];
 

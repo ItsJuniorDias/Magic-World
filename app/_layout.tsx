@@ -105,6 +105,11 @@ export default function RootLayout() {
               options={{ headerShown: false }}
             />
 
+            <Stack.Screen
+              name="(platformer-adventure)/index"
+              options={{ headerShown: false }}
+            />
+
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           </Stack>
           <StatusBar style="auto" />

@@ -1,7 +1,0 @@
-** BUILD FAILED **
-
-
-The following build commands failed:
-	CompileC /Users/alexandrejunior/Library/Developer/Xcode/DerivedData/MagicWorld-fhfjocfymhawlbfyrweyymotfwge/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/ReactCodegen.build/Objects-normal/arm64/ComponentDescriptors-934976e658c2d3d20d7a05a54b0b20d7.o /Users/alexandrejunior/Documents/Magic-World/ios/build/generated/ios/react/renderer/components/rngesturehandler_codegen/ComponentDescriptors.cpp normal arm64 c++ com.apple.compilers.llvm.clang.1_0.compiler (in target 'ReactCodegen' from project 'Pods')
-	Building workspace MagicWorld with scheme magicworld and configuration Debug
-(2 failures)
