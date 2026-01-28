@@ -454,7 +454,7 @@ export default function EldoriaFinalBattle({
             <TouchableOpacity style={styles.back} onPress={() => router.back()}>
               <Text
                 title="BACK TO HUB"
-                style={{ color: "white" }}``
+                style={{ color: "white" }}
                 fontFamily="bold"
               />
             </TouchableOpacity>
