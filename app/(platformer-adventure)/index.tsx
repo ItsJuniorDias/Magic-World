@@ -20,9 +20,11 @@ import { createPlayerSystem } from "./utils/PlayerSystem";
 import {
   spawnEnemy,
   createParticle,
+  loadEnemyAssets,
   Enemy,
   Particle,
 } from "./utils/GameSystems";
+import { router } from "expo-router";
 
 export default function EldoriaFinalBattle({
   onBackToHub,
@@ -69,12 +71,24 @@ export default function EldoriaFinalBattle({
   const requestRef = useRef<number>();
   const stickPos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
 
+  // LIMPEZA E ORIENTAÇÃO
   useEffect(() => {
     ScreenOrientation.lockAsync(
       ScreenOrientation.OrientationLock.LANDSCAPE_LEFT,
     ).then(() => setReady(true));
+
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
+      sceneRef.current?.traverse((object: any) => {
+        if (object.geometry) object.geometry.dispose();
+        if (object.material) {
+          if (Array.isArray(object.material)) {
+            object.material.forEach((m: any) => m.dispose());
+          } else {
+            object.material.dispose();
+          }
+        }
+      });
     };
   }, []);
 
@@ -132,41 +146,45 @@ export default function EldoriaFinalBattle({
     dirLight.castShadow = true;
     scene.add(dirLight);
 
-    const grassTex = await loadAsync(TEXTURES.grass);
-    if (grassTex) {
-      grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
-      grassTex.repeat.set(20, 20);
-    }
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(200, 200),
-      new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.8 }),
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    scene.add(ground);
+    // Carregamento de Assets em Paralelo
+    const [pData, eLoaded, moonTex] = await Promise.all([
+      createPlayerSystem(scene),
+      loadEnemyAssets(require("../../assets/models/robot.glb")),
+      loadAsync(TEXTURES.moon),
+    ]);
 
-    // --- CARREGAR PLAYER (Usando o Módulo Separado) ---
-    const playerData = await createPlayerSystem(scene);
-    if (playerData) {
-      playerRef.current = playerData.playerGroup;
-      swordRef.current = playerData.swordContainer;
-      swordMeshesRef.current = playerData.swordMeshes;
-      mixer.current = playerData.mixer;
-      actions.current = playerData.actions;
+    if (pData) {
+      playerRef.current = pData.playerGroup;
+      swordRef.current = pData.swordContainer;
+      swordMeshesRef.current = pData.swordMeshes;
+      mixer.current = pData.mixer;
+      actions.current = pData.actions;
     }
+
+    if (moonTex) {
+      moonTex.wrapS = moonTex.wrapT = THREE.RepeatWrapping;
+      moonTex.repeat.set(20, 20);
+      const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(200, 200),
+        new THREE.MeshStandardMaterial({ map: moonTex, roughness: 0.8 }),
+      );
+      ground.rotation.x = -Math.PI / 2;
+      ground.receiveShadow = true;
+      scene.add(ground);
+    }
+
     setLoading(false);
 
     // Spawn Inicial
-    for (let i = 0; i < 3; i++) {
-      if (playerRef.current)
+    if (playerRef.current) {
+      for (let i = 0; i < 3; i++) {
         enemies.current.push(spawnEnemy(scene, playerRef.current.position));
+      }
     }
 
     // --- LOOP PRINCIPAL ---
     const animate = () => {
       requestRef.current = requestAnimationFrame(animate);
-
-      // Renderização contínua (Previne Crash)
       renderer.render(scene, camera);
 
       if (!gameActive.current || !playerRef.current) {
@@ -207,33 +225,30 @@ export default function EldoriaFinalBattle({
       p.position.add(fwd.multiplyScalar(speed));
 
       // 2. Lógica da Espada
-      if (swordRef.current) {
-        if (logic.current.attackTimer > 0) {
-          logic.current.attackTimer--;
-          const prog = 1 - logic.current.attackTimer / 20;
-          const swing =
-            prog < 0.5
-              ? THREE.MathUtils.lerp(0, Math.PI / 1.5, prog * 2)
-              : THREE.MathUtils.lerp(Math.PI / 1.5, 0, (prog - 0.5) * 2);
+      if (swordRef.current && logic.current.attackTimer > 0) {
+        logic.current.attackTimer--;
+        const prog = 1 - logic.current.attackTimer / 20;
+        const swing =
+          prog < 0.5
+            ? THREE.MathUtils.lerp(0, Math.PI / 1.5, prog * 2)
+            : THREE.MathUtils.lerp(Math.PI / 1.5, 0, (prog - 0.5) * 2);
+        swordRef.current.rotation.x = -Math.PI / 2 + swing;
 
-          swordRef.current.rotation.x = -Math.PI / 2 + swing;
-
-          // Efeito de brilho na lâmina
-          const color =
-            logic.current.attackType === "light" ? 0x00ffff : 0xff0000;
-          swordMeshesRef.current.forEach((m) => {
-            (m.material as THREE.MeshStandardMaterial).emissive.setHex(color);
-            (m.material as THREE.MeshStandardMaterial).emissiveIntensity = 2;
-          });
-        } else {
-          swordRef.current.rotation.x = -Math.PI / 2;
-          swordMeshesRef.current.forEach((m) => {
-            (m.material as THREE.MeshStandardMaterial).emissiveIntensity = 0;
-          });
-        }
+        const color =
+          logic.current.attackType === "light" ? 0x00ffff : 0xff0000;
+        swordMeshesRef.current.forEach((m) => {
+          (m.material as THREE.MeshStandardMaterial).emissive.setHex(color);
+          (m.material as THREE.MeshStandardMaterial).emissiveIntensity = 2;
+        });
+      } else if (swordRef.current) {
+        swordRef.current.rotation.x = -Math.PI / 2;
+        swordMeshesRef.current.forEach((m) => {
+          (m.material as THREE.MeshStandardMaterial).emissiveIntensity = 0;
+        });
       }
 
-      // 3. Inimigos
+      // 3. Inimigos (IA + ANIMAÇÕES + ESCALA)
+
       if (logic.current.spawnTimer > 0) logic.current.spawnTimer--;
       if (
         enemies.current.length < CONFIG.MAX_ENEMIES &&
@@ -244,29 +259,48 @@ export default function EldoriaFinalBattle({
       }
 
       enemies.current.forEach((e) => {
+        // Atualiza animação individual do robô
+        e.mixer.update(delta);
+
         const dist = p.position.distanceTo(e.mesh.position);
-        if (dist > 1.2) {
-          e.mesh.position.add(
-            p.position
-              .clone()
-              .sub(e.mesh.position)
-              .normalize()
-              .multiplyScalar(0.04),
-          );
+
+        // IA de Movimento
+        if (dist > 1.3) {
+          const moveDir = p.position.clone().sub(e.mesh.position).normalize();
+          // Velocidade inversamente proporcional à escala (maiores são mais lentos)
+          const step = 0.04 / (e.mesh.scale.x * 0.9);
+          e.mesh.position.add(moveDir.multiplyScalar(step));
+
+          if (e.actions["Walk"] && !e.actions["Walk"].isRunning()) {
+            e.actions["Idle"]?.fadeOut(0.2);
+            e.actions["Walk"].reset().fadeIn(0.2).play();
+          }
+        } else {
+          if (e.actions["Idle"] && !e.actions["Idle"].isRunning()) {
+            e.actions["Walk"]?.fadeOut(0.2);
+            e.actions["Idle"].reset().fadeIn(0.2).play();
+          }
         }
+
         e.mesh.lookAt(p.position);
         e.hpBar.lookAt(camera.position);
 
         if (dist < 1.5 && e.attackCooldown <= 0) {
           takeDamage(10);
           e.attackCooldown = 60;
+          if (e.actions["Attack"]) e.actions["Attack"].reset().play();
         }
+
         if (e.attackCooldown > 0) e.attackCooldown--;
+
+        // Efeito de Hit Flash
         if (e.hitFlash > 0) {
           e.hitFlash--;
           e.material.emissive.setHex(0xffffff);
+          e.material.emissiveIntensity = 1;
         } else {
           e.material.emissive.setHex(0x000000);
+          e.material.emissiveIntensity = 0;
         }
       });
 
@@ -281,7 +315,7 @@ export default function EldoriaFinalBattle({
         }
       }
 
-      // 5. Câmera
+      // 5. Câmera (Follow + Shake)
       let sx = 0,
         sy = 0;
       if (logic.current.cameraShake > 0) {
@@ -302,13 +336,11 @@ export default function EldoriaFinalBattle({
     animate();
   };
 
-  // --- LÓGICA DE DANO ---
   const takeDamage = (amount: number) => {
     if (!gameActive.current) return;
     logic.current.hp -= amount;
     setPlayerHp(Math.max(0, logic.current.hp));
 
-    // Efeito Visual UI
     redFlashOpacity.setValue(0.8);
     Animated.timing(redFlashOpacity, {
       toValue: 0,
@@ -318,13 +350,11 @@ export default function EldoriaFinalBattle({
     logic.current.cameraShake = 0.6;
 
     if (logic.current.hp <= 0) {
-      logic.current.hp = 0;
       gameActive.current = false;
       setIsGameOver(true);
     }
   };
 
-  // --- CONTROLES DE COMBATE ---
   const handleAttack = (type: "light" | "heavy") => {
     if (
       !gameActive.current ||
@@ -332,6 +362,7 @@ export default function EldoriaFinalBattle({
       !playerRef.current
     )
       return;
+
     logic.current.attackType = type;
     logic.current.attackTimer = 20;
     const dmg = type === "light" ? 4 : 8;
@@ -358,7 +389,6 @@ export default function EldoriaFinalBattle({
       }
     });
 
-    // Limpeza de mortos
     for (let i = enemies.current.length - 1; i >= 0; i--) {
       if (enemies.current[i].hp <= 0) {
         sceneRef.current?.remove(enemies.current[i].mesh);
@@ -375,12 +405,12 @@ export default function EldoriaFinalBattle({
     if (playerRef.current) playerRef.current.position.set(0, 0, 0);
     gameActive.current = true;
     setIsGameOver(false);
-    // Respawn inicial
-    for (let i = 0; i < 3; i++)
+    for (let i = 0; i < 3; i++) {
       if (playerRef.current)
         enemies.current.push(
           spawnEnemy(sceneRef.current!, playerRef.current.position),
         );
+    }
   };
 
   if (!ready) return <View style={{ flex: 1, backgroundColor: "#000" }} />;
@@ -396,19 +426,16 @@ export default function EldoriaFinalBattle({
         pointerEvents="none"
       />
 
-      {/* LOADING */}
       {loading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#fff" />
           <Text
             title="Carregando Eldoria..."
             style={{ color: "white", marginTop: 10 }}
-            fontFamily="regular"
           />
         </View>
       )}
 
-      {/* GAME OVER UI */}
       {isGameOver && (
         <View style={styles.gameOverOverlay}>
           <View style={styles.modalContent}>
@@ -424,14 +451,19 @@ export default function EldoriaFinalBattle({
                 fontFamily="bold"
               />
             </TouchableOpacity>
+            <TouchableOpacity style={styles.back} onPress={() => router.back()}>
+              <Text
+                title="BACK TO HUB"
+                style={{ color: "white" }}``
+                fontFamily="bold"
+              />
+            </TouchableOpacity>
           </View>
         </View>
       )}
 
-      {/* HUD */}
       {!isGameOver && !loading && (
         <View style={styles.overlay} pointerEvents="box-none">
-          {/* HP BAR */}
           <View style={styles.playerStats}>
             <View style={styles.hpBarContainer}>
               <View
@@ -443,7 +475,6 @@ export default function EldoriaFinalBattle({
             </View>
           </View>
 
-          {/* CONTROLS */}
           <View style={styles.hud} pointerEvents="box-none">
             <View style={styles.joyArea} {...panResponder.panHandlers}>
               <View style={styles.joyBase}>
@@ -544,6 +575,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     marginBottom: 10,
+  },
+  back: {
+    width: "100%",
+    padding: 15,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.7)",
+    borderRadius: 8,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,

@@ -16,9 +16,10 @@ export const CONFIG = {
 };
 
 export const TEXTURES = {
-  grass: require("../../../assets/texture/grass.jpg"),
+  moon: require("../../../assets/texture/moon.jpg"),
   bark: require("../../../assets/texture/bark.jpg"),
   leaves: require("../../../assets/texture/leaves.jpg"),
+  grass: require("../../../assets/texture/grass.jpg"),
 };
 export const MODELS = {
   soldier: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/Soldier.glb",
