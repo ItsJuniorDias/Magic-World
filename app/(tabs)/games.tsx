@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import { Colors } from "@/constants/theme";
 import Text from "@/components/text";
+import * as ScreenOrientation from "expo-screen-orientation";
 import { StatusBar } from "expo-status-bar";
 
 const games = [
@@ -14,7 +15,20 @@ const games = [
     route: "/(endless-runner)",
     description: "Navigate your spaceship through endless asteroids!",
   },
-  // estilo Hollow Knight, jogo de plataforma com espada e magia
+  {
+    id: "quiz",
+    title: "Quiz Master",
+    emoji: "❓",
+    route: "/(quiz)",
+    description: "Test your knowledge with fun and challenging quizzes!",
+  },
+  {
+    id: "memory-game",
+    title: "Memory Match",
+    emoji: "🧠",
+    route: "/(memory-game)",
+    description: "Train your brain with this classic memory matching game!",
+  },
   {
     id: "platformer-adventure",
     title: "Knight's Quest",
@@ -49,7 +63,17 @@ export default function GamesHub() {
           <TouchableOpacity
             key={game.id}
             style={styles.card}
-            onPress={() => router.push(game.route)}
+            onPress={() => {
+              if (games[3].id === "platformer-adventure") {
+                ScreenOrientation.lockAsync(
+                  ScreenOrientation.OrientationLock.LANDSCAPE_LEFT,
+                ).then(() => {
+                  console.log("Screen locked to landscape left");
+                });
+              }
+
+              router.push(game.route);
+            }}
             activeOpacity={0.85}
           >
             {/* Emoji */}
