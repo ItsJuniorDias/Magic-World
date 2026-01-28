@@ -1,5 +1,6 @@
 // src/game/config.ts
 import { Dimensions } from "react-native";
+import swordModel from "../../../assets/models/straight_long_sword.glb";
 
 export const SCREEN = Dimensions.get("window");
 
@@ -19,8 +20,7 @@ export const TEXTURES = {
   bark: require("../../../assets/texture/bark.jpg"),
   leaves: require("../../../assets/texture/leaves.jpg"),
 };
-
 export const MODELS = {
   soldier: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/Soldier.glb",
-  sword: require("../../../assets/models/sword_of_artorias.glb"),
+  sword: swordModel,
 };
