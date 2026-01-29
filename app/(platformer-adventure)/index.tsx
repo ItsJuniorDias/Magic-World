@@ -25,6 +25,7 @@ import {
   Particle,
 } from "./utils/GameSystems";
 import { router } from "expo-router";
+import { createBase } from "./utils/createBase";
 
 export default function EldoriaFinalBattle({
   onBackToHub,
@@ -124,13 +125,14 @@ export default function EldoriaFinalBattle({
   const onContextCreate = async (gl: ExpoWebGLRenderingContext) => {
     const renderer = new Renderer({ gl });
     renderer.setSize(gl.drawingBufferWidth, gl.drawingBufferHeight);
-    renderer.setClearColor(CONFIG.SKY_COLOR);
+    renderer.setClearColor(0x020205); // Fundo espacial quase preto
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     const scene = new THREE.Scene();
     sceneRef.current = scene;
-    scene.fog = new THREE.Fog(CONFIG.SKY_COLOR, 15, 80);
+    // Ajuste do Fog para não esconder o céu
+    scene.fog = new THREE.Fog(0x020205, 20, 90);
 
     const camera = new THREE.PerspectiveCamera(
       60,
@@ -139,12 +141,77 @@ export default function EldoriaFinalBattle({
       1000,
     );
 
+    const bases: THREE.Group[] = [];
+
+    // Adicionando 3 bases em triângulo ao redor do spawn
+    bases.push(createBase(scene, 15, 15, 0x00d4ff)); // Base Azul
+    bases.push(createBase(scene, -15, 15, 0xff4444)); // Base Vermelha
+    bases.push(createBase(scene, 0, -20, 0xffaa00)); // Base Amarela
+
     // Luz e Chão
-    scene.add(new THREE.AmbientLight(0x404050, 0.6));
+    scene.add(new THREE.AmbientLight(0x404050, 0.4));
     const dirLight = new THREE.DirectionalLight(0xaaccff, 1.2);
     dirLight.position.set(20, 50, 20);
     dirLight.castShadow = true;
     scene.add(dirLight);
+
+    // ==========================================
+    // ADICIONANDO O COSMOS (ESTRELAS, PLANETAS E GALÁXIAS)
+    // ==========================================
+
+    // 1. Campo de Estrelas
+    const starGeometry = new THREE.BufferGeometry();
+    const starCount = 4000;
+    const starPositions = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount * 3; i++) {
+      starPositions[i] = (Math.random() - 0.5) * 400; // Espalha as estrelas num cubo de 400 unidades
+    }
+    starGeometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(starPositions, 3),
+    );
+    const starMaterial = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 0.4,
+      sizeAttenuation: true,
+    });
+    const stars = new THREE.Points(starGeometry, starMaterial);
+    scene.add(stars);
+
+    // 2. Planeta Distante
+    const planetGeom = new THREE.SphereGeometry(15, 32, 32);
+    const planetMat = new THREE.MeshStandardMaterial({
+      color: 0x3344ff,
+      emissive: 0x112244,
+      roughness: 0.8,
+      metalness: 0.2,
+    });
+    const planet = new THREE.Mesh(planetGeom, planetMat);
+    planet.position.set(-60, 40, -100);
+    scene.add(planet);
+
+    // 3. Efeito de Galáxia/Nebulosa (Vários discos coloridos no fundo)
+    const createGalaxyPart = (
+      color: number,
+      pos: THREE.Vector3,
+      size: number,
+    ) => {
+      const geom = new THREE.SphereGeometry(size, 16, 16);
+      const mat = new THREE.MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.15,
+      });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.position.copy(pos);
+      mesh.scale.set(2, 0.5, 2); // Faz parecer um disco galáctico
+      scene.add(mesh);
+    };
+
+    createGalaxyPart(0xff00ff, new THREE.Vector3(80, 20, -120), 40); // Galáxia Púrpura
+    createGalaxyPart(0x00ffff, new THREE.Vector3(-100, 30, -80), 30); // Nebulosa Azul
+
+    // ==========================================
 
     // Carregamento de Assets em Paralelo
     const [pData, eLoaded, moonTex] = await Promise.all([
@@ -166,7 +233,11 @@ export default function EldoriaFinalBattle({
       moonTex.repeat.set(20, 20);
       const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(200, 200),
-        new THREE.MeshStandardMaterial({ map: moonTex, roughness: 0.8 }),
+        new THREE.MeshStandardMaterial({
+          map: moonTex,
+          roughness: 0.9,
+          color: 0x888888,
+        }),
       );
       ground.rotation.x = -Math.PI / 2;
       ground.receiveShadow = true;
@@ -194,6 +265,10 @@ export default function EldoriaFinalBattle({
 
       const delta = clock.current.getDelta();
       if (mixer.current) mixer.current.update(delta);
+
+      // Animação leve do planeta e estrelas para dar vida
+      planet.rotation.y += 0.001;
+      stars.rotation.y += 0.0001;
 
       // 1. Movimento do Player
       const p = playerRef.current;
@@ -247,8 +322,7 @@ export default function EldoriaFinalBattle({
         });
       }
 
-      // 3. Inimigos (IA + ANIMAÇÕES + ESCALA)
-
+      // 3. Inimigos
       if (logic.current.spawnTimer > 0) logic.current.spawnTimer--;
       if (
         enemies.current.length < CONFIG.MAX_ENEMIES &&
@@ -259,15 +333,11 @@ export default function EldoriaFinalBattle({
       }
 
       enemies.current.forEach((e) => {
-        // Atualiza animação individual do robô
         e.mixer.update(delta);
-
         const dist = p.position.distanceTo(e.mesh.position);
 
-        // IA de Movimento
         if (dist > 1.3) {
           const moveDir = p.position.clone().sub(e.mesh.position).normalize();
-          // Velocidade inversamente proporcional à escala (maiores são mais lentos)
           const step = 0.04 / (e.mesh.scale.x * 0.9);
           e.mesh.position.add(moveDir.multiplyScalar(step));
 
@@ -293,7 +363,6 @@ export default function EldoriaFinalBattle({
 
         if (e.attackCooldown > 0) e.attackCooldown--;
 
-        // Efeito de Hit Flash
         if (e.hitFlash > 0) {
           e.hitFlash--;
           e.material.emissive.setHex(0xffffff);
@@ -315,7 +384,7 @@ export default function EldoriaFinalBattle({
         }
       }
 
-      // 5. Câmera (Follow + Shake)
+      // 5. Câmera
       let sx = 0,
         sy = 0;
       if (logic.current.cameraShake > 0) {
@@ -430,6 +499,8 @@ export default function EldoriaFinalBattle({
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#fff" />
           <Text
+            fontFamily="bold"
+            fontSize={18}
             title="Carregando Eldoria..."
             style={{ color: "white", marginTop: 10 }}
           />
@@ -440,20 +511,20 @@ export default function EldoriaFinalBattle({
         <View style={styles.gameOverOverlay}>
           <View style={styles.modalContent}>
             <Text
-              title="YOU DIED"
+              title="VOCÊ CAIU"
               style={{ color: "#ff4444", fontSize: 32, marginBottom: 10 }}
               fontFamily="bold"
             />
             <TouchableOpacity style={styles.modalBtn} onPress={resetGame}>
               <Text
-                title="TRY AGAIN"
+                title="TENTAR NOVAMENTE"
                 style={{ color: "white" }}
                 fontFamily="bold"
               />
             </TouchableOpacity>
             <TouchableOpacity style={styles.back} onPress={() => router.back()}>
               <Text
-                title="BACK TO HUB"
+                title="VOLTAR AO HUB"
                 style={{ color: "white" }}
                 fontFamily="bold"
               />
@@ -539,7 +610,7 @@ export default function EldoriaFinalBattle({
 }
 
 const styles = StyleSheet.create({
-  container: { backgroundColor: "#0b1026" },
+  container: { backgroundColor: "#020205" },
   damageFlash: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "red",
@@ -560,18 +631,18 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
   modalContent: {
-    width: 300,
+    width: 320,
     padding: 20,
-    backgroundColor: "#1a1a1a",
-    borderRadius: 10,
+    backgroundColor: "#0b1026",
+    borderRadius: 15,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#555",
+    borderWidth: 2,
+    borderColor: "#4455aa",
   },
   modalBtn: {
     width: "100%",
     padding: 15,
-    backgroundColor: "#ff4444",
+    backgroundColor: "#4455aa",
     borderRadius: 8,
     alignItems: "center",
     marginBottom: 10,
@@ -581,7 +652,7 @@ const styles = StyleSheet.create({
     padding: 15,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.7)",
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderRadius: 8,
   },
   overlay: {
@@ -592,13 +663,14 @@ const styles = StyleSheet.create({
   playerStats: { position: "absolute", top: 20, left: 20 },
   hpBarContainer: {
     width: 200,
-    height: 20,
-    backgroundColor: "#330000",
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: "#555",
+    height: 14,
+    backgroundColor: "#1a1a2e",
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: "#4455aa",
+    overflow: "hidden",
   },
-  hpBarFill: { height: "100%", backgroundColor: "#ff0000", borderRadius: 4 },
+  hpBarFill: { height: "100%", backgroundColor: "#00d4ff", borderRadius: 4 },
   hud: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -615,33 +687,37 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "rgba(68, 85, 170, 0.2)",
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
+    borderWidth: 2,
+    borderColor: "rgba(68, 85, 170, 0.5)",
   },
   joyStick: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(255, 200, 50, 0.8)",
+    backgroundColor: "#00d4ff",
+    elevation: 5,
+    shadowColor: "#00d4ff",
+    shadowRadius: 10,
+    shadowOpacity: 0.8,
   },
   pad: { width: 160, height: 160 },
   btn: {
-    width: 80,
-    height: 80,
-    borderRadius: 50,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     position: "absolute",
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: "rgba(11, 16, 38, 0.6)",
     borderWidth: 2,
     justifyContent: "center",
     alignItems: "center",
   },
-  up: { top: 0, left: 50 },
-  left: { top: 60, left: 0 },
-  right: { top: 60, right: 0 },
-  light: { borderColor: "#66ccff" },
+  up: { top: 0, left: 45 },
+  left: { top: 60, left: -10 },
+  right: { top: 60, right: -10 },
+  light: { borderColor: "#00d4ff" },
   heavy: { borderColor: "#ff4444" },
   dash: { borderColor: "#ffaa00" },
 });

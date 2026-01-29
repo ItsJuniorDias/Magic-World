@@ -2,7 +2,7 @@ const { getDefaultConfig } = require("expo/metro-config");
 
 const config = getDefaultConfig(__dirname);
 
-// Adiciona 'glb' e 'gltf' na lista de arquivos permitidos
-config.resolver.assetExts.push("glb", "gltf");
+// 🛠️ Adicione 'glb', 'gltf', 'png' e 'jpg' aqui:
+config.resolver.assetExts.push("glb", "gltf", "png", "jpg");
 
 module.exports = config;

@@ -20,6 +20,7 @@ export const TEXTURES = {
   bark: require("../../../assets/texture/bark.jpg"),
   leaves: require("../../../assets/texture/leaves.jpg"),
   grass: require("../../../assets/texture/grass.jpg"),
+  earth: require("../../../assets/texture/earth.jpg"),
 };
 export const MODELS = {
   soldier: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/Soldier.glb",
