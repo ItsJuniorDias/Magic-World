@@ -23,6 +23,14 @@ const games = [
     description: "Navigate through asteroids.",
   },
   {
+    id: "runner-kart",
+    title: "Runner Kart",
+    emoji: "🏎️",
+    color: "#FF375F",
+    route: "/(runner-kart)",
+    description: "Race your way to victory.",
+  },
+  {
     id: "quiz",
     title: "Quiz Master",
     emoji: "❓",

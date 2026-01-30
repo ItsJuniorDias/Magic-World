@@ -1,7 +1,7 @@
 // ios/UnityViewManager.m
 
 #import <React/RCTViewManager.h>
-#import "UnityFramework/UnityFramework.h" // Importar o framework do Unity
+#import <UnityFramework/UnityFramework.h> // Importar o framework do Unity
 
 // Interface que define que esta classe gerencia Views
 @interface UnityViewManager : RCTViewManager

@@ -1,0 +1,8 @@
+** BUILD FAILED **
+
+
+The following build commands failed:
+	SwiftEmitModule normal arm64 Emitting\ module\ for\ MagicWorld (in target 'magicworld' from project 'magicworld')
+	EmitSwiftModule normal arm64 (in target 'magicworld' from project 'magicworld')
+	Building workspace MagicWorld with scheme magicworld and configuration Debug
+(3 failures)

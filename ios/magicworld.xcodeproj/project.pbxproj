@@ -8,26 +8,30 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
-		20A82BC1D76CE344ED970AFA /* Pods_magicworld.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DCE7654BD6C76086B0E2EFFF /* Pods_magicworld.framework */; };
 		32A108A68216FEB40EA83F69 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3D5E2C262B2E5F6E9B09381A /* PrivacyInfo.xcprivacy */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
+		55573AD4486D25CC1CCE8D8E /* Pods_magicworld.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D1058B775E1FA680921A30AC /* Pods_magicworld.framework */; };
+		83C2CAB62F2CCBFA007A1317 /* UnityViewManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 83C2CAB52F2CCBFA007A1317 /* UnityViewManager.m */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		E9987F7914DBE47155D4DD34 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CC3FE0F5FDB25E07F2756AB /* ExpoModulesProvider.swift */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		0945D2822FF754AD7B85E543 /* Pods-magicworld.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-magicworld.debug.xcconfig"; path = "Target Support Files/Pods-magicworld/Pods-magicworld.debug.xcconfig"; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* MagicWorld.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MagicWorld.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = magicworld/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = magicworld/Info.plist; sourceTree = "<group>"; };
 		1CC3FE0F5FDB25E07F2756AB /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-magicworld/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		2B141957A6244A04A4E631FB /* SplashScreen.storyboard */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = SplashScreen.storyboard; path = MagicWorld/SplashScreen.storyboard; sourceTree = "<group>"; };
+		383BA9DAABB92F713196070A /* Pods-magicworld.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-magicworld.release.xcconfig"; path = "Target Support Files/Pods-magicworld/Pods-magicworld.release.xcconfig"; sourceTree = "<group>"; };
 		3D5E2C262B2E5F6E9B09381A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = magicworld/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		83C2CAB52F2CCBFA007A1317 /* UnityViewManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UnityViewManager.m; sourceTree = "<group>"; };
+		83C2CAB72F2CCC3C007A1317 /* UnityFramework.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = UnityFramework.h; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = magicworld/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
-		DAA7AE59293E074FA2005E7D /* Pods-magicworld.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-magicworld.release.xcconfig"; path = "Target Support Files/Pods-magicworld/Pods-magicworld.release.xcconfig"; sourceTree = "<group>"; };
-		DCE7654BD6C76086B0E2EFFF /* Pods_magicworld.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_magicworld.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		D1058B775E1FA680921A30AC /* Pods_magicworld.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_magicworld.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		EF6E66A0A4D4E1F8D4CC65FA /* Pods-magicworld.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-magicworld.debug.xcconfig"; path = "Target Support Files/Pods-magicworld/Pods-magicworld.debug.xcconfig"; sourceTree = "<group>"; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = magicworld/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* magicworld-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "magicworld-Bridging-Header.h"; path = "magicworld/magicworld-Bridging-Header.h"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -37,7 +41,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				20A82BC1D76CE344ED970AFA /* Pods_magicworld.framework in Frameworks */,
+				55573AD4486D25CC1CCE8D8E /* Pods_magicworld.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -47,8 +51,8 @@
 		01940AF7001B41FF2FF05FFC /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				0945D2822FF754AD7B85E543 /* Pods-magicworld.debug.xcconfig */,
-				DAA7AE59293E074FA2005E7D /* Pods-magicworld.release.xcconfig */,
+				EF6E66A0A4D4E1F8D4CC65FA /* Pods-magicworld.debug.xcconfig */,
+				383BA9DAABB92F713196070A /* Pods-magicworld.release.xcconfig */,
 			);
 			path = Pods;
 			sourceTree = "<group>";
@@ -56,6 +60,7 @@
 		13B07FAE1A68108700A75B9A /* magicworld */ = {
 			isa = PBXGroup;
 			children = (
+				83C2CAB52F2CCBFA007A1317 /* UnityViewManager.m */,
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
 				F11748442D0722820044C1D9 /* magicworld-Bridging-Header.h */,
 				BB2F792B24A3F905000567C9 /* Supporting */,
@@ -63,6 +68,7 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
 				3D5E2C262B2E5F6E9B09381A /* PrivacyInfo.xcprivacy */,
+				83C2CAB82F2CCC3C007A1317 /* UnityFramework */,
 			);
 			name = magicworld;
 			sourceTree = "<group>";
@@ -71,7 +77,7 @@
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				DCE7654BD6C76086B0E2EFFF /* Pods_magicworld.framework */,
+				D1058B775E1FA680921A30AC /* Pods_magicworld.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -99,6 +105,14 @@
 			name = Libraries;
 			sourceTree = "<group>";
 		};
+		83C2CAB82F2CCC3C007A1317 /* UnityFramework */ = {
+			isa = PBXGroup;
+			children = (
+				83C2CAB72F2CCC3C007A1317 /* UnityFramework.h */,
+			);
+			path = UnityFramework;
+			sourceTree = "<group>";
+		};
 		83CBB9F61A601CBA00E9B192 = {
 			isa = PBXGroup;
 			children = (
@@ -108,6 +122,7 @@
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				01940AF7001B41FF2FF05FFC /* Pods */,
 				611588B521C4032550DB240A /* ExpoModulesProviders */,
+				2B141957A6244A04A4E631FB /* SplashScreen.storyboard */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -138,14 +153,14 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "magicworld" */;
 			buildPhases = (
-				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
+				28FF9DDEC1E856F70DCAD933 /* [CP] Check Pods Manifest.lock */,
 				3F6F785705D547CAE9703640 /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
-				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				C6AC428971A83EA8E4ED0C8D /* [CP] Embed Pods Frameworks */,
+				8588747AF7D33F8B3BE5CA9A /* [CP] Embed Pods Frameworks */,
+				D3316B3C4E4C9B919897F08B /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
@@ -169,7 +184,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "MagicWorld" */;
+			buildConfigurationList = 83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "magicworld" */;
 			compatibilityVersion = "Xcode 3.2";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -219,7 +234,7 @@
 			shellPath = /bin/sh;
 			shellScript = "if [[ -f \"$PODS_ROOT/../.xcode.env\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env\"\nfi\nif [[ -f \"$PODS_ROOT/../.xcode.env.local\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env.local\"\nfi\n\n# The project root by default is one level up from the ios directory\nexport PROJECT_ROOT=\"$PROJECT_DIR\"/..\n\nif [[ \"$CONFIGURATION\" = *Debug* ]]; then\n  export SKIP_BUNDLING=1\nfi\nif [[ -z \"$ENTRY_FILE\" ]]; then\n  # Set the entry JS file using the bundler's entry resolution.\n  export ENTRY_FILE=\"$(\"$NODE_BINARY\" -e \"require('expo/scripts/resolveAppEntry')\" \"$PROJECT_ROOT\" ios absolute | tail -n 1)\"\nfi\n\nif [[ -z \"$CLI_PATH\" ]]; then\n  # Use Expo CLI\n  export CLI_PATH=\"$(\"$NODE_BINARY\" --print \"require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })\")\"\nfi\nif [[ -z \"$BUNDLE_COMMAND\" ]]; then\n  # Default Expo CLI command for bundling\n  export BUNDLE_COMMAND=\"export:embed\"\nfi\n\n# Source .xcode.env.updates if it exists to allow\n# SKIP_BUNDLING to be unset if needed\nif [[ -f \"$PODS_ROOT/../.xcode.env.updates\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env.updates\"\nfi\n# Source local changes to allow overrides\n# if needed\nif [[ -f \"$PODS_ROOT/../.xcode.env.local\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env.local\"\nfi\n\n`\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('react-native/package.json')) + '/scripts/react-native-xcode.sh'\"`\n\n";
 		};
-		08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */ = {
+		28FF9DDEC1E856F70DCAD933 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -265,7 +280,29 @@
 			shellPath = /bin/sh;
 			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-magicworld/expo-configure-project.sh\"\n";
 		};
-		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
+		8588747AF7D33F8B3BE5CA9A /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-magicworld/Pods-magicworld-frameworks.sh",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/React-Core-prebuilt/React.framework/React",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ReactNativeDependencies/ReactNativeDependencies.framework/ReactNativeDependencies",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputPaths = (
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/React.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ReactNativeDependencies.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-magicworld/Pods-magicworld-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		D3316B3C4E4C9B919897F08B /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -319,28 +356,6 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-magicworld/Pods-magicworld-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		C6AC428971A83EA8E4ED0C8D /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-magicworld/Pods-magicworld-frameworks.sh",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/React-Core-prebuilt/React.framework/React",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ReactNativeDependencies/ReactNativeDependencies.framework/ReactNativeDependencies",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputPaths = (
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/React.framework",
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ReactNativeDependencies.framework",
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-magicworld/Pods-magicworld-frameworks.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -349,6 +364,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
+				83C2CAB62F2CCBFA007A1317 /* UnityViewManager.m in Sources */,
 				E9987F7914DBE47155D4DD34 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -358,7 +374,7 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 0945D2822FF754AD7B85E543 /* Pods-magicworld.debug.xcconfig */;
+			baseConfigurationReference = EF6E66A0A4D4E1F8D4CC65FA /* Pods-magicworld.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -366,6 +382,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 968FPR7Y35;
 				ENABLE_BITCODE = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/UnityFramework",
+				);
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"FB_SONARKIT_ENABLED=1",
@@ -397,13 +417,17 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = DAA7AE59293E074FA2005E7D /* Pods-magicworld.release.xcconfig */;
+			baseConfigurationReference = 383BA9DAABB92F713196070A /* Pods-magicworld.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = magicworld/magicworld.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 968FPR7Y35;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/UnityFramework",
+				);
 				INFOPLIST_FILE = magicworld/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Magic World";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
@@ -584,7 +608,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "MagicWorld" */ = {
+		83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "magicworld" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				83CBBA201A601CBA00E9B192 /* Debug */,

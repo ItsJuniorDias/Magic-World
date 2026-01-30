@@ -1,9 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 
-// Replace importing the UnityAppController header (which may be missing) with a forward declaration
-// so this header doesn't require the UnityFramework headers to be available at compile time.
-@class UnityAppController;
+#import <UnityFramework/UnityAppController.h>
 
 // this is coming from mach-o/ldsyms.h
 // we were including this header header here directly
