@@ -1,15 +1,14 @@
-import { requireNativeComponent, View, ViewProps } from "react-native";
+import { View, Text } from "react-native";
 
-// import UnityViewGame from "../../modules/unity/index";
-import UnityViewGame from "meu-modulo-unity";
+// import MyNativeText from "meu-modulo-unity";
 
 // O nome 'UnityView' aqui DEVE bater com o nome da classe exportada no Obj-C/Swift
 // menos a palavra 'Manager'.
 
-export default function App() {
+export default function RunnerKartScreen() {
   return (
     <View style={{ flex: 1 }}>
-      <UnityViewGame style={{ flex: 1 }} />
+      <Text>{}</Text>
     </View>
   );
 }

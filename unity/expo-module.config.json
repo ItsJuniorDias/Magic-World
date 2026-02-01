@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android", "web"],
+  "apple": {
+    "modules": ["UnityModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.unity.UnityModule"]
+  }
+}

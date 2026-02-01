@@ -13,7 +13,6 @@ pnpm-debug.log*
 .expo/
 .expo-shared/
 web-build/
-unity/
 
 # =========================
 # React Native

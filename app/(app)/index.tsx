@@ -1,11 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import {
-  Animated,
-  Dimensions,
-  Linking,
-  Platform,
-  UIManager,
-} from "react-native";
+import { Animated, Dimensions, Linking, Platform } from "react-native";
 
 import Text from "@/components/text";
 import { Colors } from "@/constants/theme";
