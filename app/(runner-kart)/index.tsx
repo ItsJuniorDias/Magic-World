@@ -1,14 +1,25 @@
-import { View, Text } from "react-native";
+// import { UnityView } from "unity";
+import { requireNativeViewManager } from "expo-modules-core";
+import { View, Text, Dimensions } from "react-native";
 
-// import MyNativeText from "meu-modulo-unity";
+const NativeView: React.ComponentType = requireNativeViewManager("Unity");
 
-// O nome 'UnityView' aqui DEVE bater com o nome da classe exportada no Obj-C/Swift
-// menos a palavra 'Manager'.
+export function UnityView(props: React.ComponentProps<typeof NativeView>) {
+  return <NativeView {...props} />;
+}
+
+// import { UnityView } from "../../unity";
 
 export default function RunnerKartScreen() {
   return (
     <View style={{ flex: 1 }}>
-      <Text>{}</Text>
+      <UnityView
+        style={{
+          flex: 1,
+          width: Dimensions.get("screen").width,
+          height: Dimensions.get("screen").height,
+        }}
+      />
     </View>
   );
 }

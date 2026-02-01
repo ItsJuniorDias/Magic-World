@@ -1,38 +1,24 @@
 import ExpoModulesCore
-import WebKit
+import UIKit
 
-// This view will be used as a native component. Make sure to inherit from `ExpoView`
-// to apply the proper styling (e.g. border radius and shadows).
 class UnityView: ExpoView {
-  let webView = WKWebView()
-  let onLoad = EventDispatcher()
-  var delegate: WebViewDelegate?
-
-  required init(appContext: AppContext? = nil) {
-    super.init(appContext: appContext)
-    clipsToBounds = true
-    delegate = WebViewDelegate { url in
-      self.onLoad(["url": url])
+    required init(appContext: AppContext? = nil) {
+        super.init(appContext: appContext)
+        self.backgroundColor = .black
     }
-    webView.navigationDelegate = delegate
-    addSubview(webView)
-  }
 
-  override func layoutSubviews() {
-    webView.frame = bounds
-  }
-}
-
-class WebViewDelegate: NSObject, WKNavigationDelegate {
-  let onUrlChange: (String) -> Void
-
-  init(onUrlChange: @escaping (String) -> Void) {
-    self.onUrlChange = onUrlChange
-  }
-
-  func webView(_ webView: WKWebView, didFinish navigation: WKNavigation) {
-    if let url = webView.url {
-      onUrlChange(url.absoluteString)
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // 1. Chama o Unity para renderizar nesta View
+        UnityManager.shared.showUnity(in: self)
     }
-  }
+
+    // 👇 AQUI ESTAVA FALTANDO ESSA FUNÇÃO
+    // O UnityModule.swift chama isso quando você passa a prop 'url' no React
+    func loadUrl(_ url: String) {
+        print("React Native enviou URL para Unity: \(url)")
+        
+        // Se você quiser mandar essa mensagem para dentro do Jogo Unity:
+        // UnityManager.shared.sendMessageToUnity(objectName: "GameController", methodName: "SetUrl", message: url)
+    }
 }

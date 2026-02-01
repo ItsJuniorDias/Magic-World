@@ -1,6 +1,6 @@
-import { NativeModule, requireNativeModule } from 'expo';
+import { NativeModule, requireNativeModule } from "expo";
 
-import { UnityModuleEvents } from './Unity.types';
+import { UnityModuleEvents } from "./Unity.types";
 
 declare class UnityModule extends NativeModule<UnityModuleEvents> {
   PI: number;
@@ -9,4 +9,4 @@ declare class UnityModule extends NativeModule<UnityModuleEvents> {
 }
 
 // This call loads the native module object from the JSI.
-export default requireNativeModule<UnityModule>('Unity');
+export default requireNativeModule<UnityModule>("Unity");

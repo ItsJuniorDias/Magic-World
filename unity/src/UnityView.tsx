@@ -1,11 +1,13 @@
-import { requireNativeView } from 'expo';
-import * as React from 'react';
+import { requireNativeViewManager } from "expo-modules-core";
+import * as React from "react";
+import { ViewProps } from "react-native";
 
-import { UnityViewProps } from './Unity.types';
+export type UnityViewProps = ViewProps;
 
+// Busca o módulo registrado como "Unity"
 const NativeView: React.ComponentType<UnityViewProps> =
-  requireNativeView('Unity');
+  requireNativeViewManager("Unity");
 
-export default function UnityView(props: UnityViewProps) {
+export function UnityView(props: UnityViewProps) {
   return <NativeView {...props} />;
 }
