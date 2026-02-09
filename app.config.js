@@ -33,24 +33,7 @@ export default {
       output: "static",
     },
     splash: null,
-    plugins: [
-      "expo-router",
-      [
-        "expo-notifications",
-        {
-          icon: "./assets/images/icon.png",
-          color: "#5C81F5'",
-        },
-      ],
-      [
-        "expo-build-properties",
-        {
-          ios: {
-            deploymentTarget: "15.1",
-          },
-        },
-      ],
-    ],
+    plugins: ["expo-router"],
     experiments: {
       typedRoutes: true,
       reactCompiler: true,

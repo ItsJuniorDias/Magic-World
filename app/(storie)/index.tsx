@@ -43,7 +43,6 @@ import TrackPlayer, {
 
 import { useLockScreenPlayer } from "@/hooks/LockScreenPlayer";
 
-import * as Notifications from "expo-notifications";
 import { BACKGROUND_TRACKS } from "@/constants/backgroundTracks";
 import { useStoriesStore } from "@/store/useStoriesStore";
 
@@ -56,16 +55,6 @@ import {
   AdventureProfileType,
   useAdventureProfileStore,
 } from "@/store/useAdventureProfileStore";
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
 
 /* =========================
    CONSTANTS
@@ -203,34 +192,12 @@ export default function StorieScreen() {
 
   // ----------------------------------
 
-  const notifyPaywall = async () => {
-    const { status } = await Notifications.getPermissionsAsync();
-    let finalStatus = status;
-
-    if (status !== "granted") {
-      const permission = await Notifications.requestPermissionsAsync();
-      finalStatus = permission.status;
-    }
-
-    if (finalStatus !== "granted") return;
-
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: "Next Chapter Locked 🔒",
-        body: "Subscribe to access the next chapter.",
-        sound: true,
-      },
-      trigger: null,
-    });
-  };
-
   const handleNextChapter = async (forcedIndex?: number) => {
     // 🔥 VERIFICAÇÃO DE SEGURANÇA
     const isPro = await AsyncStorage.getItem("@user_is_pro");
 
     if (isPro !== "true") {
       await pauseAllAudio();
-      await notifyPaywall();
       return;
     } else {
       const targetIndex = forcedIndex ?? nextIndex;
@@ -724,7 +691,9 @@ export default function StorieScreen() {
           if (Number(currentIndex) === 1) {
             setIsLoadingNextChapter(true);
             const prompt = `
-            Based on the ending of this story: "${sentences.slice(-3).join(" ")}", 
+            Based on the ending of this story: "${sentences
+              .slice(-3)
+              .join(" ")}", 
             generate two distinct emotional or action-driven choices for the final chapter with.
             Return ONLY a JSON array with this exact structure:
             [
@@ -960,7 +929,7 @@ export default function StorieScreen() {
           if (isPro !== "true") {
             setShowFinishModal(false);
             await pauseAllAudio();
-            await notifyPaywall();
+
             return;
           }
 
