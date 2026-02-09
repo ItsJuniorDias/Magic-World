@@ -3,7 +3,7 @@ export default {
     name: "Magic World",
     slug: "magicworld",
     version: "3.0.0",
-    orientation: "portrait",
+    orientation: "default",
     icon: "./assets/images/icon.png",
     scheme: "magicworld",
     userInterfaceStyle: "automatic",
