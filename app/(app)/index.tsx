@@ -14,12 +14,10 @@ import Purchases from "react-native-purchases";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLikedStore } from "@/store/useLikedStore";
 
-import * as Notifications from "expo-notifications";
 import { useAdventureProfileStore } from "@/store/useAdventureProfileStore";
 
 import { getDeviceId } from "@/utils/getDeviceId";
 import { savePushToken } from "@/services/savePushToken";
-import { registerForPushNotifications } from "@/services/registerForPushNotifications";
 
 const { height } = Dimensions.get("window");
 
@@ -76,20 +74,6 @@ export default function OnboardingScreen() {
   const init = useLikedStore((s) => s.init);
 
   useEffect(() => {
-    const setupPushNotifications = async () => {
-      const deviceId = await getDeviceId();
-
-      const token = await registerForPushNotifications();
-
-      if (token) {
-        await savePushToken(deviceId, token);
-      }
-    };
-
-    setupPushNotifications();
-  }, []);
-
-  useEffect(() => {
     init();
 
     const load = async () => {
@@ -108,18 +92,6 @@ export default function OnboardingScreen() {
     const iosApiKey = "appl_UcIhNLORZZgNuPFDjVUoqawwHfK";
 
     Purchases.configure({ apiKey: iosApiKey });
-  }, []);
-
-  useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener(() => {
-      const storeUrl =
-        Platform.OS === "ios" &&
-        "https://apps.apple.com/us/app/magic-world-kids-books-read/id6757454902";
-
-      if (storeUrl) Linking.openURL(storeUrl);
-    });
-
-    return () => sub.remove();
   }, []);
 
   return (
