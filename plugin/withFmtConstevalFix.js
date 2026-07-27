@@ -1,5 +1,5 @@
 /**
- * withFmtConstevalFix.ts
+ * withFmtConstevalFix.js
  * ============================================================
  * Patch pro erro de build do iOS com Xcode 26.4+ (Apple Clang 21):
  *
@@ -13,8 +13,9 @@
  * entra em React Native ≥ 0.83.9 / Expo SDK 56.
  *
  * O que este plugin faz:
- *   1. Compila o pod `fmt` e `RCT-Folly` em C++17 (consteval não
- *      existe em C++17, então o caminho problemático é ignorado).
+ *   1. Compila os pods `fmt` e `RCT-Folly` em C++17 (consteval
+ *      não existe em C++17, então o caminho problemático é
+ *      ignorado).
  *   2. Adiciona `FMT_USE_CONSTEVAL=0` no preprocessor pra
  *      forçar fmt a validar format strings em runtime.
  *
@@ -32,9 +33,9 @@
  *   - fmtlib/fmt#4740
  */
 
-import { ConfigPlugin, withDangerousMod } from "@expo/config-plugins";
-import * as fs from "node:fs";
-import * as path from "node:path";
+const { withDangerousMod } = require("@expo/config-plugins");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const PATCH_MARKER = "# BEGIN fmt-consteval-fix";
 const PATCH_END = "# END fmt-consteval-fix";
@@ -55,7 +56,7 @@ const PATCH_SNIPPET = `
     ${PATCH_END}
 `;
 
-const withFmtConstevalFix: ConfigPlugin = (config) => {
+const withFmtConstevalFix = (config) => {
   return withDangerousMod(config, [
     "ios",
     async (config) => {
@@ -85,15 +86,14 @@ const withFmtConstevalFix: ConfigPlugin = (config) => {
       //     ...
       //   end
       //
-      // Procuramos o último `end` do bloco post_install e
-      // injetamos antes dele.
-      const postInstallRegex = /post_install do \|installer\|([\s\S]*?)^\s*end\s*$/m;
+      // Procuramos o post_install e injetamos antes do `end`.
+      const postInstallRegex =
+        /post_install do \|installer\|([\s\S]*?)^\s*end\s*$/m;
       const match = podfileContent.match(postInstallRegex);
 
       if (!match) {
         // Sem post_install existente — adiciona um novo no fim.
-        podfileContent +=
-          `\n\npost_install do |installer|${PATCH_SNIPPET}end\n`;
+        podfileContent += `\n\npost_install do |installer|${PATCH_SNIPPET}end\n`;
       } else {
         // Injeta o snippet no final do post_install existente,
         // antes do `end`.
@@ -111,4 +111,4 @@ const withFmtConstevalFix: ConfigPlugin = (config) => {
   ]);
 };
 
-export default withFmtConstevalFix;
+module.exports = withFmtConstevalFix;

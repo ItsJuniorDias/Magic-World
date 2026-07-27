@@ -299,9 +299,11 @@ entra em RN ≥ 0.83.9 / Expo SDK 56.
 
 **Fix aplicado neste refactor:**
 
-- Novo plugin `plugin/withFmtConstevalFix.ts` — compila os pods
+- Novo plugin `plugin/withFmtConstevalFix.js` — compila os pods
   `fmt` e `RCT-Folly` em C++17 e adiciona `FMT_USE_CONSTEVAL=0`
   no preprocessor. Idempotente, sobrevive a `expo prebuild --clean`.
+  Escrito em CommonJS puro porque é o formato que o Expo espera
+  pra config plugins locais (não usa ts-node).
 - `app.config.js` — plugin registrado ao lado de `expo-router`.
 
 **Como aplicar depois de extrair o zip:**
