@@ -59,5 +59,20 @@ target 'MagicWorld' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
-  end
+
+    # BEGIN fmt-consteval-fix
+    installer.pods_project.targets.each do |target|
+      if target.name == 'fmt' || target.name == 'RCT-Folly'
+        target.build_configurations.each do |config|
+          config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+          config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+          unless config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'].include?('FMT_USE_CONSTEVAL=0')
+            config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'FMT_USE_CONSTEVAL=0'
+          end
+        end
+      end
+    end
+    # END fmt-consteval-fix
+end
+
 end
