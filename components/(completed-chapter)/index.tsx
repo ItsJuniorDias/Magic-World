@@ -4,7 +4,7 @@ import { BlurView } from "expo-blur";
 import { Colors } from "@/constants/theme";
 import Text from "@/components/text";
 import { FontAwesome6 } from "@expo/vector-icons";
-import { GlassView } from "expo-glass-effect";
+import GlassView from "@/components/ui/Glass";
 import { LinearGradient } from "expo-linear-gradient";
 
 import {

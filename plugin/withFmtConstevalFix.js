@@ -12,48 +12,66 @@
  * strict consteval. Fix upstream chegou em fmt 12.1.0, que só
  * entra em React Native ≥ 0.83.9 / Expo SDK 56.
  *
- * O que este plugin faz:
- *   1. Compila os pods `fmt` e `RCT-Folly` em C++17 (consteval
- *      não existe em C++17, então o caminho problemático é
- *      ignorado).
- *   2. Adiciona `FMT_USE_CONSTEVAL=0` no preprocessor pra
- *      forçar fmt a validar format strings em runtime.
+ * ABORDAGEM (v2 — source-level, mais robusta):
+ * -------------------------------------------
+ * A v1 deste plugin tentava mudar build_settings (`c++17` +
+ * `FMT_USE_CONSTEVAL=0`) no target `fmt` via post_install.
+ * Isso pode falhar por vários motivos: (a) CocoaPods sobrescreve
+ * as build_settings depois; (b) o pod compila em contexto que
+ * ignora essas flags; (c) meu regex pode não achar o post_install.
+ *
+ * A v2 edita DIRETAMENTE o arquivo fonte do fmt (`base.h`) no
+ * post_install do Podfile, forçando `FMT_USE_CONSTEVAL 0`. Como
+ * o patch é source-level e roda DEPOIS de o CocoaPods baixar o
+ * pod, o compilador não tem como ignorar. Também aplica as
+ * build_settings como cinto+suspensório.
  *
  * Zero impacto em produção: as format strings do fmt são todas
- * literais internas e sempre corretas — a validação em runtime
- * é equivalente à de compile-time nesse caso específico.
- *
- * Como remover: quando migrar pra Expo SDK 56+ / RN 0.83.9+,
- * tira este plugin do `app.config.js`. Se buildar sem erro,
- * pode deletar o arquivo.
+ * literais internas e sempre corretas — validação em runtime é
+ * equivalente à de compile-time nesse caso.
  *
  * Referências:
  *   - facebook/react-native#55601
  *   - expo/expo#44229
  *   - fmtlib/fmt#4740
+ *   - github.com/joaoalvess/expo-fmt-consteval-fix (mesmo approach)
  */
 
 const { withDangerousMod } = require("@expo/config-plugins");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const PATCH_MARKER = "# BEGIN fmt-consteval-fix";
-const PATCH_END = "# END fmt-consteval-fix";
+const PATCH_MARKER = "# BEGIN fmt-consteval-fix v2";
+const PATCH_END = "# END fmt-consteval-fix v2";
 
+// Snippet Ruby que:
+//   1. Edita ios/Pods/fmt/include/fmt/base.h → FMT_USE_CONSTEVAL 0
+//   2. Ajusta build_settings dos pods fmt e RCT-Folly (fallback)
 const PATCH_SNIPPET = `
-    ${PATCH_MARKER}
-    installer.pods_project.targets.each do |target|
-      if target.name == 'fmt' || target.name == 'RCT-Folly'
-        target.build_configurations.each do |config|
-          config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
-          config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
-          unless config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'].include?('FMT_USE_CONSTEVAL=0')
-            config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'FMT_USE_CONSTEVAL=0'
-          end
+  ${PATCH_MARKER}
+  # Fix pro erro de build fmt/consteval no Xcode 26.4+ (Apple Clang 21).
+  # Ver facebook/react-native#55601. Remover ao subir pra Expo SDK 56+.
+  fmt_base_h = File.join(installer.sandbox.root, 'fmt', 'include', 'fmt', 'base.h')
+  if File.exist?(fmt_base_h)
+    original = File.read(fmt_base_h)
+    patched = original.gsub(/^\\s*#\\s*define\\s+FMT_USE_CONSTEVAL\\s+1\\s*$/, '# define FMT_USE_CONSTEVAL 0')
+    if original != patched
+      File.write(fmt_base_h, patched)
+      Pod::UI.puts "[fmt-consteval-fix] Patched \#{fmt_base_h}"
+    end
+  end
+  installer.pods_project.targets.each do |target|
+    if target.name == 'fmt' || target.name == 'RCT-Folly'
+      target.build_configurations.each do |config|
+        config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+        unless config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'].include?('FMT_USE_CONSTEVAL=0')
+          config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'FMT_USE_CONSTEVAL=0'
         end
       end
     end
-    ${PATCH_END}
+  end
+  ${PATCH_END}
 `;
 
 const withFmtConstevalFix = (config) => {
@@ -66,49 +84,71 @@ const withFmtConstevalFix = (config) => {
       );
 
       if (!fs.existsSync(podfilePath)) {
-        console.warn("[withFmtConstevalFix] Podfile não encontrado, pulando");
+        console.warn(
+          "[withFmtConstevalFix] Podfile não encontrado em " + podfilePath,
+        );
         return config;
       }
 
       let podfileContent = fs.readFileSync(podfilePath, "utf8");
 
-      // Idempotência: se já aplicou, não faz nada.
+      // Remove versões antigas do patch (v1) se existirem, pra
+      // permitir "upgrade" limpo do plugin sem edição manual.
+      const OLD_MARKER_START = "# BEGIN fmt-consteval-fix";
+      const OLD_MARKER_END = "# END fmt-consteval-fix";
+      if (
+        podfileContent.includes(OLD_MARKER_START) &&
+        !podfileContent.includes(PATCH_MARKER)
+      ) {
+        const oldPatchRegex = new RegExp(
+          `\\s*${escapeRegex(OLD_MARKER_START)}[\\s\\S]*?${escapeRegex(OLD_MARKER_END)}\\s*`,
+          "g",
+        );
+        podfileContent = podfileContent.replace(oldPatchRegex, "\n");
+      }
+
+      // Idempotência: se v2 já foi aplicado, não faz nada.
       if (podfileContent.includes(PATCH_MARKER)) {
+        fs.writeFileSync(podfilePath, podfileContent, "utf8");
         return config;
       }
 
-      // Estratégia: injeta o snippet logo antes do `end` que
-      // fecha o post_install block padrão do RN/Expo.
+      // Estratégia: procura o `post_install do |installer|` e
+      // injeta o snippet logo APÓS a linha de abertura (não antes
+      // do `end`). Isso garante que o patch rode mesmo se o corpo
+      // do post_install tiver `return` ou outras condicionais.
       //
-      // O post_install do template é:
-      //   post_install do |installer|
-      //     react_native_post_install(installer, ...)
-      //     ...
-      //   end
-      //
-      // Procuramos o post_install e injetamos antes do `end`.
-      const postInstallRegex =
-        /post_install do \|installer\|([\s\S]*?)^\s*end\s*$/m;
-      const match = podfileContent.match(postInstallRegex);
+      // Se não achar post_install, cria um novo no final do arquivo.
+      const openingRegex = /(post_install\s+do\s+\|installer\|\s*\n)/;
+      const openingMatch = podfileContent.match(openingRegex);
 
-      if (!match) {
-        // Sem post_install existente — adiciona um novo no fim.
-        podfileContent += `\n\npost_install do |installer|${PATCH_SNIPPET}end\n`;
+      if (openingMatch) {
+        // Injeta logo após a abertura
+        podfileContent = podfileContent.replace(
+          openingRegex,
+          `$1${PATCH_SNIPPET}\n`,
+        );
+        console.log(
+          "[withFmtConstevalFix] Snippet injetado no post_install existente",
+        );
       } else {
-        // Injeta o snippet no final do post_install existente,
-        // antes do `end`.
-        const fullMatch = match[0];
-        const withoutClosingEnd = fullMatch.replace(/^(\s*)end\s*$/m, "");
-        const patched = `${withoutClosingEnd}${PATCH_SNIPPET}end\n`;
-        podfileContent = podfileContent.replace(fullMatch, patched);
+        // Sem post_install — cria um novo no fim do arquivo
+        podfileContent += `\n\npost_install do |installer|\n${PATCH_SNIPPET}\nend\n`;
+        console.log(
+          "[withFmtConstevalFix] post_install criado do zero (Podfile não tinha um)",
+        );
       }
 
       fs.writeFileSync(podfilePath, podfileContent, "utf8");
-      console.log("[withFmtConstevalFix] Podfile patcheado com sucesso");
+      console.log("[withFmtConstevalFix] Podfile patcheado com sucesso ✓");
 
       return config;
     },
   ]);
 };
+
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 module.exports = withFmtConstevalFix;

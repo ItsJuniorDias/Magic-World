@@ -9,14 +9,12 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import { useRef, useState, useEffect, useMemo, useCallback } from "react";
 
-import * as Application from "expo-application";
-
 import { LinearGradient } from "expo-linear-gradient";
 
 import { Colors } from "@/constants/theme";
 import Text from "@/components/text";
 
-import { GlassView } from "expo-glass-effect";
+import GlassView from "@/components/ui/Glass";
 import { FontAwesome6 } from "@expo/vector-icons";
 
 import { franc } from "franc-min";
@@ -48,7 +46,6 @@ import { useStoriesStore } from "@/store/useStoriesStore";
 
 import { useMagicProgressStore } from "@/store/useMagicProgressStore";
 import { ChapterCompletedModal } from "@/components/(completed-chapter)";
-import { getUserKey } from "@/services/getUserKey";
 
 import { useIsFocused } from "@react-navigation/native";
 import {
@@ -62,7 +59,6 @@ import {
 const HEADER_HEIGHT = 420;
 const MIN_HEADER_HEIGHT = 160;
 const SCREEN_HEIGHT = Dimensions.get("window").height;
-const SAFE_MARGIN = 140;
 
 export default function StorieScreen() {
   const isFocused = useIsFocused();

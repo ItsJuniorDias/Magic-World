@@ -91,27 +91,12 @@ export default function RootLayout() {
             />
 
             <Stack.Screen
-              name="(endless-runner)/index"
-              options={{ headerShown: false }}
-            />
-
-            <Stack.Screen
               name="(terms-eula)/index"
               options={{ headerShown: false }}
             />
 
             <Stack.Screen
               name="(privacy-policy)/index"
-              options={{ headerShown: false }}
-            />
-
-            <Stack.Screen
-              name="(platformer-adventure)/index"
-              options={{ headerShown: false }}
-            />
-
-            <Stack.Screen
-              name="(runner-kart)/index"
               options={{ headerShown: false }}
             />
 

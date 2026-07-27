@@ -16,7 +16,7 @@ import { useAdventureProfileStore } from "@/store/useAdventureProfileStore";
 import { generateJSON } from "@/services/ai";
 import QuizSkeleton from "@/components/(quiz-skeleton)";
 import { StatusBar } from "expo-status-bar";
-import { GlassView } from "expo-glass-effect";
+import GlassView from "@/components/ui/Glass";
 import { FontAwesome6 } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 

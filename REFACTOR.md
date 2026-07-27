@@ -323,6 +323,131 @@ Referências: facebook/react-native#55601, expo/expo#44229, fmtlib/fmt#4740.
 
 ---
 
+## Substituição do `expo-glass-effect` por `expo-blur`
+
+**Sintoma:** ao rodar `bun run ios` você vê:
+
+```
+node_modules/expo-glass-effect/ios/GlassContainer.swift:49:24
+method does not override any method from its superclass
+```
+
+Em `mountChildComponentView`, `unmountChildComponentView`, tanto em
+`GlassContainer.swift` quanto em `GlassView.swift`.
+
+**Causa:** `expo-glass-effect@0.1.8` foi atualizada em set/2025
+(PR expo/expo#39595) pra usar overrides de Fabric
+(`mountChildComponentView` / `unmountChildComponentView`) que só
+existem quando `newArchEnabled: true`. O projeto está em old arch
+(`newArchEnabled: false` em `app.config.js`), então os overrides
+não encontram método na superclass e o build quebra.
+
+**Fix aplicado neste refactor:**
+
+- Novo componente `components/ui/Glass/index.tsx` — wrapper sobre
+  `BlurView` de `expo-blur` (já instalado, `^15.0.8`) com API
+  compatível com `GlassView`. Aceita as mesmas props (`style`,
+  `isInteractive`, `glassEffectStyle`, `intensity`).
+- Substituídos 6 imports em: `(completed-chapter)`, `(storie)`,
+  `(categories-detail)`, `(quiz)`, `(categories)`, `(memory-game)`.
+- Removido `expo-glass-effect` do `package.json`.
+
+**Diferença visual:** `expo-glass-effect` é o "liquid glass" novo
+do iOS 26 (com highlights dinâmicos). `expo-blur` é o blur
+clássico do iOS (UIVisualEffectView). Pra chips, botões
+circulares e modais que o app usa, a diferença é sutil.
+
+**Como reverter** (quando migrar pra New Architecture):
+
+1. Adiciona `expo-glass-effect` de volta ao `package.json`.
+2. Edita `components/ui/Glass/index.tsx` pra usar `GlassView`
+   internamente (a API já é compatível, só troca o interior).
+3. Não precisa mexer em nenhuma das 6 telas.
+
+**Passos depois de extrair o zip:**
+
+```bash
+# Remove os artifacts antigos com expo-glass-effect
+rm -rf node_modules ios/Pods ios/Podfile.lock ios/build
+bun install
+npx expo prebuild --platform ios --clean
+cd ios && pod install && cd ..
+bun run ios --device
+```
+
+---
+
+## Limpeza de dead code (v3.5)
+
+**Contexto:** o erro `Unable to resolve "../../../assets/texture/moon.jpg"` no
+Metro apontou pra código legado dos jogos 3D que referenciavam assets grandes
+sem que os jogos fossem realmente parte do fluxo principal do app (Magic World
+é posicionado como audiobook infantil, não como plataforma de mini-games 3D).
+
+### Rotas removidas
+
+- `app/(platformer-adventure)/` — Knight's Quest. Usava `three`, `@react-three/fiber`,
+  `expo-three`, `expo-gl` + GLBs pesados (espadas, robôs).
+- `app/(endless-runner)/` — Space Runner. Usava GLBs de 50MB cada
+  (planet_of_phoenix, asteroid_low_poly).
+- `app/(runner-kart)/` — já era stub vazio, estava comentado no games.tsx.
+
+### Componentes / utils removidos
+
+- `components/(joysticky-control)/` — só usado no platformer.
+- `components/(achievements-details)/` — 0 importadores.
+- `utils/addCraters.ts`, `utils/getDeviceId.ts`, `utils/globals.ts` — 0 importadores.
+- `helpers/shuffleArray.ts` — 0 importadores. Diretório removido.
+- `hooks/use-theme-color.ts` — 0 importadores após tokens virarem primary.
+- `services/getUserKey.ts`, `services/savePushToken.ts` — 0 importadores.
+- `TrackPlayerService.ts` na raiz — duplicata órfã de `services/trackPlayer.ts`.
+- `@types/glb.d.ts` — declaração de tipo pra `.glb`, sem imports depois da limpeza.
+- `plugin/withUnity.ts` — arquivo vazio (0 bytes) desde o início.
+
+### Deps removidas de `package.json`
+
+- `three` (2MB)
+- `three-stdlib` (600KB)
+- `@react-three/fiber`, `@react-three/drei`
+- `@types/three` (devDep)
+- `expo-three`, `expo-gl`
+- `expo-screen-orientation` (só era usado pra trancar landscape do platformer)
+- `create-expo-module` (era dep de dev pra criar novos módulos)
+- `expo-glass-effect` (removido na v3.4, substituído por wrapper sobre `expo-blur`)
+
+Redução estimada de bundle: ~5–7MB comprimido, ~150MB de assets removidos.
+
+### Imports órfãos limpos
+
+- `app/(tabs)/index.tsx` — removidos `addDoc`, `collection`, `getDocs`,
+  `serverTimestamp`, `setDoc`, `useMutation`, `useQueryClient`, `StoreReview`
+  (só apareciam em bloco comentado do seed manual).
+- `app/(storie)/index.tsx` — removidos `Application` (expo-application),
+  `getUserKey`, constante `SAFE_MARGIN`.
+
+### Games.tsx atualizado
+
+Restam **2 jogos leves**:
+- Quiz Master (`quiz`) — perguntas geradas via OpenRouter
+- Memory Match (`memory-game`) — jogo de memória local
+
+### Ação necessária na extração
+
+⚠️ Este zip **não inclui** `assets/sounds/*.mp3` (background tracks) —
+eles são grandes e não mudaram no refactor. Ao extrair:
+
+```bash
+# Extração que preserva os sons locais:
+unzip -o Magic-World-refactor-v3.5.zip
+# (o -o sobrescreve arquivos, mas não deleta os que não estão no zip)
+```
+
+Se você fez `rm -rf` do projeto antes de extrair, precisa restaurar
+`assets/sounds/` do git ou de backup, senão o `constants/backgroundTracks.ts`
+não vai conseguir resolver os requires e a tela de story quebra.
+
+---
+
 ## Métricas do refactor
 
 - **40+ cores hex hardcoded** → **~5** (as que sobraram estão nas

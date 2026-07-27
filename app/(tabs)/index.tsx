@@ -21,25 +21,19 @@ import React, {
 } from "react"; // Adicionado useRef
 import { useRouter } from "expo-router";
 import {
-  addDoc,
-  collection,
   doc,
-  getDocs,
   increment,
-  serverTimestamp,
-  setDoc,
   updateDoc,
 } from "firebase/firestore";
 import { useStoriesStore } from "@/store/useStoriesStore";
 
 import { useLikedStore } from "@/store/useLikedStore";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { getStories } from "@/services/getStories";
 import CardSkeleton from "@/components/card-skeleton";
 import { uploadGeminiToCloudinary } from "@/services/generateURL";
 
-import * as StoreReview from "expo-store-review";
 import { useAppReview } from "@/hooks/useAppReview";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -259,23 +253,20 @@ Structure:
           requestReviewOnce();
         }, 30000);
 
-        // await AsyncStorage.removeItem("@app_review_requested");
-
+        // Seed manual de novas histórias (dev-only):
+        // 1. Descomenta as duas linhas abaixo
+        // 2. Reinstala `firebase/firestore` addDoc/collection/serverTimestamp
+        // 3. Adiciona no import: import { addDoc, collection, serverTimestamp }
+        //
         // const story = await generateStory();
-        // console.log("GENERATED STORY:", story);
-
-        // const result = await addDoc(collection(db, "stories"), {
-        //   ...story,
-        //   createdAt: serverTimestamp(),
-        // });
-        // console.log(result, "STORY ADDED WITH ID");
+        // await addDoc(collection(db, "stories"), { ...story, createdAt: serverTimestamp() });
       } catch (err) {
         console.error(err);
       }
     };
     load();
 
-    loadLikedStories(); // Carrega os likes ao montar a tela
+    loadLikedStories();
   }, []);
 
   // ✅ CORREÇÃO: renderItem agora é um CALLBACK estável

@@ -53,26 +53,38 @@ target 'MagicWorld' do
   )
 
   post_install do |installer|
+
+  # BEGIN fmt-consteval-fix v2
+  # Fix pro erro de build fmt/consteval no Xcode 26.4+ (Apple Clang 21).
+  # Ver facebook/react-native#55601. Remover ao subir pra Expo SDK 56+.
+  fmt_base_h = File.join(installer.sandbox.root, 'fmt', 'include', 'fmt', 'base.h')
+  if File.exist?(fmt_base_h)
+    original = File.read(fmt_base_h)
+    patched = original.gsub(/^\s*#\s*define\s+FMT_USE_CONSTEVAL\s+1\s*$/, '# define FMT_USE_CONSTEVAL 0')
+    if original != patched
+      File.write(fmt_base_h, patched)
+      Pod::UI.puts "[fmt-consteval-fix] Patched #{fmt_base_h}"
+    end
+  end
+  installer.pods_project.targets.each do |target|
+    if target.name == 'fmt' || target.name == 'RCT-Folly'
+      target.build_configurations.each do |config|
+        config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+        unless config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'].include?('FMT_USE_CONSTEVAL=0')
+          config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'FMT_USE_CONSTEVAL=0'
+        end
+      end
+    end
+  end
+  # END fmt-consteval-fix v2
+
     react_native_post_install(
       installer,
       config[:reactNativePath],
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
-
-    # BEGIN fmt-consteval-fix
-    installer.pods_project.targets.each do |target|
-      if target.name == 'fmt' || target.name == 'RCT-Folly'
-        target.build_configurations.each do |config|
-          config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
-          config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
-          unless config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'].include?('FMT_USE_CONSTEVAL=0')
-            config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'FMT_USE_CONSTEVAL=0'
-          end
-        end
-      end
-    end
-    # END fmt-consteval-fix
 end
 
 end

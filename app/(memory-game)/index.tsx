@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import Text from "@/components/text";
 import { Colors } from "@/constants/theme";
-import { GlassView } from "expo-glass-effect";
+import GlassView from "@/components/ui/Glass";
 import { FontAwesome6 } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";

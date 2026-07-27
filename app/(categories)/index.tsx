@@ -1,7 +1,7 @@
 import React from "react";
 import { FlatList, Pressable, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
-import { GlassView } from "expo-glass-effect";
+import GlassView from "@/components/ui/Glass";
 import { MaterialIcons, FontAwesome6 } from "@expo/vector-icons";
 
 import Text from "@/components/ui/Text";

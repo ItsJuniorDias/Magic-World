@@ -7,7 +7,6 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import * as ScreenOrientation from "expo-screen-orientation";
 import { Ionicons } from "@expo/vector-icons";
 
 import Text from "@/components/ui/Text";
@@ -18,20 +17,12 @@ type Game = {
   id: string;
   title: string;
   emoji: string;
-  accent: string; // cor de acento — puxada da palette pra manter identidade
+  accent: string;
   route: string;
   description: string;
 };
 
 const GAMES: Game[] = [
-  {
-    id: "endless-runner",
-    title: "Space Runner",
-    emoji: "🚀",
-    accent: tokens.palette.amber500,
-    route: "/(endless-runner)",
-    description: "Navigate through asteroids.",
-  },
   {
     id: "quiz",
     title: "Quiz Master",
@@ -48,29 +39,12 @@ const GAMES: Game[] = [
     route: "/(memory-game)",
     description: "Train your brain.",
   },
-  {
-    id: "platformer-adventure",
-    title: "Knight's Quest",
-    emoji: "🗡️",
-    accent: tokens.palette.purple500,
-    route: "/(platformer-adventure)",
-    description: "Magical platforming adventure.",
-  },
 ];
 
 export default function GamesHub() {
   const router = useRouter();
   const t = useThemedTokens();
   const isDark = t.scheme === "dark";
-
-  const handleGamePress = (game: Game) => {
-    if (game.id === "platformer-adventure") {
-      ScreenOrientation.lockAsync(
-        ScreenOrientation.OrientationLock.LANDSCAPE_LEFT,
-      ).catch(() => {});
-    }
-    router.push(game.route as any);
-  };
 
   return (
     <>
@@ -85,7 +59,6 @@ export default function GamesHub() {
           ]}
           showsVerticalScrollIndicator={false}
         >
-          {/* Header */}
           <View
             style={[
               styles.headerContainer,
@@ -123,7 +96,7 @@ export default function GamesHub() {
                   ...(isDark ? {} : t.shadow.sm),
                 },
               ]}
-              onPress={() => handleGamePress(game)}
+              onPress={() => router.push(game.route as any)}
               activeOpacity={0.75}
             >
               <View
