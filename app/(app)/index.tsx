@@ -1,38 +1,35 @@
 import React, { useEffect, useRef } from "react";
-import { Animated, Dimensions, Linking, Platform } from "react-native";
-
-import Text from "@/components/text";
-import { Colors } from "@/constants/theme";
-import { StatusBar } from "expo-status-bar";
-
-import background_header from "../../assets/images/background-header.png";
-
-import { Button, Container, Content, Gradient, GradientImage } from "./styles";
+import { Animated, Dimensions } from "react-native";
 import { useRouter } from "expo-router";
-
+import { StatusBar } from "expo-status-bar";
 import Purchases from "react-native-purchases";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useLikedStore } from "@/store/useLikedStore";
 
+import Text from "@/components/ui/Text";
+import Button from "@/components/ui/Button";
+import { useThemedTokens } from "@/hooks/use-tokens";
+import { useLikedStore } from "@/store/useLikedStore";
 import { useAdventureProfileStore } from "@/store/useAdventureProfileStore";
 
-import { getDeviceId } from "@/utils/getDeviceId";
-import { savePushToken } from "@/services/savePushToken";
+import background_header from "../../assets/images/background-header.png";
+import { Container, Content, Gradient, GradientImage } from "./styles";
 
 const { height } = Dimensions.get("window");
 
 export default function OnboardingScreen() {
+  const t = useThemedTokens();
+  const router = useRouter();
+
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const translateYAnim = useRef(new Animated.Value(0)).current;
 
   const { loadProfile, profile } = useAdventureProfileStore();
-
-  const router = useRouter();
+  const init = useLikedStore((s) => s.init);
 
   useEffect(() => {
     Animated.loop(
       Animated.parallel([
-        // 🔍 Zoom
+        // Zoom sutil
         Animated.sequence([
           Animated.timing(scaleAnim, {
             toValue: 1.08,
@@ -45,11 +42,10 @@ export default function OnboardingScreen() {
             useNativeDriver: true,
           }),
         ]),
-
-        // 🧭 Parallax vertical
+        // Parallax vertical
         Animated.sequence([
           Animated.timing(translateYAnim, {
-            toValue: -height * 0.04, // sobe levemente
+            toValue: -height * 0.04,
             duration: 9000,
             useNativeDriver: true,
           }),
@@ -63,16 +59,6 @@ export default function OnboardingScreen() {
     ).start();
   }, []);
 
-  const saveProStatus = async (status: boolean) => {
-    try {
-      await AsyncStorage.setItem("@user_is_pro", JSON.stringify(status));
-    } catch (e) {
-      console.error("Erro ao salvar status Pro", e);
-    }
-  };
-
-  const init = useLikedStore((s) => s.init);
-
   useEffect(() => {
     init();
 
@@ -83,15 +69,10 @@ export default function OnboardingScreen() {
         await AsyncStorage.setItem("@adventure_profile_viewed", "true");
       }
     };
-
     load();
 
-    // saveProStatus(true);
-
-    // Platform-specific API keys
-    const iosApiKey = "appl_UcIhNLORZZgNuPFDjVUoqawwHfK";
-
-    Purchases.configure({ apiKey: iosApiKey });
+    // Nota: chave RevenueCat pública por design, ok manter hardcoded
+    Purchases.configure({ apiKey: "appl_UcIhNLORZZgNuPFDjVUoqawwHfK" });
   }, []);
 
   return (
@@ -99,18 +80,16 @@ export default function OnboardingScreen() {
       <StatusBar style="light" translucent />
 
       <Container>
-        {/* Imagem com PARALLAX + ZOOM */}
         <Animated.Image
           source={background_header}
           resizeMode="cover"
           style={{
             width: "100%",
-            height: "80%", // evita borda branca ao mover
+            height: "80%",
             transform: [{ scale: scaleAnim }, { translateY: translateYAnim }],
           }}
         />
 
-        {/* Gradient no topo */}
         <GradientImage
           start={{ x: 0.3, y: 0.3 }}
           colors={["rgba(0,0,0,0.4)", "transparent"]}
@@ -120,38 +99,32 @@ export default function OnboardingScreen() {
       <Gradient
         colors={[
           "transparent",
-          "rgba(0,0,0,0.9)",
-          "rgba(0,0,0,0.9)",
-          "rgba(0,0,0,0.9)",
-          "rgba(0,0,0,0.9)",
+          t.color.overlayStrong,
+          t.color.overlayStrong,
+          t.color.overlayStrong,
+          t.color.overlayStrong,
         ]}
       >
         <Content>
           <Text
-            fontFamily="bold"
-            fontSize={28}
-            color={Colors.dark.text}
-            title={`Welcome to Our\nAudiobook Journey`}
-          />
+            variant="display"
+            size="xxxl"
+            color={t.color.textPrimary}
+          >
+            {`Welcome to Our\nAudiobook Journey`}
+          </Text>
 
-          <Text
-            fontFamily="regular"
-            fontSize={16}
-            color={Colors.dark.text}
-            title={`Turn the page, or rather, press play, and let the adventure begin.`}
-          />
+          <Text variant="body" color={t.color.textPrimary}>
+            Turn the page, or rather, press play, and let the adventure begin.
+          </Text>
 
           <Button
+            label="Get Started"
+            size="lg"
+            fullWidth
             onPress={() => router.push("/(profile-adventure)")}
-            activeOpacity={0.85}
-          >
-            <Text
-              fontFamily="bold"
-              fontSize={18}
-              color={Colors.dark.background}
-              title="Get Started"
-            />
-          </Button>
+            style={{ marginTop: t.spacing.lg }}
+          />
         </Content>
       </Gradient>
     </>

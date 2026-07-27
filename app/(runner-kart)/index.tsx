@@ -1,12 +1,31 @@
-import { requireNativeComponent } from "react-native";
+import { requireNativeViewManager } from "expo-modules-core";
+import { View, useWindowDimensions, StyleSheet } from "react-native";
 
-const UnityView = requireNativeComponent("UnityView");
+const NativeView: React.ComponentType<any> = requireNativeViewManager("Unity");
 
-export default function App() {
+export function UnityView(props: any) {
+  return <NativeView {...props} />;
+}
+
+export default function RunnerKartScreen() {
+  // Esse hook escuta mudanças de orientação automaticamente
+  const { width, height } = useWindowDimensions();
+
   return (
-    <UnityView
-      style={{ flex: 1 }}
-      onMessage={(e) => console.log(e.nativeEvent.message)}
-    />
+    <View style={styles.container}>
+      <UnityView
+        style={{
+          width: width,
+          height: height,
+        }}
+      />
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#000", // Fundo preto evita flashes brancos na rotação
+  },
+});

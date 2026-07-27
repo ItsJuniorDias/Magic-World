@@ -13,22 +13,23 @@ import Text from "@/components/text";
 import { Colors } from "@/constants/theme";
 import { AchievementModal } from "@/components/(achievements)";
 import { useAdventureProfileStore } from "@/store/useAdventureProfileStore";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { generateJSON } from "@/services/ai";
 import QuizSkeleton from "@/components/(quiz-skeleton)";
 import { StatusBar } from "expo-status-bar";
 import { GlassView } from "expo-glass-effect";
 import { FontAwesome6 } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
-const genAI = new GoogleGenerativeAI(
-  process.env.EXPO_PUBLIC_GOOGLE_API_KEY || "",
-);
-
-export const geminiModel = genAI.getGenerativeModel({
-  model: "gemini-2.5-flash",
-});
-
 const { width } = Dimensions.get("window");
+
+type QuizQuestion = {
+  id: number;
+  question: string;
+  options: string[];
+  answer: string;
+  rewardChapters: number;
+  badgeId: number;
+};
 
 export default function QuizScreen() {
   const { profile } = useAdventureProfileStore();
@@ -49,35 +50,38 @@ export default function QuizScreen() {
   useEffect(() => {
     async function fetchQuestions() {
       const prompt = `
-        Generate 5 fantasy/magic themed quiz questions.
-        Each question should have:
-        - question text
-        - 4 options
-        - correct answer
-        - rewardChapters (number)
-        - badgeId (number)
-        Format as JSON array:
-        [
-          {
-            "id": 1,
-            "question": "...",
-            "options": ["..","..","..",".."],
-            "answer": "...",
-            "rewardChapters": 2,
-            "badgeId": 1
-          }
-        ]
-      `;
+Generate 5 fantasy/magic themed quiz questions.
+Each question must have:
+- question text
+- exactly 4 options
+- one correct answer (must match one of the options exactly)
+- rewardChapters (number, 1-3)
+- badgeId (number)
+
+Return a JSON array with this exact shape:
+[
+  {
+    "id": 1,
+    "question": "...",
+    "options": ["..","..","..",".."],
+    "answer": "...",
+    "rewardChapters": 2,
+    "badgeId": 1
+  }
+]
+`;
 
       try {
-        const result = await geminiModel.generateContent(prompt);
-
-        const parsed = JSON.parse(
-          result.response
-            .text()
-            .replace(/```json|```/g, "")
-            .trim(),
-        );
+        const parsed = await generateJSON<QuizQuestion[]>(prompt, {
+          model: "fast",
+          temperature: 0.8,
+          validate: (v): v is QuizQuestion[] =>
+            Array.isArray(v) &&
+            v.length > 0 &&
+            typeof v[0]?.question === "string" &&
+            Array.isArray(v[0]?.options) &&
+            v[0].options.length === 4,
+        });
 
         setQuestions(parsed);
 

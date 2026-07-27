@@ -13,8 +13,8 @@ import { FontAwesome6 } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 
 import { CardContainer, Gradient } from "./styles";
-import Text from "../text";
-import { Colors } from "@/constants/theme";
+import Text from "@/components/ui/Text";
+import { tokens } from "@/constants/tokens";
 
 export type CardProps = {
   variant?: "default" | "category" | "recent";
@@ -143,13 +143,17 @@ export default function Card({
             },
           ]}
         >
-          <FontAwesome6 name="crown" size={10} color="#fff" />
+          <FontAwesome6
+            name="crown"
+            size={10}
+            color={tokens.color.dark.textPrimary}
+          />
           <Text
             title="PREMIUM"
             fontFamily="bold"
             fontSize={12}
-            color="#fff"
-            style={{ marginLeft: 4 }}
+            color={tokens.color.dark.textPrimary}
+            style={{ marginLeft: tokens.spacing.xxs }}
           />
         </Animated.View>
       )}
@@ -194,21 +198,25 @@ export default function Card({
               name="heart"
               size={24}
               solid={localFavorite}
-              color={localFavorite ? Colors.light.red : "#fff"}
+              color={
+                localFavorite
+                  ? tokens.color.dark.danger
+                  : tokens.color.dark.textPrimary
+              }
             />
           </Animated.View>
         </TouchableOpacity>
       )}
 
       <Gradient
-        colors={["transparent", "rgba(0,0,0,0.4)", "rgba(0,0,0,0.9)"]}
+        colors={["transparent", "rgba(0,0,0,0.4)", tokens.color.dark.overlayStrong]}
         variant={variant}
       >
         {title && (
           <Text
             fontFamily="bold"
             fontSize={18}
-            color="#fff"
+            color={tokens.color.dark.textPrimary}
             title={title}
             style={{ textAlign: variant === "category" ? "center" : "left" }}
           />
@@ -218,7 +226,7 @@ export default function Card({
           <Text
             fontFamily="regular"
             fontSize={14}
-            color="#fff"
+            color={tokens.color.dark.textPrimary}
             title={`${views} Views`}
           />
         )}
@@ -230,23 +238,20 @@ export default function Card({
 const styles = StyleSheet.create({
   badgeOpacity: {
     position: "absolute",
-    top: 12,
-    left: 12,
+    top: tokens.spacing.sm,
+    left: tokens.spacing.sm,
     zIndex: 15,
     flexDirection: "row",
     alignItems: "center",
-    // Fundo preto translúcido (efeito fumê)
-    backgroundColor: "rgba(0, 0, 0, 0.55)",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    // Borda fina para dar profundidade ao "vidro"
+    // Fundo escuro translúcido (efeito fumê)
+    backgroundColor: tokens.color.dark.overlay,
+    paddingHorizontal: tokens.spacing.xs + 2,
+    paddingVertical: tokens.spacing.xxs + 1,
+    borderRadius: tokens.radius.xl,
+    // Borda fina pra dar profundidade ao "vidro"
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
-    // Sombra suave para destacar do fundo
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    // Sombra suave pra destacar do fundo
+    ...tokens.shadow.md,
   },
 });

@@ -4,11 +4,17 @@ import { router } from "expo-router";
 import { GlassView } from "expo-glass-effect";
 import { MaterialIcons, FontAwesome6 } from "@expo/vector-icons";
 
-import Text from "@/components/text";
-import { Colors } from "@/constants/theme";
+import Text from "@/components/ui/Text";
+import { useThemedTokens } from "@/hooks/use-tokens";
 import { Container, ModernCategoryCard } from "./styles";
 
-const categories = [
+type Category = {
+  id: string;
+  title: string;
+  icon: string;
+};
+
+const CATEGORIES: Category[] = [
   { id: "1", title: "adventure", icon: "map" },
   { id: "2", title: "romance", icon: "heart-broken" },
   { id: "3", title: "fantasy", icon: "star" },
@@ -17,29 +23,43 @@ const categories = [
 ];
 
 export default function CategoriesScreen() {
-  const renderCategory = ({ item }: { item: (typeof categories)[0] }) => (
+  const t = useThemedTokens();
+
+  const renderCategory = ({ item }: { item: Category }) => (
     <ModernCategoryCard
       key={item.id}
-      onPress={() => router.push(`/(categories-detail)?category=${item.title}`)}
+      onPress={() =>
+        router.push(`/(categories-detail)?category=${item.title}` as any)
+      }
     >
-      <MaterialIcons name={item.icon as any} size={36} color="#fff" />
-      <Text
-        title={item.title}
-        fontFamily="bold"
-        fontSize={16}
-        color="#FFFFFF"
-        style={{ marginTop: 12, textAlign: "center" }}
+      <MaterialIcons
+        name={item.icon as any}
+        size={36}
+        color={t.color.textPrimary}
       />
+      <Text
+        variant="heading"
+        size="md"
+        color={t.color.textPrimary}
+        style={{ marginTop: t.spacing.sm, textAlign: "center" }}
+      >
+        {item.title}
+      </Text>
     </ModernCategoryCard>
   );
 
   return (
     <Container showsVerticalScrollIndicator={false}>
-      <View style={styles.contentHeader}>
-        <Pressable
-          style={styles.backButtonWrapper}
-          onPress={() => router.back()}
-        >
+      <View
+        style={[
+          styles.contentHeader,
+          {
+            paddingHorizontal: t.spacing.lg,
+            marginBottom: t.spacing.lg,
+          },
+        ]}
+      >
+        <Pressable onPress={() => router.back()}>
           <GlassView
             style={styles.buttonBack}
             isInteractive
@@ -48,50 +68,44 @@ export default function CategoriesScreen() {
             <FontAwesome6
               name="chevron-left"
               size={22}
-              color={Colors.dark.text}
+              color={t.color.textPrimary}
             />
           </GlassView>
         </Pressable>
 
         <Text
-          fontFamily="bold"
-          fontSize={24}
-          color="#FFFFFF"
-          title="Categories"
-        />
+          variant="heading"
+          size="xxl"
+          color={t.color.textPrimary}
+        >
+          Categories
+        </Text>
 
         <View style={{ width: 48 }} />
       </View>
 
-      {/* LISTA DE CATEGORIAS EM DUAS COLUNAS */}
       <FlatList
-        data={categories}
+        data={CATEGORIES}
         renderItem={renderCategory}
         keyExtractor={(item) => item.id}
         numColumns={2}
         columnWrapperStyle={{
           justifyContent: "space-between",
-          marginBottom: 16,
-          marginHorizontal: 24,
+          marginBottom: t.spacing.md,
+          marginHorizontal: t.spacing.lg,
         }}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 24 }}
+        contentContainerStyle={{ paddingBottom: t.spacing.lg }}
       />
     </Container>
   );
 }
 
 const styles = StyleSheet.create({
-  backButtonWrapper: {
-    // top: 16,
-    // left: 24,
-  },
   contentHeader: {
     alignItems: "center",
     justifyContent: "space-between",
     flexDirection: "row",
-    paddingHorizontal: 24,
-    marginBottom: 24,
   },
   buttonBack: {
     height: 48,

@@ -1,18 +1,30 @@
 import styled from "styled-components/native";
 import { LinearGradient } from "expo-linear-gradient";
-import { Image } from "expo-image"
+import { Image } from "expo-image";
+import { tokens } from "@/constants/tokens";
+
+type CardVariant = "default" | "category" | "recent";
 
 type CardContainerProps = {
-  variant?: "default" | "category" | "recent";
+  variant?: CardVariant;
+};
+
+const CARD_DIMENSIONS: Record<
+  CardVariant,
+  { width: number; height: number; radius: number }
+> = {
+  default: { width: 214, height: 295, radius: tokens.radius.xxl },
+  category: { width: 144, height: 144, radius: tokens.radius.circle },
+  recent: { width: 214, height: 295, radius: tokens.radius.xxl },
 };
 
 export const CardContainer = styled.TouchableOpacity<CardContainerProps>`
-  width: ${(props) => (props.variant === "category" ? "144px" : "214px")};
-  height: ${(props) => (props.variant === "category" ? "144px" : "295px")};
-  border-radius: ${(props) => (props.variant === "category" ? "100px" : "24px")};
+  width: ${({ variant = "default" }) => CARD_DIMENSIONS[variant].width}px;
+  height: ${({ variant = "default" }) => CARD_DIMENSIONS[variant].height}px;
+  border-radius: ${({ variant = "default" }) => CARD_DIMENSIONS[variant].radius}px;
   overflow: hidden;
-  margin-bottom: 16px;
-  margin-right: 16px;
+  margin-bottom: ${tokens.spacing.md}px;
+  margin-right: ${tokens.spacing.md}px;
 `;
 
 export const ImageCard = styled(Image)`
@@ -20,11 +32,13 @@ export const ImageCard = styled(Image)`
   width: 100%;
 `;
 
-export const Gradient = styled(LinearGradient)`
+export const Gradient = styled(LinearGradient)<CardContainerProps>`
   position: absolute;
   bottom: 0;
   width: 100%;
-  padding: 12px;
-  border-bottom-left-radius: ${(props) => (props.variant === "category" ? "100px" : "24px")};
-  border-bottom-right-radius: ${(props) => (props.variant === "category" ? "100px" : "24px")};
+  padding: ${tokens.spacing.sm}px;
+  border-bottom-left-radius: ${({ variant = "default" }) =>
+    CARD_DIMENSIONS[variant].radius}px;
+  border-bottom-right-radius: ${({ variant = "default" }) =>
+    CARD_DIMENSIONS[variant].radius}px;
 `;

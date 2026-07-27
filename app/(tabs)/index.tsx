@@ -1,5 +1,6 @@
 import Card from "@/components/card";
-import Text from "@/components/text";
+import Text from "@/components/ui/Text";
+import { tokens } from "@/constants/tokens";
 import { StatusBar } from "expo-status-bar";
 import {
   FlatList,
@@ -8,7 +9,7 @@ import {
   StyleSheet,
   View,
   Animated,
-} from "react-native"; // Adicionado Animated
+} from "react-native";
 
 import { db } from "../../firebaseConfig";
 import React, {
@@ -31,8 +32,6 @@ import {
 } from "firebase/firestore";
 import { useStoriesStore } from "@/store/useStoriesStore";
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
 import { useLikedStore } from "@/store/useLikedStore";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -44,16 +43,18 @@ import * as StoreReview from "expo-store-review";
 import { useAppReview } from "@/hooks/useAppReview";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const genAI = new GoogleGenerativeAI(
+// Texto via OpenRouter (services/ai). Imagem continua com
+// Gemini direto porque é chamada só pelo seed manual da home
+// (a função `generateStory` está comentada no useEffect).
+import { generateJSON } from "@/services/ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const geminiForImages = new GoogleGenerativeAI(
   process.env.EXPO_PUBLIC_GOOGLE_API_KEY || "",
 );
 
-export const geminiModel = genAI.getGenerativeModel({
-  model: "gemini-2.5-flash",
-});
-
-const geminiImage = genAI.getGenerativeModel({
-  model: "gemini-2.5-flash-image", // Note o sufixo "-image"
+const geminiImage = geminiForImages.getGenerativeModel({
+  model: "gemini-2.5-flash-image",
 });
 
 // --- COMPONENTE DE SEÇÃO MEMORIZADO PARA EVITAR PISQUE ---
@@ -80,8 +81,8 @@ const SectionComponent = ({
         title={title}
         fontFamily="bold"
         fontSize={24}
-        color="#FFFFFF"
-        style={{ marginBottom: 12, marginLeft: 24 }}
+        color={tokens.color.dark.textPrimary}
+        style={{ marginBottom: tokens.spacing.sm, marginLeft: tokens.spacing.lg }}
       />
 
       {loading ? (
@@ -151,14 +152,15 @@ export default function HomeScreen() {
   };
 
   async function generateStory() {
-    const textResult = await geminiModel.generateContent(`
-Write an original children’s saga-style story set in a magical adventure world.
+    // Texto via OpenRouter (services/ai já cuida de retry e parse JSON)
+    const story: any = await generateJSON(
+      `
+Write an original children's saga-style story set in a magical adventure world.
 
 Important character rules:
 Each chapter must focus on different main characters (children, creatures, or heroes), with unique personalities, backgrounds, and motivations.
 Do not reuse the same protagonist across chapters.
 Characters may meet, influence events, or be connected by the same world or legend, but each chapter should feel like a new perspective.
-
 
 Story guidelines:
 Genre: future
@@ -169,61 +171,34 @@ World-building should feel magical, safe, and wondrous
 Include discovery, courage, friendship, and mystery
 Avoid violence or dark themes unsuitable for children
 
-
 Narrative focus:
 Chapter 1: Introduce the world through the eyes of the first character
 Chapter 2: Expand the world with a new character from a different place or culture
 Chapter 3: Reveal a deeper secret of the world through a third, unexpected character
 
-
 Writing rules:
 Rich descriptions and sensory details
 Clear beginning, middle, and end for each chapter
 Maintain continuity of the world while changing protagonists
-Generate the story following a structured JSON format when requested.
+Generate the story following the exact JSON structure below.
 
 Structure:
 {
-  category: "future",
-  title: "",
-  thumbnail: "",
-  views: 0,
-  id: "",
-  isPro: true,
-  chapter: [
-    {
-      locked: false,
-      navigate: "/(storie)",
-      storie: "",
-      title: "",
-      thumbnail: ""
-    },
-    {
-      locked: true,
-      navigate: "/(storie)",
-      storie: "",
-      title: "",
-      thumbnail: ""
-    },
-    {
-      locked: true,
-      navigate: "/(storie)",
-      storie: "",
-      title: "",
-      thumbnail: ""
-    }
+  "category": "future",
+  "title": "",
+  "thumbnail": "",
+  "views": 0,
+  "id": "",
+  "isPro": true,
+  "chapter": [
+    { "locked": false, "navigate": "/(storie)", "storie": "", "title": "", "thumbnail": "" },
+    { "locked": true,  "navigate": "/(storie)", "storie": "", "title": "", "thumbnail": "" },
+    { "locked": true,  "navigate": "/(storie)", "storie": "", "title": "", "thumbnail": "" }
   ]
 }
-`);
-
-    const cleaned = textResult.response
-      .text()
-      .replace(/```json|```/g, "")
-      .trim();
-
-    console.log("CLEANED JSON:", cleaned);
-
-    const story = JSON.parse(cleaned);
+`,
+      { model: "smart", temperature: 0.85 },
+    );
 
     // Upload and set story thumbnail
     const storyImagePrompt = `Cover illustration for a children's mystery saga titled "${story.title}". The scene should be magical, safe, and wondrous, capturing the essence of discovery, courage, friendship, and mystery. Style: vibrant colors, whimsical details, and a touch of fantasy.`;
@@ -442,10 +417,10 @@ Structure:
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#15141A",
-    paddingTop: Platform.OS === "ios" ? 8 : 24,
+    backgroundColor: tokens.color.dark.bg,
+    paddingTop: Platform.OS === "ios" ? tokens.spacing.xs : tokens.spacing.lg,
   },
   section: {
-    marginBottom: 16,
+    marginBottom: tokens.spacing.md,
   },
 });

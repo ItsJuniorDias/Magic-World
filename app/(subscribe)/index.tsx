@@ -1,27 +1,30 @@
-import Text from "@/components/text";
-import { SubscribeContainer } from "./styles";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  TouchableOpacity,
   FlatList,
-  StyleSheet,
-  View,
   Linking,
+  StyleSheet,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { Colors } from "@/constants/theme";
-import { useEffect, useState } from "react";
 import Purchases from "react-native-purchases";
-import AsyncStorage from "@react-native-async-storage/async-storage"; // 1. Importar
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 
+import Text from "@/components/ui/Text";
+import Button from "@/components/ui/Button";
+import { useThemedTokens } from "@/hooks/use-tokens";
+import { SubscribeContainer } from "./styles";
 import { logEvent } from "@/services/analyticsHelper";
 
 export default function SubscribeScreen() {
   const router = useRouter();
+  const t = useThemedTokens();
 
   const [packages, setPackages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [purchasing, setPurchasing] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<any>(null);
 
   useEffect(() => {
@@ -34,7 +37,6 @@ export default function SubscribeScreen() {
 
           if (offerings.current.monthly)
             availablePackages.push(offerings.current.monthly);
-
           if (offerings.current.annual)
             availablePackages.push(offerings.current.annual);
 
@@ -52,7 +54,6 @@ export default function SubscribeScreen() {
     fetchPackages();
   }, []);
 
-  // 2. Função para salvar o status
   const saveProStatus = async (status: boolean) => {
     try {
       await AsyncStorage.setItem("@user_is_pro", JSON.stringify(status));
@@ -65,7 +66,7 @@ export default function SubscribeScreen() {
     if (!selectedPackage) return;
 
     try {
-      setLoading(true);
+      setPurchasing(true);
 
       await logEvent("purchase_started", {
         source: "subscribe_screen",
@@ -75,7 +76,6 @@ export default function SubscribeScreen() {
 
       const purchase = await Purchases.purchasePackage(selectedPackage);
 
-      // Verificando se a assinatura está ativa
       if (purchase.customerInfo.entitlements.active["Magic World Pro"]) {
         await logEvent("purchase_successful", {
           source: "subscribe_screen",
@@ -84,10 +84,8 @@ export default function SubscribeScreen() {
           package: selectedPackage.identifier,
         });
 
-        await saveProStatus(true); // 3. Salvar no storage
+        await saveProStatus(true);
         Alert.alert("Success", "Subscription activated!");
-        // Aqui você pode redirecionar o usuário: navigation.goBack();
-
         router.back();
       }
     } catch (error: any) {
@@ -103,7 +101,7 @@ export default function SubscribeScreen() {
         Alert.alert("Error", "An error occurred during purchase.");
       }
     } finally {
-      setLoading(false);
+      setPurchasing(false);
     }
   };
 
@@ -113,46 +111,61 @@ export default function SubscribeScreen() {
 
     return (
       <TouchableOpacity
-        style={[styles.card, isSelected && styles.selectedCard]}
+        style={[
+          {
+            backgroundColor: t.color.surface,
+            borderRadius: t.radius.xl,
+            padding: t.spacing.lg,
+            borderWidth: 2,
+            borderColor: isSelected ? t.color.brand : "transparent",
+          },
+          isSelected && {
+            backgroundColor: t.color.brandSubtle,
+          },
+        ]}
         onPress={() => setSelectedPackage(item)}
-        activeOpacity={0.8}
+        activeOpacity={0.85}
       >
         <View style={styles.cardHeader}>
           <Text
-            title={item.packageType === "MONTHLY" ? "Monthly" : "Annual"}
-            fontFamily="bold"
-            fontSize={22}
-            color={Colors.light.text}
-          />
+            variant="heading"
+            size="xxl"
+            color={t.color.textPrimary}
+          >
+            {isMonthly ? "Monthly" : "Annual"}
+          </Text>
         </View>
 
         <Text
-          fontFamily="regular"
-          fontSize={15}
-          color={Colors.light.text}
-          style={{ marginTop: 8 }}
-          title={
-            isMonthly
-              ? "• Unlock all story chapters\n• Ad-free experience\n• Billed monthly"
-              : "• Everything in Monthly\n• Best value for long stories\n• Billed annually"
-          }
-        />
+          variant="body"
+          color={t.color.textPrimary}
+          style={{ marginTop: t.spacing.xs }}
+        >
+          {isMonthly
+            ? "• Unlock all story chapters\n• Ad-free experience\n• Billed monthly"
+            : "• Everything in Monthly\n• Best value for long stories\n• Billed annually"}
+        </Text>
 
-        <View style={styles.priceRow}>
+        <View style={[styles.priceRow, { marginTop: t.spacing.sm }]}>
           <Text
-            fontFamily="bold"
-            fontSize={20}
-            color={isSelected ? "#5C81F5" : Colors.light.text}
-            title={item.product.priceString}
-          />
+            variant="heading"
+            size="xl"
+            color={isSelected ? t.color.brand : t.color.textPrimary}
+          >
+            {item.product.priceString}
+          </Text>
           {isSelected && (
-            <View style={styles.selectedBadge}>
-              <Text
-                title="Selected"
-                fontSize={12}
-                color="#fff"
-                fontFamily="bold"
-              />
+            <View
+              style={{
+                backgroundColor: t.color.brand,
+                paddingHorizontal: t.spacing.xs + 2,
+                paddingVertical: t.spacing.xxs,
+                borderRadius: t.radius.sm,
+              }}
+            >
+              <Text variant="label" color={t.color.textOnBrand}>
+                Selected
+              </Text>
             </View>
           )}
         </View>
@@ -161,55 +174,64 @@ export default function SubscribeScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: Colors.dark.background }}>
+    <View style={{ flex: 1, backgroundColor: t.color.bg }}>
       <SubscribeContainer
-        contentContainerStyle={{ marginHorizontal: 24, paddingTop: 40 }}
+        contentContainerStyle={{
+          marginHorizontal: t.spacing.lg,
+          paddingTop: t.spacing.xxl,
+        }}
       >
         <Text
-          title="Magic World Pro"
-          fontFamily="bold"
-          fontSize={32}
-          color="#ffffff"
-          style={{ marginBottom: 8 }}
-        />
+          variant="display"
+          color={t.color.textPrimary}
+          style={{ marginBottom: t.spacing.xs }}
+        >
+          Magic World Pro
+        </Text>
         <Text
-          title="Unlock all chapters and exclusive content."
-          fontFamily="regular"
-          fontSize={16}
-          color="#8E8E93"
-          style={{ marginBottom: 24 }}
-        />
+          variant="body"
+          color={t.color.textSecondary}
+          style={{ marginBottom: t.spacing.lg }}
+        >
+          Unlock all chapters and exclusive content.
+        </Text>
 
         {loading && packages.length === 0 ? (
-          <ActivityIndicator size="large" color="#5C81F5" />
+          <ActivityIndicator size="large" color={t.color.brand} />
         ) : (
           <FlatList
             data={packages}
             renderItem={renderPackage}
             keyExtractor={(item) => item.identifier}
-            contentContainerStyle={{ gap: 16, paddingBottom: 150 }}
+            contentContainerStyle={{
+              gap: t.spacing.md,
+              paddingBottom: 150,
+            }}
           />
         )}
       </SubscribeContainer>
 
       {!loading && packages.length > 0 && (
-        <View style={styles.footer}>
-          <TouchableOpacity
-            style={styles.subscribeButton}
+        <View
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            backgroundColor: t.color.surface,
+            padding: t.spacing.lg,
+            paddingBottom: t.spacing.xxl,
+            borderTopLeftRadius: t.radius.xxl,
+            borderTopRightRadius: t.radius.xxl,
+          }}
+        >
+          <Button
+            label="Subscribe Now"
+            size="lg"
+            fullWidth
+            loading={purchasing}
             onPress={handlePurchase}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text
-                title="Subscribe Now"
-                fontFamily="bold"
-                fontSize={18}
-                color="#fff"
-              />
-            )}
-          </TouchableOpacity>
+          />
 
           <TouchableOpacity
             onPress={async () => {
@@ -217,18 +239,17 @@ export default function SubscribeScreen() {
                 source: "subscribe_screen",
                 reason: "maybe_later",
               });
-
               router.back();
             }}
-            style={{ marginTop: 12 }}
+            style={{ marginTop: t.spacing.sm }}
           >
             <Text
-              title="Maybe Later"
-              fontFamily="regular"
-              fontSize={14}
-              color="#8E8E93"
+              variant="caption"
+              color={t.color.textSecondary}
               style={{ textAlign: "center" }}
-            />
+            >
+              Maybe Later
+            </Text>
           </TouchableOpacity>
 
           <View
@@ -236,35 +257,35 @@ export default function SubscribeScreen() {
               flexDirection: "row",
               justifyContent: "center",
               alignItems: "center",
-              marginTop: 16,
+              marginTop: t.spacing.md,
             }}
           >
             <TouchableOpacity onPress={() => router.push("/(privacy-policy)")}>
               <Text
-                title="Privacy Policy"
-                fontSize={14}
-                fontFamily="regular"
-                color="#8E8E93"
+                variant="caption"
+                color={t.color.textSecondary}
                 style={{ textDecorationLine: "underline" }}
-              />
+              >
+                Privacy Policy
+              </Text>
             </TouchableOpacity>
 
             <Text
-              title=" • "
-              fontFamily="regular"
-              fontSize={14}
-              color="#8E8E93"
-              style={{ marginHorizontal: 6 }}
-            />
+              variant="caption"
+              color={t.color.textSecondary}
+              style={{ marginHorizontal: t.spacing.xs - 2 }}
+            >
+              {" • "}
+            </Text>
 
             <TouchableOpacity onPress={() => router.push("/(terms-eula)")}>
               <Text
-                title="Terms of Use (EULA)"
-                fontFamily="regular"
-                fontSize={14}
-                color="#8E8E93"
+                variant="caption"
+                color={t.color.textSecondary}
                 style={{ textDecorationLine: "underline" }}
-              />
+              >
+                Terms of Use (EULA)
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -274,17 +295,6 @@ export default function SubscribeScreen() {
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 3,
-    borderColor: "transparent",
-  },
-  selectedCard: {
-    borderColor: "#5C81F5",
-    backgroundColor: "#F8F9FF",
-  },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -294,34 +304,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 12,
-  },
-  selectedBadge: {
-    backgroundColor: "#5C81F5",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  footer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "#1C1C1E", // Darker footer
-    padding: 24,
-    paddingBottom: 40,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-  },
-  subscribeButton: {
-    backgroundColor: "#5C81F5",
-    borderRadius: 16,
-    height: 58,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#5C81F5",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
   },
 });

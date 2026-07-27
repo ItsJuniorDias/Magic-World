@@ -6,7 +6,6 @@ import {
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import "react-native-reanimated";
 
 import {
   useQueryClient,
@@ -18,6 +17,7 @@ import TrackPlayer from "react-native-track-player";
 import trackPlayerService from "../services/trackPlayer";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useEffect } from "react";
 
 export const unstable_settings = {
   anchor: "(tabs)",

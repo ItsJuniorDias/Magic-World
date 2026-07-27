@@ -15,8 +15,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { doc, updateDoc, increment } from "firebase/firestore";
 
 import Card from "@/components/card";
-import Text from "@/components/text";
-import { Colors } from "@/constants/theme";
+import Text from "@/components/ui/Text";
+import { tokens } from "@/constants/tokens";
 import { db } from "@/firebaseConfig";
 import { useLikedStore } from "@/store/useLikedStore";
 import { useStoriesStore } from "@/store/useStoriesStore";
@@ -239,7 +239,12 @@ const Section = ({ title, data, renderItem }: any) => {
   return (
     <View style={styles.sectionWrapper}>
       <View style={styles.sectionHeader}>
-        <Text title={title} fontFamily="bold" fontSize={22} color="#FFFFFF" />
+        <Text
+          title={title}
+          fontFamily="bold"
+          fontSize={22}
+          color={tokens.color.dark.textPrimary}
+        />
       </View>
 
       <Animated.FlatList
@@ -262,14 +267,14 @@ const Section = ({ title, data, renderItem }: any) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.dark.background,
-    paddingTop: 64,
+    backgroundColor: tokens.color.dark.bg,
+    paddingTop: tokens.spacing.xxxl,
   },
-  sectionWrapper: { marginBottom: 24 },
-  sectionHeader: { paddingLeft: 24 },
+  sectionWrapper: { marginBottom: tokens.spacing.lg },
+  sectionHeader: { paddingLeft: tokens.spacing.lg },
   flatListContent: {
-    paddingTop: 16,
-    paddingLeft: 24,
-    paddingRight: 12,
+    paddingTop: tokens.spacing.md,
+    paddingLeft: tokens.spacing.lg,
+    paddingRight: tokens.spacing.sm,
   },
 });

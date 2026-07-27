@@ -1,40 +1,42 @@
 import React from "react";
 import {
-  View,
-  StyleSheet,
   ScrollView,
+  StyleSheet,
   TouchableOpacity,
-  useColorScheme, // 1. Import hook
+  View,
 } from "react-native";
 import { useRouter } from "expo-router";
-// import { Colors } from "@/constants/theme"; // Optional: You can remove this if relying on local theme logic below
-import Text from "@/components/text";
-import * as ScreenOrientation from "expo-screen-orientation";
 import { StatusBar } from "expo-status-bar";
+import * as ScreenOrientation from "expo-screen-orientation";
 import { Ionicons } from "@expo/vector-icons";
 
-const games = [
+import Text from "@/components/ui/Text";
+import { useThemedTokens } from "@/hooks/use-tokens";
+import { tokens } from "@/constants/tokens";
+
+type Game = {
+  id: string;
+  title: string;
+  emoji: string;
+  accent: string; // cor de acento — puxada da palette pra manter identidade
+  route: string;
+  description: string;
+};
+
+const GAMES: Game[] = [
   {
     id: "endless-runner",
     title: "Space Runner",
     emoji: "🚀",
-    color: "#FF9F0A",
+    accent: tokens.palette.amber500,
     route: "/(endless-runner)",
     description: "Navigate through asteroids.",
   },
-  // {
-  //   id: "runner-kart",
-  //   title: "Runner Kart",
-  //   emoji: "🏎️",
-  //   color: "#FF375F",
-  //   route: "/(runner-kart)",
-  //   description: "Race your way to victory.",
-  // },
   {
     id: "quiz",
     title: "Quiz Master",
     emoji: "❓",
-    color: "#30D158",
+    accent: tokens.palette.green500,
     route: "/(quiz)",
     description: "Test your knowledge.",
   },
@@ -42,7 +44,7 @@ const games = [
     id: "memory-game",
     title: "Memory Match",
     emoji: "🧠",
-    color: "#0A84FF",
+    accent: tokens.palette.blue500,
     route: "/(memory-game)",
     description: "Train your brain.",
   },
@@ -50,7 +52,7 @@ const games = [
     id: "platformer-adventure",
     title: "Knight's Quest",
     emoji: "🗡️",
-    color: "#BF5AF2",
+    accent: tokens.palette.purple500,
     route: "/(platformer-adventure)",
     description: "Magical platforming adventure.",
   },
@@ -58,109 +60,113 @@ const games = [
 
 export default function GamesHub() {
   const router = useRouter();
-  const colorScheme = useColorScheme(); // 2. Detect System Theme
-  const isDark = colorScheme === "dark";
+  const t = useThemedTokens();
+  const isDark = t.scheme === "dark";
 
-  // 3. Define Dynamic Colors
-  const theme = {
-    background: isDark ? "#000000" : "#F2F2F7", // Pure Black vs Grouped Gray
-    card: isDark ? "#1C1C1E" : "#FFFFFF", // Dark Gray vs White
-    textPrimary: isDark ? "#FFFFFF" : "#000000",
-    textSecondary: "#8E8E93", // System Gray works on both
-    iconBgOpacity: isDark ? "30" : "20", // Slightly stronger opacity on dark
-    chevron: isDark ? "#545458" : "#C7C7CC",
-  };
-
-  const handleGamePress = (game) => {
+  const handleGamePress = (game: Game) => {
     if (game.id === "platformer-adventure") {
       ScreenOrientation.lockAsync(
         ScreenOrientation.OrientationLock.LANDSCAPE_LEFT,
-      ).then(() => {
-        console.log("Screen locked to landscape left");
-      });
+      ).catch(() => {});
     }
-    router.push(game.route);
+    router.push(game.route as any);
   };
 
   return (
     <>
-      {/* 4. Update Status Bar */}
       <StatusBar style={isDark ? "light" : "dark"} />
 
-      <View
-        style={[styles.mainContainer, { backgroundColor: theme.background }]}
-      >
+      <View style={[styles.mainContainer, { backgroundColor: t.color.bg }]}>
         <ScrollView
           style={styles.container}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingTop: t.spacing.xxxl + 16, paddingHorizontal: t.spacing.md },
+          ]}
           showsVerticalScrollIndicator={false}
         >
           {/* Header */}
-          <View style={styles.headerContainer}>
+          <View
+            style={[
+              styles.headerContainer,
+              { marginBottom: t.spacing.lg, paddingHorizontal: t.spacing.xxs },
+            ]}
+          >
             <Text
-              fontFamily="bold"
-              fontSize={34}
-              color={theme.textPrimary}
-              title="Arcade"
-              style={{ letterSpacing: -0.5 }}
-            />
+              variant="display"
+              size="display"
+              color={t.color.textPrimary}
+              style={{ letterSpacing: t.typography.letterSpacing.tight }}
+            >
+              Arcade
+            </Text>
             <Text
-              fontFamily="regular"
-              fontSize={17}
-              color={theme.textSecondary}
-              title="Premium Games Collection"
-              style={{ marginTop: 4 }}
-            />
+              variant="body"
+              size="md"
+              color={t.color.textSecondary}
+              style={{ marginTop: t.spacing.xxs }}
+            >
+              Premium Games Collection
+            </Text>
           </View>
 
-          {games.map((game) => (
+          {GAMES.map((game) => (
             <TouchableOpacity
               key={game.id}
               style={[
                 styles.card,
                 {
-                  backgroundColor: theme.card,
-                  // Hide shadow in dark mode (iOS style preference)
-                  shadowOpacity: isDark ? 0 : 0.05,
+                  backgroundColor: t.color.surface,
+                  borderRadius: t.radius.lg,
+                  marginBottom: t.spacing.md,
+                  padding: t.spacing.md,
+                  ...(isDark ? {} : t.shadow.sm),
                 },
               ]}
               onPress={() => handleGamePress(game)}
-              activeOpacity={0.7}
+              activeOpacity={0.75}
             >
-              {/* Icon Container */}
               <View
                 style={[
                   styles.iconContainer,
-                  { backgroundColor: game.color + theme.iconBgOpacity },
+                  {
+                    width: 56,
+                    height: 56,
+                    borderRadius: t.radius.md,
+                    marginRight: t.spacing.md,
+                    backgroundColor: withAlpha(game.accent, isDark ? 0.19 : 0.13),
+                  },
                 ]}
               >
-                <Text fontFamily="bold" fontSize={32} title={game.emoji} />
+                <Text variant="heading" size="display">
+                  {game.emoji}
+                </Text>
               </View>
 
-              {/* Info */}
               <View style={styles.info}>
                 <Text
-                  fontFamily="bold"
-                  fontSize={17}
-                  color={theme.textPrimary}
-                  title={game.title}
+                  variant="heading"
+                  size="lg"
+                  color={t.color.textPrimary}
                   style={{ marginBottom: 2 }}
-                />
+                >
+                  {game.title}
+                </Text>
                 <Text
-                  fontFamily="regular"
-                  fontSize={15}
-                  color={theme.textSecondary}
-                  title={game.description}
+                  variant="body"
+                  size="sm"
+                  color={t.color.textSecondary}
                   numberOfLines={2}
                   style={{ lineHeight: 20 }}
-                />
+                >
+                  {game.description}
+                </Text>
               </View>
 
-              {/* Chevron */}
               <Ionicons
                 name="chevron-forward"
                 size={20}
-                color={theme.chevron}
+                color={t.color.textMuted}
               />
             </TouchableOpacity>
           ))}
@@ -170,43 +176,27 @@ export default function GamesHub() {
   );
 }
 
+function withAlpha(hex: string, alpha: number): string {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return hex;
+  const a = Math.round(alpha * 255)
+    .toString(16)
+    .padStart(2, "0");
+  return `${hex}${a}`;
+}
+
 const styles = StyleSheet.create({
-  mainContainer: {
-    flex: 1,
-    // Background color is now handled inline via theme object
-  },
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingTop: 80,
-    paddingHorizontal: 16,
-    paddingBottom: 40,
-  },
-  headerContainer: {
-    marginBottom: 24,
-    paddingHorizontal: 4,
-  },
+  mainContainer: { flex: 1 },
+  container: { flex: 1 },
+  scrollContent: { paddingBottom: 40 },
+  headerContainer: {},
   card: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-
-    shadowRadius: 8,
-    elevation: 2,
     borderCurve: "continuous",
   },
   iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 16,
     borderCurve: "continuous",
   },
   info: {

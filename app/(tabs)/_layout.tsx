@@ -1,78 +1,52 @@
 import React from "react";
 
-import { Colors } from "@/constants/theme";
-import { useColorScheme } from "@/hooks/use-color-scheme";
+import { tokens } from "@/constants/tokens";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <NativeTabs
       backgroundColor="transparent"
-      rippleColor={Colors.light.background}
-      indicatorColor={Colors.light.background}
+      rippleColor={tokens.color.dark.bg}
+      indicatorColor={tokens.color.dark.bg}
     >
       <NativeTabs.Trigger name="index">
-        <Label
-          selectedStyle={{
-            color: Colors.light.tint,
-          }}
-        >
-          Home
-        </Label>
+        <Label selectedStyle={{ color: tokens.color.dark.brand }}>Home</Label>
         <Icon
           sf={"house.fill"}
           drawable="ic_menu_home"
-          selectedColor={Colors.light.tint}
+          selectedColor={tokens.color.dark.brand}
         />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="favorite">
-        <Label
-          selectedStyle={{
-            color: Colors.light.tint,
-          }}
-        >
+        <Label selectedStyle={{ color: tokens.color.dark.brand }}>
           Favorite
         </Label>
-
         <Icon
           sf={"heart.fill"}
           drawable="ic_menu_preferences"
-          selectedColor={Colors.light.tint}
+          selectedColor={tokens.color.dark.brand}
         />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="games">
-        <Label
-          selectedStyle={{
-            color: Colors.light.tint,
-          }}
-        >
-          Games
-        </Label>
-
+        <Label selectedStyle={{ color: tokens.color.dark.brand }}>Games</Label>
         <Icon
           sf={"gamecontroller.fill"}
           drawable="ic_menu_preferences"
-          selectedColor={Colors.light.tint}
+          selectedColor={tokens.color.dark.brand}
         />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="profile">
-        <Label
-          selectedStyle={{
-            color: Colors.light.tint,
-          }}
-        >
+        <Label selectedStyle={{ color: tokens.color.dark.brand }}>
           Profile
         </Label>
-
         <Icon
           sf={"person.fill"}
           drawable="ic_menu_preferences"
-          selectedColor={Colors.light.tint}
+          selectedColor={tokens.color.dark.brand}
         />
       </NativeTabs.Trigger>
     </NativeTabs>

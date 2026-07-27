@@ -28,7 +28,7 @@ import { useLocalSearchParams } from "expo-router/build/hooks";
 import { NextChapterButton } from "@/components/(next-chapter-button)";
 
 import * as Speech from "expo-speech";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { generateJSON, translateText as aiTranslate } from "@/services/ai";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import GuidedReadingModal from "@/components/guided-reading-modal";
@@ -63,17 +63,6 @@ const HEADER_HEIGHT = 420;
 const MIN_HEADER_HEIGHT = 160;
 const SCREEN_HEIGHT = Dimensions.get("window").height;
 const SAFE_MARGIN = 140;
-
-/* =========================
-   GEMINI
-========================= */
-const genAI = new GoogleGenerativeAI(
-  process.env.EXPO_PUBLIC_GOOGLE_API_KEY || "",
-);
-
-export const geminiModel = genAI.getGenerativeModel({
-  model: "gemini-2.5-flash",
-});
 
 export default function StorieScreen() {
   const isFocused = useIsFocused();
@@ -198,7 +187,6 @@ export default function StorieScreen() {
 
     if (isPro !== "true") {
       await pauseAllAudio();
-
       return;
     } else {
       const targetIndex = forcedIndex ?? nextIndex;
@@ -413,31 +401,18 @@ export default function StorieScreen() {
   /* =========================
      TRANSLATION
   ========================== */
+  // Wrapper local: mantém a UI (Alert de fallback) e delega
+  // retry/timeout pro services/ai.
   async function translateText(text: string, target = "en") {
-    const prompt = `
-      Translate the following text to ${target}.
-      Return only the translated text.
-      Text: "${text}"
-    `;
-    let attempts = 3;
-    while (attempts > 0) {
-      try {
-        const result = await geminiModel.generateContent(prompt);
-        return result.response.text();
-      } catch (error: any) {
-        if (error.toString().includes("503")) {
-          attempts--;
-          await new Promise((r) => setTimeout(r, 1200));
-        } else {
-          throw error;
-        }
-      }
+    try {
+      return await aiTranslate(text, target);
+    } catch (err) {
+      Alert.alert(
+        "Translation unavailable",
+        "The translation service is overloaded. Please try again later.",
+      );
+      return text;
     }
-    Alert.alert(
-      "Translation unavailable",
-      "The translation service is overloaded. Please try again later.",
-    );
-    return text;
   }
 
   async function handleTranslateAll(lang: string) {
@@ -692,23 +667,32 @@ export default function StorieScreen() {
           if (Number(currentIndex) === 1) {
             setIsLoadingNextChapter(true);
             const prompt = `
-            Based on the ending of this story: "${sentences.slice(-3).join(" ")}", 
-            generate two distinct emotional or action-driven choices for the final chapter with.
-            Return ONLY a JSON array with this exact structure:
-            [
-              {"title": "Short action title", "description": "Briefly what happens", "targetIndex": 1, profile: ${AdventureProfileTypeOne}},
-              {"title": "Short emotional title", "description": "Briefly what happens", "targetIndex": 2, profile: ${AdventureProfileTypeTwo}}
-            ]
-          `;
+Based on the ending of this story: "${sentences.slice(-3).join(" ")}"
 
-            const result = await geminiModel.generateContent(prompt);
-            const responseText = result.response.text();
+Generate two distinct emotional or action-driven choices for the final chapter.
+Return ONLY a JSON array with this exact shape (all keys quoted):
+[
+  {"title": "Short action title", "description": "Briefly what happens", "targetIndex": 1, "profile": ${AdventureProfileTypeOne}},
+  {"title": "Short emotional title", "description": "Briefly what happens", "targetIndex": 2, "profile": ${AdventureProfileTypeTwo}}
+]
+`;
 
-            const cleanJson = responseText.replace(/```json|```/g, "").trim();
-            const parsedChoices = JSON.parse(cleanJson);
-
-            setBranchOptions(parsedChoices);
-            setIsLoadingNextChapter(false);
+            try {
+              const parsedChoices = await generateJSON<
+                {
+                  title: string;
+                  description: string;
+                  targetIndex: number;
+                  profile: string;
+                }[]
+              >(prompt, { model: "fast", temperature: 0.85 });
+              setBranchOptions(parsedChoices);
+            } catch (e) {
+              console.error("branch options generation failed:", e);
+              setBranchOptions(null);
+            } finally {
+              setIsLoadingNextChapter(false);
+            }
           } else {
             setBranchOptions(null);
           }
@@ -938,20 +922,26 @@ export default function StorieScreen() {
             setIsTranslating(true);
 
             const finalePrompt = `
-                Write the FINAL chapter (Chapter 3) of this story.
-                Previous context: "${sentences.join(" ")}"
-                The reader chose the path: "${choice.title}".
-                Provide a satisfying and immersive conclusion in English.
-                with approximately 300 words storie.
-                Return ONLY a JSON object: 
-                {"title": "The Final Destiny", "storie": "Your short story here..."}
-            `;
+Write the FINAL chapter (Chapter 3) of this story.
+Previous context: "${sentences.join(" ")}"
+The reader chose the path: "${choice.title}".
+
+Provide a satisfying and immersive conclusion in English,
+approximately 300 words.
+
+Return ONLY a JSON object with this exact shape:
+{"title": "The Final Destiny", "storie": "Your short story here..."}
+`;
 
             try {
-              const result = await geminiModel.generateContent(finalePrompt);
-              const data = JSON.parse(
-                result.response.text().replace(/```json|```/g, ""),
-              );
+              const data = await generateJSON<{
+                title: string;
+                storie: string;
+              }>(finalePrompt, {
+                model: "smart",
+                temperature: 0.8,
+                maxTokens: 1200,
+              });
 
               router.replace({
                 pathname: "/(storie)",

@@ -1,8 +1,8 @@
-import { Colors } from "@/constants/theme";
-import styled from "styled-components/native";  
+import styled from "styled-components/native";
+import { tokens } from "@/constants/tokens";
 
 export const SubscribeContainer = styled.ScrollView`
   flex: 1;
-  background-color: ${Colors.dark.background};
-  padding-top: 64px
+  background-color: ${tokens.color.dark.bg};
+  padding-top: ${tokens.spacing.xxxl}px;
 `;

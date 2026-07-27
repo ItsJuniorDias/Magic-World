@@ -3,18 +3,18 @@ export default {
     name: "Magic World",
     slug: "magicworld",
     version: "3.0.0",
-    orientation: "portrait",
+    orientation: "default",
     icon: "./assets/images/icon.png",
     scheme: "magicworld",
     userInterfaceStyle: "automatic",
-    newArchEnabled: true,
+    newArchEnabled: false,
     extra: {
       eas: {
         projectId: "2ed87d70-4ddc-404a-b9eb-2478b82fd7d3",
       },
     },
     ios: {
-      newArchEnabled: true,
+      newArchEnabled: false,
       supportsTablet: true,
       bundleIdentifier: "com.alexandre.juniort10.magicworld",
       infoPlist: {
