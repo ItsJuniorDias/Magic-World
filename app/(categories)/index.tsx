@@ -1,12 +1,11 @@
-import React from "react";
 import { FlatList, Pressable, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
-import GlassView from "@/components/ui/Glass";
 import { MaterialIcons, FontAwesome6 } from "@expo/vector-icons";
 
 import Text from "@/components/ui/Text";
+import GlassView from "@/components/ui/Glass";
 import { useThemedTokens } from "@/hooks/use-tokens";
-import { Container, ModernCategoryCard } from "./styles";
+import { ModernCategoryCard } from "./styles";
 
 type Category = {
   id: string;
@@ -48,60 +47,65 @@ export default function CategoriesScreen() {
     </ModernCategoryCard>
   );
 
-  return (
-    <Container showsVerticalScrollIndicator={false}>
-      <View
-        style={[
-          styles.contentHeader,
-          {
-            paddingHorizontal: t.spacing.lg,
-            marginBottom: t.spacing.lg,
-          },
-        ]}
-      >
-        <Pressable onPress={() => router.back()}>
-          <GlassView
-            style={styles.buttonBack}
-            isInteractive
-            glassEffectStyle="clear"
-          >
-            <FontAwesome6
-              name="chevron-left"
-              size={22}
-              color={t.color.textPrimary}
-            />
-          </GlassView>
-        </Pressable>
-
-        <Text
-          variant="heading"
-          size="xxl"
-          color={t.color.textPrimary}
+  const Header = (
+    <View
+      style={[
+        styles.contentHeader,
+        {
+          paddingHorizontal: t.spacing.lg,
+          marginBottom: t.spacing.lg,
+        },
+      ]}
+    >
+      <Pressable onPress={() => router.back()}>
+        <GlassView
+          style={styles.buttonBack}
+          isInteractive
+          glassEffectStyle="clear"
         >
-          Categories
-        </Text>
+          <FontAwesome6
+            name="chevron-left"
+            size={22}
+            color={t.color.textPrimary}
+          />
+        </GlassView>
+      </Pressable>
 
-        <View style={{ width: 48 }} />
-      </View>
+      <Text variant="heading" size="xxl" color={t.color.textPrimary}>
+        Categories
+      </Text>
 
+      <View style={{ width: 48 }} />
+    </View>
+  );
+
+  return (
+    <View style={[styles.container, { backgroundColor: t.color.bg }]}>
       <FlatList
         data={CATEGORIES}
         renderItem={renderCategory}
         keyExtractor={(item) => item.id}
         numColumns={2}
+        ListHeaderComponent={Header}
         columnWrapperStyle={{
           justifyContent: "space-between",
           marginBottom: t.spacing.md,
           marginHorizontal: t.spacing.lg,
         }}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: t.spacing.lg }}
+        contentContainerStyle={{
+          paddingTop: t.spacing.xxxl,
+          paddingBottom: t.spacing.lg,
+        }}
       />
-    </Container>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   contentHeader: {
     alignItems: "center",
     justifyContent: "space-between",

@@ -1,12 +1,6 @@
 import styled from "styled-components/native";
 import { tokens } from "@/constants/tokens";
 
-export const Container = styled.ScrollView`
-  flex: 1;
-  background-color: ${tokens.color.dark.bg};
-  padding-top: ${tokens.spacing.xxxl}px;
-`;
-
 export const ModernCategoryCard = styled.TouchableOpacity`
   flex: 1;
   max-width: 48%;

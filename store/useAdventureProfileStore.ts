@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 import { db } from "@/firebaseConfig";
 import { doc, setDoc, getDoc } from "firebase/firestore";
-import * as Application from "expo-application"; // para pegar deviceId
+import { getAnonymousUserId } from "@/utils/anonymousUser";
 
 export type AdventureProfileType =
   | "brave"
@@ -38,15 +38,9 @@ export const useAdventureProfileStore = create<AdventureProfileState>(
     loadProfile: async () => {
       set({ isLoading: true });
       try {
-        const iosId = await Application.getIosIdForVendorAsync();
+        const userId = await getAnonymousUserId();
 
-
-        if (!iosId) {
-            console.error("Não foi possível obter o iOS Device ID");
-            return
-        }
-
-        const userRef = doc(db, "users", iosId);
+        const userRef = doc(db, "users", userId);
         const docSnap = await getDoc(userRef);
 
         if (docSnap.exists()) {
@@ -58,7 +52,7 @@ export const useAdventureProfileStore = create<AdventureProfileState>(
         } else {
           // Cria documento padrão se não existir
           await setDoc(userRef, { points: initialPoints, profile: null });
-          
+
           set({ points: initialPoints, profile: null });
         }
       } catch (error) {
@@ -75,21 +69,11 @@ export const useAdventureProfileStore = create<AdventureProfileState>(
       }));
 
       try {
-        const iosId = await Application.getIosIdForVendorAsync();
-
-        if (!iosId) {
-              console.error("Não foi possível obter o iOS Device ID");
-              return
-          }
-
-        const userRef = doc(db, "users", iosId);
+        const userId = await getAnonymousUserId();
+        const userRef = doc(db, "users", userId);
         const { points } = get();
 
-        await setDoc(
-          userRef,
-          { points },
-          { merge: true }
-        );
+        await setDoc(userRef, { points }, { merge: true });
       } catch (error) {
         console.error("Erro ao atualizar pontos no Firebase:", error);
       }
@@ -98,31 +82,22 @@ export const useAdventureProfileStore = create<AdventureProfileState>(
   calculateProfile: async () => {
     const { points } = get();
 
-    const sorted = Object.entries(points).sort(
-      (a, b) => b[1] - a[1]
-    );
+    const sorted = Object.entries(points).sort((a, b) => b[1] - a[1]);
     const winner = sorted[0][0] as AdventureProfileType;
 
     set({ profile: winner });
 
     try {
-      // Pega ID do usuário (ou deviceId)
-      const iosId = await Application.getIosIdForVendorAsync();
+      const userId = await getAnonymousUserId();
+      const userRef = doc(db, "users", userId);
 
-      if (!iosId) {
-        console.error("Não foi possível obter o iOS Device ID");
-      } else {
-        // Atualiza ou cria documento do usuário no Firestore
-        const userRef = doc(db, "users", iosId);
+      await setDoc(
+        userRef,
+        { profile: winner },
+        { merge: true }, // Merge mantém outros campos
+      );
 
-        await setDoc(
-          userRef,
-          { profile: winner },
-          { merge: true } // Merge mantém outros campos
-        );
-
-        console.log("Profile salvo com sucesso:", winner);
-      }
+      console.log("Profile salvo com sucesso:", winner);
     } catch (error) {
       console.error("Erro ao salvar profile no Firestore:", error);
     }

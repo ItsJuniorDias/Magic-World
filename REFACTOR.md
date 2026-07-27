@@ -446,6 +446,46 @@ Se você fez `rm -rf` do projeto antes de extrair, precisa restaurar
 `assets/sounds/` do git ou de backup, senão o `constants/backgroundTracks.ts`
 não vai conseguir resolver os requires e a tela de story quebra.
 
+### Runtime — `expo-application` removido
+
+**Sintoma:** ao rodar o app depois de fazer prebuild, dev-mode quebrava
+com `Error: Cannot find native module 'ExpoApplication'`.
+
+**Causa:** `useAdventureProfileStore.ts` e `useMagicProgressStore.ts`
+importavam `expo-application` mas essa dep **nunca esteve** no
+`package.json` original — só que essas stores eram carregadas lazy
+e ninguém tinha esbarrado no bug antes do fluxo de onboarding rodar
+sob teste de device.
+
+**Fix:** trocar `Application.getIosIdForVendorAsync()` por
+`getAnonymousUserId()` de `utils/anonymousUser.ts`, que já existia
+no projeto e:
+- Funciona no Android também (não é iOS-only)
+- Não depende de nenhuma dep nativa extra
+- Persiste via AsyncStorage com UUID gerado por `expo-crypto`
+- Sobrevive a reinstalações do app (o que o `IDFV` do vendor não faz)
+
+### `_layout.tsx` simplificado
+
+Removidas `Stack.Screen` órfãs (`(profile)/index` não existe), e
+substituídas ~12 declarações repetidas de `headerShown: false` por
+um `screenOptions` global no `<Stack>`. O expo-router v6 detecta as
+rotas automaticamente via file-based routing — só precisamos declarar
+`Stack.Screen` quando queremos customizar options por rota.
+
+### `(categories)/index.tsx` — VirtualizedList em ScrollView
+
+Warning "VirtualizedLists should never be nested inside plain ScrollViews"
+resolvido movendo o header pra `ListHeaderComponent` do `FlatList` em
+vez de envelopar o FlatList num ScrollView externo. Deletado o
+`Container` (styled ScrollView) que virou órfão.
+
+### Imports órfãos de `React`
+
+6 arquivos importavam `import React from "react"` sem usar `React.X`.
+Com `reactCompiler: true` no `app.config.js` (novo JSX transform),
+esses imports são bloat. Removidos.
+
 ---
 
 ## Métricas do refactor

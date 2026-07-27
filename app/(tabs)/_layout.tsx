@@ -1,4 +1,3 @@
-import React from "react";
 
 import { tokens } from "@/constants/tokens";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
