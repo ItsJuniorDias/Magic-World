@@ -486,6 +486,38 @@ vez de envelopar o FlatList num ScrollView externo. Deletado o
 Com `reactCompiler: true` no `app.config.js` (novo JSX transform),
 esses imports são bloat. Removidos.
 
+### Runtime — `@expo/ui/swift-ui` removido (v3.8)
+
+**Sintoma:** botão de menu de contexto no `(storie)` renderizava
+como quadrado vermelho grande sobrepondo o header. Screenshot em
+device confirmou.
+
+**Causa:** `@expo/ui/swift-ui` é uma biblioteca de wrappers React
+Native pra componentes SwiftUI nativos. Ela **requer Fabric/New
+Architecture** pra montar as views. O projeto está com
+`newArchEnabled: false`, então o `Host` do pacote renderiza um
+placeholder vermelho de debug indicando "não consegui montar".
+
+Componentes afetados:
+- `app/(storie)/index.tsx` — usava `ContextMenu`, `Host`, `Picker`
+  pra dropdown de Translate + Ambient Sound
+- `components/card-skeleton/index.tsx` — importava `border` de
+  `@expo/ui/swift-ui/modifiers` mas nunca usava (import morto)
+
+**Fix aplicado:**
+
+- Novo `components/ui/MenuSheet/index.tsx` — bottom action sheet
+  reutilizável usando `Modal` do RN (funciona em old + new arch,
+  iOS + Android, sem deps externas). API declarativa com múltiplas
+  seções.
+- `(storie)/index.tsx` — `renderContextMenu` (que retornava
+  `Host/ContextMenu/Picker`) virou `renderContextMenuTrigger`
+  (que retorna só o botão do ellipsis-vertical). O menu completo
+  virou um `<MenuSheet>` renderizado no fim do JSX, disparado por
+  state `showMenuSheet`.
+- `card-skeleton/` — import morto removido.
+- `@expo/ui` removido do `package.json`.
+
 ---
 
 ## Métricas do refactor

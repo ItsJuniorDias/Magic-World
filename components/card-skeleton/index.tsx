@@ -1,7 +1,6 @@
 import { View, StyleSheet, Animated, Dimensions } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useRef } from "react";
-import { border } from "@expo/ui/swift-ui/modifiers";
 
 const { width } = Dimensions.get("window");
 

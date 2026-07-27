@@ -15,11 +15,10 @@ import { Colors } from "@/constants/theme";
 import Text from "@/components/text";
 
 import GlassView from "@/components/ui/Glass";
+import MenuSheet from "@/components/ui/MenuSheet";
 import { FontAwesome6 } from "@expo/vector-icons";
 
 import { franc } from "franc-min";
-
-import { ContextMenu, Host, Picker } from "@expo/ui/swift-ui";
 
 import { Container, ContainerStorie } from "./styles";
 import { useLocalSearchParams } from "expo-router/build/hooks";
@@ -119,6 +118,7 @@ export default function StorieScreen() {
   >(null);
 
   const [isSavingProgress, setIsSavingProgress] = useState(false);
+  const [showMenuSheet, setShowMenuSheet] = useState(false);
 
   useEffect(() => {
     if (!isFocused) return;
@@ -428,54 +428,27 @@ export default function StorieScreen() {
   /* =========================
      CONTEXT MENU
   ========================== */
-  const renderContextMenu = () => {
-    const map = ["en", "es", "pt", "fr", "zh", "hi"];
-    const musicOptions = BACKGROUND_TRACKS.map((t) => t.title);
+  const languageLabels = [
+    "English",
+    "Spanish",
+    "Portuguese",
+    "French",
+    "Chinese",
+    "Hindi",
+  ];
+  const languageCodes = ["en", "es", "pt", "fr", "zh", "hi"];
 
+  const renderContextMenuTrigger = () => {
     return (
-      <Host style={{ width: 48, height: 48 }}>
-        <ContextMenu>
-          <ContextMenu.Items>
-            <Picker
-              label="Translate"
-              options={[
-                "English",
-                "Spanish",
-                "Portuguese",
-                "French",
-                "Chinese",
-                "Hindi",
-              ]}
-              variant="menu"
-              selectedIndex={selectedIndex}
-              onOptionSelected={({ nativeEvent: { index } }) => {
-                setSelectedIndex(index);
-                handleTranslateAll(map[index]);
-              }}
-            />
-            <Picker
-              label="Ambient Sound"
-              options={musicOptions}
-              variant="menu"
-              selectedIndex={musicIndex}
-              onOptionSelected={async ({ nativeEvent: { index } }) => {
-                setMusicIndex(index);
-                await TrackPlayer.stop();
-                // A música será reiniciada pelo hook ou lógica externa, mas importante garantir loop
-              }}
-            />
-          </ContextMenu.Items>
-          <ContextMenu.Trigger>
-            <GlassView style={styles.glassButton} isInteractive>
-              <FontAwesome6
-                name={isTranslating ? "spinner" : "ellipsis-vertical"}
-                size={20}
-                color={Colors.dark.text}
-              />
-            </GlassView>
-          </ContextMenu.Trigger>
-        </ContextMenu>
-      </Host>
+      <Pressable onPress={() => setShowMenuSheet(true)}>
+        <GlassView style={styles.glassButton} isInteractive>
+          <FontAwesome6
+            name={isTranslating ? "spinner" : "ellipsis-vertical"}
+            size={20}
+            color={Colors.dark.text}
+          />
+        </GlassView>
+      </Pressable>
     );
   };
 
@@ -766,10 +739,10 @@ Return ONLY a JSON array with this exact shape (all keys quoted):
           </GlassView>
         </Pressable>
 
-        {/* TRANSLATE */}
-        <Pressable style={styles.translateButtonWrapper}>
-          {renderContextMenu()}
-        </Pressable>
+        {/* TRANSLATE / MENU */}
+        <View style={styles.translateButtonWrapper}>
+          {renderContextMenuTrigger()}
+        </View>
 
         {/* PLAY */}
         <Pressable style={styles.playButtonWrapper} onPress={handlePlayPress}>
@@ -982,6 +955,31 @@ Return ONLY a JSON object with this exact shape:
           await TrackPlayer.pause();
           handleSpeak(true); // Retoma se tiver salvo
         }}
+      />
+
+      <MenuSheet
+        visible={showMenuSheet}
+        onClose={() => setShowMenuSheet(false)}
+        sections={[
+          {
+            title: "Translate",
+            options: languageLabels,
+            selectedIndex: selectedIndex,
+            onSelect: (index) => {
+              setSelectedIndex(index);
+              handleTranslateAll(languageCodes[index]);
+            },
+          },
+          {
+            title: "Ambient Sound",
+            options: BACKGROUND_TRACKS.map((track) => track.title),
+            selectedIndex: musicIndex,
+            onSelect: async (index) => {
+              setMusicIndex(index);
+              await TrackPlayer.stop();
+            },
+          },
+        ]}
       />
     </>
   );
