@@ -33,7 +33,10 @@ export default {
       output: "static",
     },
     splash: null,
-    plugins: ["expo-router"],
+    plugins: [
+      "expo-router",
+      "./plugin/withFmtConstevalFix",
+    ],
     experiments: {
       typedRoutes: true,
       reactCompiler: true,

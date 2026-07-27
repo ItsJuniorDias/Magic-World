@@ -281,6 +281,46 @@ Ordem sugerida das próximas fatias:
 
 ---
 
+## Fix do build iOS (Xcode 26.4+ / Apple Clang 21)
+
+**Sintoma:** ao rodar `bun run ios` você vê:
+
+```
+ios/Pods/fmt/include/fmt/format-inl.h:59:24
+call to consteval function 'fmt::basic_format_string<...>' is not a constant expression
+```
+
+E mais 4 erros similares em linhas 60, 1387, 1391, 1394.
+
+**Causa:** fmt 11.0.2 (bundled via RCT-Folly no RN 0.81) usa
+`FMT_STRING(...)` de um jeito que Apple Clang 21 (que veio com
+Xcode 26.4) recusa. Fix upstream chegou em fmt 12.1.0, que só
+entra em RN ≥ 0.83.9 / Expo SDK 56.
+
+**Fix aplicado neste refactor:**
+
+- Novo plugin `plugin/withFmtConstevalFix.ts` — compila os pods
+  `fmt` e `RCT-Folly` em C++17 e adiciona `FMT_USE_CONSTEVAL=0`
+  no preprocessor. Idempotente, sobrevive a `expo prebuild --clean`.
+- `app.config.js` — plugin registrado ao lado de `expo-router`.
+
+**Como aplicar depois de extrair o zip:**
+
+```bash
+cd ios && rm -rf Pods Podfile.lock build && cd ..
+npx expo prebuild --platform ios --clean
+cd ios && pod install && cd ..
+bun run ios --device
+```
+
+**Como remover** (quando migrar pra Expo SDK 56+): tira a
+linha `"./plugin/withFmtConstevalFix"` de `app.config.js`,
+roda `expo prebuild --clean` e deleta o arquivo do plugin.
+
+Referências: facebook/react-native#55601, expo/expo#44229, fmtlib/fmt#4740.
+
+---
+
 ## Métricas do refactor
 
 - **40+ cores hex hardcoded** → **~5** (as que sobraram estão nas
