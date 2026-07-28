@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
-  Linking,
   StyleSheet,
   TouchableOpacity,
   View,
 } from "react-native";
-import Purchases from "react-native-purchases";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Purchases, {
+  CustomerInfo,
+  PurchasesPackage,
+} from "react-native-purchases";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 
@@ -18,200 +20,409 @@ import { useThemedTokens } from "@/hooks/use-tokens";
 import { SubscribeContainer } from "./styles";
 import { logEvent } from "@/services/analyticsHelper";
 
+const ENTITLEMENT_ID = "Magic World Pro";
+const PRO_STORAGE_KEY = "@user_is_pro";
+
+// Featured review — set to null until you have a real quote from the App Store.
+// One strong parent quote beats a star count when review volume is thin.
+const FEATURED_REVIEW: { quote: string; author: string } | null = null;
+// Example once you have one:
+// const FEATURED_REVIEW = {
+//   quote: "My 3-year-old asks for a new story every single night. Lifesaver at bedtime.",
+//   author: "Sarah M., parent",
+// };
+
+const VALUE_PROPS = [
+  { icon: "🌙", label: "Screen-free bedtime stories" },
+  { icon: "📚", label: "New audiobooks every week" },
+  { icon: "👶", label: "Made for little listeners, ages 0–10" },
+  { icon: "🔒", label: "100% ad-free & kid-safe" },
+];
+
+/** Reads a free trial length from a RC package. Returns null if there's no free trial. */
+function parseTrialDays(pkg: PurchasesPackage | null): number | null {
+  if (!pkg) return null;
+  const intro = pkg.product?.introPrice;
+  if (!intro || intro.price !== 0) return null;
+  const n = intro.periodNumberOfUnits;
+  const unit = intro.periodUnit;
+  if (!n || !unit) return null;
+  if (unit === "DAY") return n;
+  if (unit === "WEEK") return n * 7;
+  if (unit === "MONTH") return n * 30;
+  if (unit === "YEAR") return n * 365;
+  return n;
+}
+
+/** Formats an annual package as its monthly-equivalent price string. */
+function formatMonthlyEquivalent(pkg: PurchasesPackage | null): string | null {
+  if (!pkg) return null;
+  const p = pkg.product?.price;
+  const cs = pkg.product?.currencyCode ?? "USD";
+  if (!p) return null;
+  const perMonth = p / 12;
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: cs,
+    }).format(perMonth);
+  } catch {
+    return `${cs} ${perMonth.toFixed(2)}`;
+  }
+}
+
+/** Returns savings % of annual vs monthly*12. Returns null if annual isn't actually cheaper. */
+function annualSavingsPercent(
+  monthly: PurchasesPackage | null,
+  annual: PurchasesPackage | null,
+): number | null {
+  if (!monthly || !annual) return null;
+  const m = monthly.product?.price;
+  const a = annual.product?.price;
+  if (!m || !a) return null;
+  const yearAtMonthly = m * 12;
+  if (a >= yearAtMonthly) return null;
+  return Math.round((1 - a / yearAtMonthly) * 100);
+}
+
 export default function SubscribeScreen() {
   const router = useRouter();
   const t = useThemedTokens();
+  const insets = useSafeAreaInsets();
 
-  const [packages, setPackages] = useState<any[]>([]);
+  const [monthly, setMonthly] = useState<PurchasesPackage | null>(null);
+  const [annual, setAnnual] = useState<PurchasesPackage | null>(null);
+  const [selected, setSelected] = useState<PurchasesPackage | null>(null);
+
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [purchasing, setPurchasing] = useState(false);
-  const [selectedPackage, setSelectedPackage] = useState<any>(null);
+  const [restoring, setRestoring] = useState(false);
 
-  useEffect(() => {
-    const fetchPackages = async () => {
-      try {
-        const offerings = await Purchases.getOfferings();
+  const trialDays = useMemo(() => parseTrialDays(selected), [selected]);
+  const savings = useMemo(
+    () => annualSavingsPercent(monthly, annual),
+    [monthly, annual],
+  );
+  const monthlyEq = useMemo(() => formatMonthlyEquivalent(annual), [annual]);
 
-        if (offerings.current) {
-          const availablePackages: any[] = [];
-
-          if (offerings.current.monthly)
-            availablePackages.push(offerings.current.monthly);
-          if (offerings.current.annual)
-            availablePackages.push(offerings.current.annual);
-
-          setPackages(availablePackages);
-
-          if (availablePackages.length > 0)
-            setSelectedPackage(availablePackages[0]);
-        }
-      } catch (error) {
-        Alert.alert("Erro", "Não foi possível carregar os planos.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchPackages();
-  }, []);
-
-  const saveProStatus = async (status: boolean) => {
+  const loadOfferings = async () => {
     try {
-      await AsyncStorage.setItem("@user_is_pro", JSON.stringify(status));
+      setError(null);
+      setLoading(true);
+      const offerings = await Purchases.getOfferings();
+      const current = offerings.current;
+      if (!current) throw new Error("No current offering");
+
+      const m = current.monthly ?? null;
+      const a = current.annual ?? null;
+      setMonthly(m);
+      setAnnual(a);
+
+      // Default to annual only if it's actually the better deal, otherwise monthly.
+      const defaultPick =
+        a && m && a.product.price < m.product.price * 12 ? a : (m ?? a ?? null);
+      setSelected(defaultPick);
+
+      await logEvent("paywall_viewed", {
+        source: "subscribe_screen",
+        has_monthly: !!m,
+        has_annual: !!a,
+        default_selection: defaultPick?.identifier ?? null,
+      });
     } catch (e) {
-      console.error("Erro ao salvar status Pro", e);
+      setError(
+        "Couldn't load subscription plans. Check your connection and try again.",
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handlePurchase = async () => {
-    if (!selectedPackage) return;
+  useEffect(() => {
+    loadOfferings();
+  }, []);
 
+  /** Sync AsyncStorage from RC's source of truth. Fixes the "locked out after cancel" bug. */
+  const syncProStatus = async (info: CustomerInfo) => {
+    const isActive = !!info.entitlements.active[ENTITLEMENT_ID];
+    try {
+      await AsyncStorage.setItem(PRO_STORAGE_KEY, JSON.stringify(isActive));
+    } catch (e) {
+      console.error("Failed to sync pro status", e);
+    }
+    return isActive;
+  };
+
+  const handleSelect = async (pkg: PurchasesPackage) => {
+    setSelected(pkg);
+    await logEvent("paywall_plan_selected", {
+      source: "subscribe_screen",
+      plan: pkg.packageType === "MONTHLY" ? "monthly" : "annual",
+      package: pkg.identifier,
+    });
+  };
+
+  const handlePurchase = async () => {
+    if (!selected) return;
     try {
       setPurchasing(true);
+      const plan = selected.packageType === "MONTHLY" ? "monthly" : "annual";
 
       await logEvent("purchase_started", {
         source: "subscribe_screen",
-        plan: selectedPackage.packageType === "MONTHLY" ? "monthly" : "annual",
-        package: selectedPackage.identifier,
+        plan,
+        package: selected.identifier,
+        trial_days: trialDays,
       });
 
-      const purchase = await Purchases.purchasePackage(selectedPackage);
+      const purchase = await Purchases.purchasePackage(selected);
+      const isActive = await syncProStatus(purchase.customerInfo);
 
-      if (purchase.customerInfo.entitlements.active["Magic World Pro"]) {
+      if (isActive) {
         await logEvent("purchase_successful", {
           source: "subscribe_screen",
-          plan:
-            selectedPackage.packageType === "MONTHLY" ? "monthly" : "annual",
-          package: selectedPackage.identifier,
+          plan,
+          package: selected.identifier,
         });
-
-        await saveProStatus(true);
-        Alert.alert("Success", "Subscription activated!");
+        Alert.alert("You're in!", "Enjoy every story, every night.");
         router.back();
       }
-    } catch (error: any) {
-      if (error.userCancelled) {
+    } catch (err: any) {
+      if (err.userCancelled) {
         await logEvent("purchase_cancelled", {
           source: "subscribe_screen",
-          plan:
-            selectedPackage?.packageType === "MONTHLY" ? "monthly" : "annual",
-          package: selectedPackage?.identifier,
+          plan: selected.packageType === "MONTHLY" ? "monthly" : "annual",
+          package: selected.identifier,
           reason: "apple_sheet_closed",
         });
       } else {
-        Alert.alert("Error", "An error occurred during purchase.");
+        Alert.alert("Something went wrong", "Please try again in a moment.");
       }
     } finally {
       setPurchasing(false);
     }
   };
 
-  const renderPackage = ({ item }: { item: any }) => {
-    const isSelected = selectedPackage?.identifier === item.identifier;
-    const isMonthly = item.packageType === "MONTHLY";
-
-    return (
-      <TouchableOpacity
-        style={[
-          {
-            backgroundColor: t.color.surface,
-            borderRadius: t.radius.xl,
-            padding: t.spacing.lg,
-            borderWidth: 2,
-            borderColor: isSelected ? t.color.brand : "transparent",
-          },
-          isSelected && {
-            backgroundColor: t.color.brandSubtle,
-          },
-        ]}
-        onPress={() => setSelectedPackage(item)}
-        activeOpacity={0.85}
-      >
-        <View style={styles.cardHeader}>
-          <Text
-            variant="heading"
-            size="xxl"
-            color={t.color.textPrimary}
-          >
-            {isMonthly ? "Monthly" : "Annual"}
-          </Text>
-        </View>
-
-        <Text
-          variant="body"
-          color={t.color.textPrimary}
-          style={{ marginTop: t.spacing.xs }}
-        >
-          {isMonthly
-            ? "• Unlock all story chapters\n• Ad-free experience\n• Billed monthly"
-            : "• Everything in Monthly\n• Best value for long stories\n• Billed annually"}
-        </Text>
-
-        <View style={[styles.priceRow, { marginTop: t.spacing.sm }]}>
-          <Text
-            variant="heading"
-            size="xl"
-            color={isSelected ? t.color.brand : t.color.textPrimary}
-          >
-            {item.product.priceString}
-          </Text>
-          {isSelected && (
-            <View
-              style={{
-                backgroundColor: t.color.brand,
-                paddingHorizontal: t.spacing.xs + 2,
-                paddingVertical: t.spacing.xxs,
-                borderRadius: t.radius.sm,
-              }}
-            >
-              <Text variant="label" color={t.color.textOnBrand}>
-                Selected
-              </Text>
-            </View>
-          )}
-        </View>
-      </TouchableOpacity>
-    );
+  const handleRestore = async () => {
+    try {
+      setRestoring(true);
+      const info = await Purchases.restorePurchases();
+      const isActive = await syncProStatus(info);
+      await logEvent("purchase_restored", {
+        source: "subscribe_screen",
+        active: isActive,
+      });
+      if (isActive) {
+        Alert.alert("Welcome back!", "Your subscription has been restored.");
+        router.back();
+      } else {
+        Alert.alert(
+          "No purchases found",
+          "We couldn't find an active subscription on this Apple ID.",
+        );
+      }
+    } catch (e) {
+      Alert.alert("Restore failed", "Please try again in a moment.");
+    } finally {
+      setRestoring(false);
+    }
   };
+
+  const handleClose = async () => {
+    await logEvent("paywall_dismissed", { source: "subscribe_screen" });
+    router.back();
+  };
+
+  const ctaLabel = trialDays
+    ? `Start ${trialDays}-Day Free Trial`
+    : selected?.packageType === "ANNUAL"
+      ? "Continue Yearly"
+      : "Continue Monthly";
+
+  const ctaFinePrint = trialDays
+    ? `Then ${selected?.product.priceString} ${
+        selected?.packageType === "MONTHLY" ? "/ month" : "/ year"
+      }. Cancel anytime.`
+    : "Auto-renews until cancelled. Cancel anytime in Settings.";
 
   return (
     <View style={{ flex: 1, backgroundColor: t.color.bg }}>
-      <SubscribeContainer
-        contentContainerStyle={{
-          marginHorizontal: t.spacing.lg,
-          paddingTop: t.spacing.xxl,
+      {/* Close */}
+      <View
+        style={{
+          paddingTop: insets.top + t.spacing.xs,
+          paddingHorizontal: t.spacing.lg,
+          flexDirection: "row",
+          justifyContent: "flex-end",
         }}
       >
+        <TouchableOpacity
+          onPress={handleClose}
+          hitSlop={16}
+          accessibilityLabel="Close paywall"
+        >
+          <Text variant="heading" size="lg" color={t.color.textSecondary}>
+            ✕
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <SubscribeContainer
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          paddingHorizontal: t.spacing.lg,
+          paddingTop: t.spacing.md,
+          paddingBottom: 280,
+        }}
+      >
+        {/* Hero */}
         <Text
           variant="display"
           color={t.color.textPrimary}
           style={{ marginBottom: t.spacing.xs }}
         >
-          Magic World Pro
+          Unlock every magical story
         </Text>
         <Text
           variant="body"
           color={t.color.textSecondary}
           style={{ marginBottom: t.spacing.lg }}
         >
-          Unlock all chapters and exclusive content.
+          Screen-free bedtime tales that grow with your little one.
         </Text>
 
-        {loading && packages.length === 0 ? (
-          <ActivityIndicator size="large" color={t.color.brand} />
-        ) : (
-          <FlatList
-            data={packages}
-            renderItem={renderPackage}
-            keyExtractor={(item) => item.identifier}
-            contentContainerStyle={{
-              gap: t.spacing.md,
-              paddingBottom: 150,
+        {/* Featured review */}
+        {FEATURED_REVIEW && (
+          <View
+            style={{
+              backgroundColor: t.color.surface,
+              padding: t.spacing.lg,
+              borderRadius: t.radius.xl,
+              marginBottom: t.spacing.lg,
             }}
+          >
+            <Text variant="label" color={t.color.brand}>
+              ★★★★★
+            </Text>
+            <Text
+              variant="body"
+              color={t.color.textPrimary}
+              style={{ marginTop: t.spacing.xs, fontStyle: "italic" }}
+            >
+              "{FEATURED_REVIEW.quote}"
+            </Text>
+            <Text
+              variant="caption"
+              color={t.color.textSecondary}
+              style={{ marginTop: t.spacing.xs }}
+            >
+              — {FEATURED_REVIEW.author}
+            </Text>
+          </View>
+        )}
+
+        {/* Value props */}
+        <View
+          style={{
+            backgroundColor: t.color.surface,
+            padding: t.spacing.lg,
+            borderRadius: t.radius.xl,
+            marginBottom: t.spacing.lg,
+          }}
+        >
+          {VALUE_PROPS.map((v, i) => (
+            <View
+              key={v.label}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                marginTop: i === 0 ? 0 : t.spacing.sm,
+              }}
+            >
+              <Text
+                variant="heading"
+                size="lg"
+                color={t.color.textPrimary}
+                style={{ marginRight: t.spacing.sm }}
+              >
+                {v.icon}
+              </Text>
+              <Text
+                variant="body"
+                color={t.color.textPrimary}
+                style={{ flex: 1 }}
+              >
+                {v.label}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Trial timeline (only if RC package actually has a free trial) */}
+        {trialDays ? <TrialTimeline trialDays={trialDays} t={t} /> : null}
+
+        {/* Plans */}
+        {loading ? (
+          <ActivityIndicator
+            size="large"
+            color={t.color.brand}
+            style={{ marginTop: t.spacing.xxl }}
           />
+        ) : error ? (
+          <View
+            style={{
+              backgroundColor: t.color.surface,
+              padding: t.spacing.lg,
+              borderRadius: t.radius.xl,
+              marginTop: t.spacing.md,
+            }}
+          >
+            <Text
+              variant="body"
+              color={t.color.textPrimary}
+              style={{ marginBottom: t.spacing.md }}
+            >
+              {error}
+            </Text>
+            <Button label="Try again" onPress={loadOfferings} />
+          </View>
+        ) : (
+          <View style={{ marginTop: t.spacing.lg, gap: t.spacing.md }}>
+            <Text
+              variant="heading"
+              size="md"
+              color={t.color.textPrimary}
+              style={{ marginBottom: t.spacing.xxs }}
+            >
+              Choose your plan
+            </Text>
+            {annual && (
+              <PlanCard
+                pkg={annual}
+                isSelected={selected?.identifier === annual.identifier}
+                onSelect={() => handleSelect(annual)}
+                savings={savings}
+                monthlyEq={monthlyEq}
+                t={t}
+              />
+            )}
+            {monthly && (
+              <PlanCard
+                pkg={monthly}
+                isSelected={selected?.identifier === monthly.identifier}
+                onSelect={() => handleSelect(monthly)}
+                savings={null}
+                monthlyEq={null}
+                t={t}
+              />
+            )}
+          </View>
         )}
       </SubscribeContainer>
 
-      {!loading && packages.length > 0 && (
+      {/* Sticky CTA */}
+      {!loading && !error && selected && (
         <View
           style={{
             position: "absolute",
@@ -219,72 +430,64 @@ export default function SubscribeScreen() {
             left: 0,
             right: 0,
             backgroundColor: t.color.surface,
-            padding: t.spacing.lg,
-            paddingBottom: t.spacing.xxl,
+            paddingTop: t.spacing.lg,
+            paddingHorizontal: t.spacing.lg,
+            paddingBottom: insets.bottom + t.spacing.md,
             borderTopLeftRadius: t.radius.xxl,
             borderTopRightRadius: t.radius.xxl,
           }}
         >
           <Button
-            label="Subscribe Now"
+            label={ctaLabel}
             size="lg"
             fullWidth
             loading={purchasing}
             onPress={handlePurchase}
           />
-
-          <TouchableOpacity
-            onPress={async () => {
-              await logEvent("purchase_cancelled", {
-                source: "subscribe_screen",
-                reason: "maybe_later",
-              });
-              router.back();
-            }}
-            style={{ marginTop: t.spacing.sm }}
+          <Text
+            variant="caption"
+            color={t.color.textSecondary}
+            style={{ textAlign: "center", marginTop: t.spacing.xs }}
           >
-            <Text
-              variant="caption"
-              color={t.color.textSecondary}
-              style={{ textAlign: "center" }}
-            >
-              Maybe Later
-            </Text>
-          </TouchableOpacity>
+            {ctaFinePrint}
+          </Text>
 
           <View
             style={{
               flexDirection: "row",
               justifyContent: "center",
               alignItems: "center",
-              marginTop: t.spacing.md,
+              marginTop: t.spacing.sm,
+              flexWrap: "wrap",
             }}
           >
+            <TouchableOpacity onPress={handleRestore} disabled={restoring}>
+              <Text
+                variant="caption"
+                color={t.color.textSecondary}
+                style={{ textDecorationLine: "underline" }}
+              >
+                {restoring ? "Restoring…" : "Restore"}
+              </Text>
+            </TouchableOpacity>
+            <Dot t={t} />
             <TouchableOpacity onPress={() => router.push("/(privacy-policy)")}>
               <Text
                 variant="caption"
                 color={t.color.textSecondary}
                 style={{ textDecorationLine: "underline" }}
               >
-                Privacy Policy
+                Privacy
               </Text>
             </TouchableOpacity>
-
-            <Text
-              variant="caption"
-              color={t.color.textSecondary}
-              style={{ marginHorizontal: t.spacing.xs - 2 }}
-            >
-              {" • "}
-            </Text>
-
+            <Dot t={t} />
             <TouchableOpacity onPress={() => router.push("/(terms-eula)")}>
               <Text
                 variant="caption"
                 color={t.color.textSecondary}
                 style={{ textDecorationLine: "underline" }}
               >
-                Terms of Use (EULA)
+                Terms (EULA)
               </Text>
             </TouchableOpacity>
           </View>
@@ -294,13 +497,200 @@ export default function SubscribeScreen() {
   );
 }
 
+// ────────────── Sub-components ──────────────
+
+function Dot({ t }: { t: ReturnType<typeof useThemedTokens> }) {
+  return (
+    <Text
+      variant="caption"
+      color={t.color.textSecondary}
+      style={{ marginHorizontal: t.spacing.xs }}
+    >
+      •
+    </Text>
+  );
+}
+
+function PlanCard({
+  pkg,
+  isSelected,
+  onSelect,
+  savings,
+  monthlyEq,
+  t,
+}: {
+  pkg: PurchasesPackage;
+  isSelected: boolean;
+  onSelect: () => void;
+  savings: number | null;
+  monthlyEq: string | null;
+  t: ReturnType<typeof useThemedTokens>;
+}) {
+  const isMonthly = pkg.packageType === "MONTHLY";
+  return (
+    <TouchableOpacity
+      onPress={onSelect}
+      activeOpacity={0.85}
+      style={{
+        backgroundColor: isSelected ? t.color.brandSubtle : t.color.surface,
+        borderRadius: t.radius.xl,
+        padding: t.spacing.lg,
+        borderWidth: 2,
+        borderColor: isSelected ? t.color.brand : "transparent",
+      }}
+    >
+      {!isMonthly && savings != null && savings > 0 && (
+        <View
+          style={{
+            position: "absolute",
+            top: -10,
+            right: t.spacing.md,
+            backgroundColor: t.color.brand,
+            paddingHorizontal: t.spacing.sm,
+            paddingVertical: 4,
+            borderRadius: t.radius.sm,
+          }}
+        >
+          <Text variant="label" color={t.color.textOnBrand}>
+            SAVE {savings}%
+          </Text>
+        </View>
+      )}
+      <View style={styles.rowBetween}>
+        <View style={{ flex: 1 }}>
+          <Text
+            variant="heading"
+            size="xl"
+            color={isSelected ? t.color.brand : t.color.textPrimary}
+          >
+            {isMonthly ? "Monthly" : "Yearly"}
+          </Text>
+          <Text
+            variant="caption"
+            color={t.color.textSecondary}
+            style={{ marginTop: 2 }}
+          >
+            {isMonthly
+              ? "Billed monthly"
+              : monthlyEq
+                ? `Just ${monthlyEq}/mo, billed yearly`
+                : "Billed yearly"}
+          </Text>
+        </View>
+        <View style={{ alignItems: "flex-end", marginLeft: t.spacing.sm }}>
+          <Text
+            variant="heading"
+            size="xxl"
+            color={isSelected ? t.color.brand : t.color.textPrimary}
+          >
+            {pkg.product.priceString}
+          </Text>
+          <Text variant="caption" color={t.color.textSecondary}>
+            {isMonthly ? "per month" : "per year"}
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function TrialTimeline({
+  trialDays,
+  t,
+}: {
+  trialDays: number;
+  t: ReturnType<typeof useThemedTokens>;
+}) {
+  const reminderDay = Math.max(trialDays - 2, 1);
+  const steps = [
+    {
+      day: "Today",
+      title: "Full access, instantly",
+      desc: "Every story, every character. Nothing locked.",
+    },
+    {
+      day: `Day ${reminderDay}`,
+      title: "We'll remind you",
+      desc: "You get a heads-up before your trial ends.",
+    },
+    {
+      day: `Day ${trialDays}`,
+      title: "Your subscription starts",
+      desc: "Only if you love it. Cancel anytime in Settings.",
+    },
+  ];
+  return (
+    <View style={{ marginTop: t.spacing.md, marginBottom: t.spacing.sm }}>
+      <Text
+        variant="heading"
+        size="md"
+        color={t.color.textPrimary}
+        style={{ marginBottom: t.spacing.md }}
+      >
+        How your {trialDays}-day free trial works
+      </Text>
+      {steps.map((s, i) => (
+        <View
+          key={s.day}
+          style={{
+            flexDirection: "row",
+            marginBottom: i === steps.length - 1 ? 0 : t.spacing.md,
+          }}
+        >
+          <View
+            style={{
+              width: 20,
+              alignItems: "center",
+              marginRight: t.spacing.sm,
+            }}
+          >
+            <View
+              style={{
+                width: 12,
+                height: 12,
+                borderRadius: 6,
+                backgroundColor: t.color.brand,
+                marginTop: 4,
+              }}
+            />
+            {i < steps.length - 1 && (
+              <View
+                style={{
+                  flex: 1,
+                  width: 2,
+                  backgroundColor: t.color.brandSubtle,
+                  marginTop: 2,
+                }}
+              />
+            )}
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text variant="label" color={t.color.brand}>
+              {s.day}
+            </Text>
+            <Text
+              variant="body"
+              color={t.color.textPrimary}
+              style={{ marginTop: 2 }}
+            >
+              {s.title}
+            </Text>
+            <Text
+              variant="caption"
+              color={t.color.textSecondary}
+              style={{ marginTop: 2 }}
+            >
+              {s.desc}
+            </Text>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  priceRow: {
+  rowBetween: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
