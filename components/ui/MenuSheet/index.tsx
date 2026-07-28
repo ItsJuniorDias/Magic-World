@@ -28,13 +28,7 @@
  */
 
 import React from "react";
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { FontAwesome6 } from "@expo/vector-icons";
 import Text from "@/components/ui/Text";
 import { useThemedTokens } from "@/hooks/use-tokens";
@@ -63,7 +57,7 @@ export default function MenuSheet({
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="slide"
       onRequestClose={onClose}
       statusBarTranslucent
     >
@@ -82,12 +76,7 @@ export default function MenuSheet({
           ]}
         >
           {/* Grip visual (padrão iOS) */}
-          <View
-            style={[
-              styles.grip,
-              { backgroundColor: t.color.textMuted },
-            ]}
-          />
+          <View style={[styles.grip, { backgroundColor: t.color.textMuted }]} />
 
           <ScrollView
             showsVerticalScrollIndicator={false}
@@ -138,11 +127,7 @@ export default function MenuSheet({
                       <Text
                         variant="body"
                         size="md"
-                        color={
-                          isSelected
-                            ? t.color.brand
-                            : t.color.textPrimary
-                        }
+                        color={isSelected ? t.color.brand : t.color.textPrimary}
                         weight={isSelected ? "bold" : "regular"}
                         style={{ flex: 1 }}
                       >

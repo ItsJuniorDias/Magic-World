@@ -1,4 +1,10 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useMemo,
+  useCallback,
+} from "react";
 import {
   View,
   StyleSheet,
@@ -35,21 +41,36 @@ export default function QuizScreen() {
   const { profile } = useAdventureProfileStore();
   const router = useRouter();
 
-  const [questions, setQuestions] = useState<any[] | null>(null);
+  const [questions, setQuestions] = useState<QuizQuestion[] | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [quizResults, setQuizResults] = useState<
     { questionId: number; correct: boolean }[]
   >([]);
+
   const [showFinalModal, setShowFinalModal] = useState(false);
 
   const avatarAnim = useRef(new Animated.Value(1)).current;
-  const optionAnimValues = useRef<Animated.Value[]>([]);
+
+  const question = questions ? questions[currentIndex] : null;
+
+  // Fresh anim values a cada troca de pergunta. Mantém o array sempre
+  // do mesmo tamanho que as opções que serão renderizadas — fonte do
+  // "cannot read property interpolate of undefined" anterior.
+  const optionAnims = useMemo(
+    () => (question ? question.options.map(() => new Animated.Value(0)) : []),
+    [question],
+  );
 
   // ================= FETCH QUIZ QUESTIONS =================
-  useEffect(() => {
-    async function fetchQuestions() {
-      const prompt = `
+  const fetchQuestions = useCallback(async () => {
+    setFetchError(null);
+    setQuestions(null);
+    setCurrentIndex(0);
+    setQuizResults([]);
+
+    const prompt = `
 Generate 5 fantasy/magic themed quiz questions.
 Each question must have:
 - question text
@@ -71,40 +92,41 @@ Return a JSON array with this exact shape:
 ]
 `;
 
-      try {
-        const parsed = await generateJSON<QuizQuestion[]>(prompt, {
-          model: "fast",
-          temperature: 0.8,
-          validate: (v): v is QuizQuestion[] =>
-            Array.isArray(v) &&
-            v.length > 0 &&
-            typeof v[0]?.question === "string" &&
-            Array.isArray(v[0]?.options) &&
-            v[0].options.length === 4,
-        });
+    try {
+      const parsed = await generateJSON<QuizQuestion[]>(prompt, {
+        model: "fast",
+        temperature: 0.8,
+        validate: (v): v is QuizQuestion[] =>
+          Array.isArray(v) &&
+          v.length > 0 &&
+          v.every(
+            (q) =>
+              q != null &&
+              typeof q.question === "string" &&
+              Array.isArray(q.options) &&
+              q.options.length === 4 &&
+              typeof q.answer === "string" &&
+              q.options.includes(q.answer),
+          ),
+      });
 
-        setQuestions(parsed);
-
-        // Initialize option animations
-        optionAnimValues.current = parsed[0].options.map(
-          () => new Animated.Value(0),
-        );
-      } catch (err) {
-        console.error("Error generating quiz:", err);
-      }
+      setQuestions(parsed);
+    } catch (err) {
+      console.error("Error generating quiz:", err);
+      setFetchError("Couldn't load the quiz. Tap Retry to try again.");
     }
-
-    fetchQuestions();
   }, []);
 
-  const question = questions ? questions[currentIndex] : null;
+  useEffect(() => {
+    fetchQuestions();
+  }, [fetchQuestions]);
 
   // ================= ANIMATE OPTIONS ENTRANCE =================
   useEffect(() => {
     if (!question) return;
-
-    question.options.forEach((_: any, i: number) => {
-      Animated.timing(optionAnimValues.current[i], {
+    optionAnims.forEach((anim, i) => {
+      anim.setValue(0);
+      Animated.timing(anim, {
         toValue: 1,
         duration: 500,
         delay: i * 100,
@@ -112,7 +134,7 @@ Return a JSON array with this exact shape:
         useNativeDriver: true,
       }).start();
     });
-  }, [currentIndex, question]);
+  }, [question, optionAnims]);
 
   // ================= AVATAR POP ANIMATION =================
   const triggerAvatarPop = () => {
@@ -137,9 +159,9 @@ Return a JSON array with this exact shape:
     setQuizResults((prev) => [...prev, { questionId: question.id, correct }]);
 
     // Animate other options away
-    question.options.forEach((_: any, i: number) => {
+    optionAnims.forEach((anim, i) => {
       if (i !== index) {
-        Animated.timing(optionAnimValues.current[i], {
+        Animated.timing(anim, {
           toValue: 0,
           duration: 300,
           easing: Easing.out(Easing.exp),
@@ -152,7 +174,6 @@ Return a JSON array with this exact shape:
       setSelectedOption(null);
 
       if (currentIndex < (questions?.length || 0) - 1) {
-        optionAnimValues.current.forEach((v) => v.setValue(0));
         setCurrentIndex(currentIndex + 1);
       } else {
         setShowFinalModal(true);
@@ -166,11 +187,38 @@ Return a JSON array with this exact shape:
     setShowFinalModal(false);
     setCurrentIndex(0);
     setQuizResults([]);
-    optionAnimValues.current.forEach((v) => v.setValue(0));
   };
 
-  // ================= RENDER =================
-  if (!questions) {
+  // ================= RENDER — ERROR =================
+  if (fetchError) {
+    return (
+      <View style={styles.container}>
+        <StatusBar animated style="light" />
+        <View style={styles.centerFill}>
+          <Text
+            fontSize={16}
+            fontFamily="bold"
+            color="#FFF"
+            title={fetchError}
+            style={{ textAlign: "center", marginBottom: 20 }}
+          />
+          <Pressable onPress={fetchQuestions}>
+            <GlassView style={styles.retryButton} isInteractive>
+              <Text
+                fontSize={14}
+                fontFamily="bold"
+                color={Colors.dark.text}
+                title="Retry"
+              />
+            </GlassView>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  // ================= RENDER — LOADING =================
+  if (!questions || !question) {
     return (
       <View style={styles.container}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -180,6 +228,7 @@ Return a JSON array with this exact shape:
     );
   }
 
+  // ================= RENDER — QUIZ =================
   return (
     <View style={styles.container}>
       <StatusBar animated style="light" />
@@ -233,12 +282,12 @@ Return a JSON array with this exact shape:
 
           const shadowOpacity = isSelected ? 0.35 : 0.15;
 
-          const translateY = optionAnimValues.current[i].interpolate({
+          const translateY = optionAnims[i].interpolate({
             inputRange: [0, 1],
             outputRange: [50, 0],
           });
 
-          const opacity = optionAnimValues.current[i];
+          const opacity = optionAnims[i];
 
           return (
             <TouchableWithoutFeedback
@@ -317,6 +366,19 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 24,
     paddingBottom: 40,
+    alignItems: "center",
+  },
+  centerFill: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  retryButton: {
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 24,
+    justifyContent: "center",
     alignItems: "center",
   },
   backButtonWrapperScroll: {
