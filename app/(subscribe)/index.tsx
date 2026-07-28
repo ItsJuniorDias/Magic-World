@@ -13,6 +13,8 @@ import Purchases, {
 } from "react-native-purchases";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
 
 import Text from "@/components/ui/Text";
 import Button from "@/components/ui/Button";
@@ -22,6 +24,14 @@ import { logEvent } from "@/services/analyticsHelper";
 
 const ENTITLEMENT_ID = "Magic World Pro";
 const PRO_STORAGE_KEY = "@user_is_pro";
+
+// Legal links — served from Notion so we can update them without a new build.
+// IMPORTANT: these must be the *public* Notion URLs (Share → Publish → "Publish to web"),
+// otherwise Apple review will hit a login wall and reject the submission.
+const TERMS_URL =
+  "https://app.notion.com/p/Terms-of-Use-Magic-World-39fbd4163b3b81018e64d954d4800b5b?source=copy_link";
+const PRIVACY_URL =
+  "https://app.notion.com/p/Privacy-Policy-Magic-World-3abbd4163b3b80a496affc2d58cefb32?source=copy_link";
 
 // Featured review — set to null until you have a real quote from the App Store.
 // One strong parent quote beats a star count when review volume is thin.
@@ -232,6 +242,30 @@ export default function SubscribeScreen() {
   const handleClose = async () => {
     await logEvent("paywall_dismissed", { source: "subscribe_screen" });
     router.back();
+  };
+
+  const openLegalLink = async (kind: "privacy" | "terms") => {
+    const url = kind === "privacy" ? PRIVACY_URL : TERMS_URL;
+    try {
+      await logEvent("paywall_link_opened", {
+        source: "subscribe_screen",
+        link: kind,
+      });
+      // Prefer the in-app browser (SFSafariViewController on iOS) — better UX,
+      // keeps the user in the app, and is what Apple review expects.
+      await WebBrowser.openBrowserAsync(url, {
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+      });
+    } catch {
+      try {
+        await Linking.openURL(url);
+      } catch {
+        Alert.alert(
+          "Couldn't open link",
+          "Please check your connection and try again.",
+        );
+      }
+    }
   };
 
   const ctaLabel = trialDays
@@ -471,7 +505,7 @@ export default function SubscribeScreen() {
               </Text>
             </TouchableOpacity>
             <Dot t={t} />
-            <TouchableOpacity onPress={() => router.push("/(privacy-policy)")}>
+            <TouchableOpacity onPress={() => openLegalLink("privacy")}>
               <Text
                 variant="caption"
                 color={t.color.textSecondary}
@@ -481,7 +515,7 @@ export default function SubscribeScreen() {
               </Text>
             </TouchableOpacity>
             <Dot t={t} />
-            <TouchableOpacity onPress={() => router.push("/(terms-eula)")}>
+            <TouchableOpacity onPress={() => openLegalLink("terms")}>
               <Text
                 variant="caption"
                 color={t.color.textSecondary}

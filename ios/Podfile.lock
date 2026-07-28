@@ -316,8 +316,6 @@ PODS:
     - ExpoModulesCore
   - ExpoSystemUI (6.0.9):
     - ExpoModulesCore
-  - ExpoUI (0.2.0-beta.9):
-    - ExpoModulesCore
   - ExpoWebBrowser (15.0.10):
     - ExpoModulesCore
   - EXUpdatesInterface (2.0.0):
@@ -2716,7 +2714,6 @@ DEPENDENCIES:
   - ExpoStoreReview (from `../node_modules/expo-store-review/ios`)
   - ExpoSymbols (from `../node_modules/expo-symbols/ios`)
   - ExpoSystemUI (from `../node_modules/expo-system-ui/ios`)
-  - "ExpoUI (from `../node_modules/@expo/ui/ios`)"
   - ExpoWebBrowser (from `../node_modules/expo-web-browser/ios`)
   - EXUpdatesInterface (from `../node_modules/expo-updates-interface/ios`)
   - fast_float (from `../node_modules/react-native/third-party-podspecs/fast_float.podspec`)
@@ -2874,8 +2871,6 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-symbols/ios"
   ExpoSystemUI:
     :path: "../node_modules/expo-system-ui/ios"
-  ExpoUI:
-    :path: "../node_modules/@expo/ui/ios"
   ExpoWebBrowser:
     :path: "../node_modules/expo-web-browser/ios"
   EXUpdatesInterface:
@@ -3066,7 +3061,6 @@ SPEC CHECKSUMS:
   ExpoStoreReview: 32bb43b6fae9c8db3e33cad69996dff3785eef5f
   ExpoSymbols: 349ee2b4d7d5ff3ea8436467914f8a67635aa354
   ExpoSystemUI: 2ad325f361a2fcd96a464e8574e19935c461c9cc
-  ExpoUI: b75e5ed95b5966b273f1305346f4b5fd911360be
   ExpoWebBrowser: 17b064c621789e41d4816c95c93f429b84971f52
   EXUpdatesInterface: 5adf50cb41e079c861da6d9b4b954c3db9a50734
   fast_float: b32c788ed9c6a8c584d114d0047beda9664e7cc6
@@ -3160,6 +3154,6 @@ SPEC CHECKSUMS:
   SwiftAudioEx: f6aa653770f3a0d3851edaf8d834a30aee4a7646
   Yoga: 728df40394d49f3f471688747cf558158b3a3bd1
 
-PODFILE CHECKSUM: bd41b87e2fdaa0f49a8bbdc6b0433ff467da34b7
+PODFILE CHECKSUM: 8c152187253618109f2fc8f01ca5a8b22fbd7427
 
 COCOAPODS: 1.16.2
