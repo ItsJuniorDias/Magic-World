@@ -30,6 +30,7 @@
     "expo-device": "^8.0.10",
     "expo-file-system": "^19.0.21",
     "expo-font": "~14.0.11",
+    "expo-gl": "~16.0.7",
     "expo-haptics": "~15.0.8",
     "expo-image": "^3.0.11",
     "expo-linear-gradient": "^15.0.8",
@@ -58,11 +59,14 @@
     "react-native-track-player": "^4.1.2",
     "react-native-web": "~0.21.0",
     "styled-components": "^6.2.0",
+    "three": "^0.182.0",
+    "three-stdlib": "^2.36.1",
     "uuid": "^13.0.0",
     "zustand": "^5.0.9"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "@types/three": "^0.182.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2",

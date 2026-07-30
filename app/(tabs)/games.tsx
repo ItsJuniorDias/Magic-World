@@ -38,6 +38,14 @@ const GAMES: Game[] = [
     route: "/(memory-game)",
     description: "Train your brain.",
   },
+  {
+    id: "endless-runner",
+    title: "Space Runner",
+    emoji: "🚀",
+    accent: tokens.palette.amber500,
+    route: "/(endless-runner)",
+    description: "Navigate through asteroids.",
+  },
 ];
 
 export default function GamesHub() {
