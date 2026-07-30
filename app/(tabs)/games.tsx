@@ -1,9 +1,4 @@
-import {
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
@@ -23,6 +18,14 @@ type Game = {
 
 const GAMES: Game[] = [
   {
+    id: "endless-runner",
+    title: "Space Runner",
+    emoji: "🚀",
+    accent: tokens.palette.amber500,
+    route: "/(endless-runner)",
+    description: "Navigate through asteroids.",
+  },
+  {
     id: "quiz",
     title: "Quiz Master",
     emoji: "❓",
@@ -37,14 +40,6 @@ const GAMES: Game[] = [
     accent: tokens.palette.blue500,
     route: "/(memory-game)",
     description: "Train your brain.",
-  },
-  {
-    id: "endless-runner",
-    title: "Space Runner",
-    emoji: "🚀",
-    accent: tokens.palette.amber500,
-    route: "/(endless-runner)",
-    description: "Navigate through asteroids.",
   },
 ];
 
@@ -62,7 +57,10 @@ export default function GamesHub() {
           style={styles.container}
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingTop: t.spacing.xxxl + 16, paddingHorizontal: t.spacing.md },
+            {
+              paddingTop: t.spacing.xxxl + 16,
+              paddingHorizontal: t.spacing.md,
+            },
           ]}
           showsVerticalScrollIndicator={false}
         >
@@ -114,7 +112,10 @@ export default function GamesHub() {
                     height: 56,
                     borderRadius: t.radius.md,
                     marginRight: t.spacing.md,
-                    backgroundColor: withAlpha(game.accent, isDark ? 0.19 : 0.13),
+                    backgroundColor: withAlpha(
+                      game.accent,
+                      isDark ? 0.19 : 0.13,
+                    ),
                   },
                 ]}
               >
