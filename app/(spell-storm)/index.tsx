@@ -230,13 +230,31 @@ export default function SpellStormScreen() {
         if (raw) {
           try {
             const parsed = JSON.parse(raw) as Progress;
-            // Defensive: a save written by an older build may be missing
-            // fields, and a crash on launch is a far worse outcome than a
-            // reset save.
+
+            // A save from the v2 pre-release could point `bench` at any room
+            // the player fell into via the misplaced hub pit — including
+            // rooms that have no bench. The game boots by teleporting the
+            // player to `progress.bench`, so a bench field that names a
+            // benchless room lands them on empty floor with an inaccurate
+            // room-title card and no way to save. THAT is what "The Long
+            // Fall" on the black screen was.
+            //
+            // Anything that fails the check falls back to the crossroads,
+            // which every build has always been able to start from.
+            const savedBench = typeof parsed.bench === "string" ? parsed.bench : "";
+            const bench =
+              ROOMS[savedBench] && ROOMS[savedBench].bench
+                ? savedBench
+                : "crossroads";
+
             progressRef.current = {
-              bosses: Array.isArray(parsed.bosses) ? parsed.bosses : [],
-              discovered: Array.isArray(parsed.discovered) ? parsed.discovered : [],
-              bench: typeof parsed.bench === "string" && ROOMS[parsed.bench] ? parsed.bench : "crossroads",
+              bosses: Array.isArray(parsed.bosses)
+                ? parsed.bosses.filter((id) => typeof id === "string" && !!ROOMS[id])
+                : [],
+              discovered: Array.isArray(parsed.discovered)
+                ? parsed.discovered.filter((id) => typeof id === "string" && !!ROOMS[id])
+                : [],
+              bench,
               benchX: typeof parsed.benchX === "number" ? parsed.benchX : 0,
               essence: typeof parsed.essence === "number" ? parsed.essence : 0,
             };
@@ -314,12 +332,23 @@ export default function SpellStormScreen() {
 
   // Rotation. The old build never called resize at all, so turning the phone
   // left the frustum on the previous aspect ratio and stretched everything.
+  //
+  // onLayout fires BEFORE onContextCreate on cold start, and the game does
+  // not exist yet. Guarding on ready avoids a resize call against a null
+  // handle that used to look silently benign but poisoned the frustum on the
+  // very first frame.
+  //
+  // The dimensions are in DIPs and the camera fit wants pixels. cameraRig.fit
+  // divides by height to get an aspect ratio, and the ratio is the same in
+  // both, so no PixelRatio multiplication is needed.
   const onLayout = useCallback(
     (e: LayoutChangeEvent) => {
+      if (!ready) return;
       const { width, height } = e.nativeEvent.layout;
+      if (width < 1 || height < 1) return;
       handleRef.current?.resize(width, height);
     },
-    [handleRef],
+    [handleRef, ready],
   );
 
   useEffect(() => {
