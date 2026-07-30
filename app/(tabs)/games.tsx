@@ -14,9 +14,22 @@ type Game = {
   accent: string;
   route: string;
   description: string;
+  /** Featured entries get a taller card and a badge. */
+  featured?: boolean;
+  badge?: string;
 };
 
 const GAMES: Game[] = [
+  {
+    id: "spell-storm",
+    title: "Spell Storm",
+    emoji: "🪄",
+    accent: tokens.palette.blue500,
+    route: "/(spell-storm)",
+    description: "Cast, dodge and survive ten waves to face the dragon.",
+    featured: true,
+    badge: "New",
+  },
   {
     id: "endless-runner",
     title: "Space Runner",
@@ -100,6 +113,10 @@ export default function GamesHub() {
                   padding: t.spacing.md,
                   ...(isDark ? {} : t.shadow.sm),
                 },
+                game.featured && {
+                  borderWidth: 1.5,
+                  borderColor: withAlpha(game.accent, 0.45),
+                },
               ]}
               onPress={() => router.push(game.route as any)}
               activeOpacity={0.75}
@@ -108,8 +125,8 @@ export default function GamesHub() {
                 style={[
                   styles.iconContainer,
                   {
-                    width: 56,
-                    height: 56,
+                    width: game.featured ? 64 : 56,
+                    height: game.featured ? 64 : 56,
                     borderRadius: t.radius.md,
                     marginRight: t.spacing.md,
                     backgroundColor: withAlpha(
@@ -125,14 +142,28 @@ export default function GamesHub() {
               </View>
 
               <View style={styles.info}>
-                <Text
-                  variant="heading"
-                  size="lg"
-                  color={t.color.textPrimary}
-                  style={{ marginBottom: 2 }}
-                >
-                  {game.title}
-                </Text>
+                <View style={styles.titleRow}>
+                  <Text
+                    variant="heading"
+                    size="lg"
+                    color={t.color.textPrimary}
+                    style={{ marginBottom: 2 }}
+                  >
+                    {game.title}
+                  </Text>
+                  {game.badge && (
+                    <View
+                      style={[
+                        styles.badge,
+                        { backgroundColor: withAlpha(game.accent, 0.18) },
+                      ]}
+                    >
+                      <Text variant="body" size="xs" color={game.accent}>
+                        {game.badge}
+                      </Text>
+                    </View>
+                  )}
+                </View>
                 <Text
                   variant="body"
                   size="sm"
@@ -183,5 +214,16 @@ const styles = StyleSheet.create({
   info: {
     flex: 1,
     marginRight: 8,
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    marginBottom: 2,
   },
 });
