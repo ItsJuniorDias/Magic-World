@@ -34,6 +34,10 @@ export interface InputState {
   jumpPressed: boolean;
   /** True while the FIRE button is held — the mage auto-fires. */
   fireHeld: boolean;
+  /** Set true on the first frame FIRE goes down. Drives the aim latch. */
+  firePressed: boolean;
+  /** Set true when a dash is requested. +1 right, -1 left, 0 ignored. */
+  dashRequest: 0 | 1 | -1;
 }
 
 // ---------------------------------------------------------------------------
@@ -60,10 +64,29 @@ export interface Player {
   /** Normalised aim direction, snapped to 8 ways. */
   aimX: number;
   aimY: number;
+  /**
+   * The snapshot of the aim direction taken when CAST was first pressed.
+   * While CAST is held, `aimX/aimY` are copied from this rather than from
+   * the live stick, so movement and aim are decoupled per turn.
+   */
+  latchedAimX: number;
+  latchedAimY: number;
+  /** True while the aim is latched — cleared on CAST release. */
+  aimLatched: boolean;
 
   weapon: WeaponId;
   weaponTimer: number;
   fireCooldown: number;
+
+  // ---- Dash ----
+  /** > 0 while dashing. During this window the player is invulnerable. */
+  dashTimer: number;
+  /** Cooldown until the next dash is available. Held between dashes. */
+  dashCooldown: number;
+  /** +1 or -1 during the dash, so the player can't reverse mid-dash. */
+  dashDir: 1 | -1;
+  /** True when this frame's landing should refund a pogo jump. */
+  pogoRefund: boolean;
 
   /** Visual-only squash/stretch, recovered toward 1. */
   squashX: number;
@@ -235,6 +258,12 @@ export interface HudSnapshot {
   totalBosses: number;
   discovered: string[];
   defeatedRooms: string[];
+
+  /** Dash telemetry, drives the cooldown pip near the CAST button. */
+  dashActive: boolean;
+  dashReady: boolean;
+  /** Whether the current shot direction is latched (visible reticle glow). */
+  aimLatched: boolean;
 
   /** Set when the player walks into a sealed door. */
   sealed: { label: string; pro: boolean } | null;

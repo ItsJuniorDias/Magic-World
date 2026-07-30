@@ -76,6 +76,58 @@ export const PLAYER = {
 
   /** Muzzle offset from the body centre, along the aim vector. */
   muzzleDistance: 0.95,
+
+  /**
+   * Aim latch.
+   *
+   * On a phone the movement stick and the aim stick are the same stick.
+   * Push up to aim up and moveX drops to zero — you stop moving. Push
+   * up-right to aim up-right and you can move AND aim, but only diagonally.
+   * There is no combination of that one stick that lets you run right at
+   * full speed while firing straight up. Which was the whole complaint.
+   *
+   * When CAST is pressed, we take a snapshot of the stick direction and
+   * treat that as the aim until CAST is released. The stick meanwhile keeps
+   * controlling movement freely. So the pattern is:
+   *
+   *   push stick up  ->  press CAST  ->  aim latches to up
+   *                  ->  push stick right (CAST still held)  ->  runs right, fires up
+   *                  ->  release CAST  ->  aim unlocks
+   *
+   * This is how Contra and every twin-stick-lite touch shooter handles it.
+   */
+  aimLatchOnCast: true,
+
+  // -------------------------------------------------------------------
+  // Dash — the extra button we did not add
+  //
+  // Two big buttons on the right (CAST, JUMP) already crowd the thumb. A
+  // third would push one of them off the edge on small phones. Instead the
+  // dash triggers on a DOUBLE-TAP anywhere in the movement zone, in the
+  // direction of the second tap. That reads as an intentional gesture
+  // (a single tap never triggers it) and takes zero pixels of HUD.
+  // -------------------------------------------------------------------
+  dashSpeed: 24,
+  dashDuration: 0.18,
+  /** i-frames granted for the dash. Shorter than the dash so it recovers. */
+  dashIFrames: 0.24,
+  dashCooldown: 0.9,
+  /** Second-tap window. Feels sluggish above ~300ms, unreliable below ~180. */
+  dashDoubleTapWindow: 0.28,
+
+  // -------------------------------------------------------------------
+  // Pogo — Hollow Knight down-strike
+  //
+  // Aim down while airborne, hit an enemy, bounce. That single mechanic
+  // turns every enemy into a stepping stone across a pit and every boss
+  // fight into a rhythm game — you can chain-pogo the Gorge Mother to
+  // stay above her landing shockwave.
+  // -------------------------------------------------------------------
+  pogoBounce: 21,
+  /** Aim must be at least this far below horizontal to count as "down". */
+  pogoDownThreshold: -0.5,
+  /** Refunds one jump so a chain of pogos isn't punished by no coyote time. */
+  pogoRefundJump: true,
 } as const;
 
 // ---------------------------------------------------------------------------

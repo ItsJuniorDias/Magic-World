@@ -8,6 +8,8 @@ export function createInputState(): InputState {
     jumpHeld: false,
     jumpPressed: false,
     fireHeld: false,
+    firePressed: false,
+    dashRequest: 0,
   };
 }
 
@@ -17,6 +19,8 @@ export function resetInput(input: InputState): void {
   input.jumpHeld = false;
   input.jumpPressed = false;
   input.fireHeld = false;
+  input.firePressed = false;
+  input.dashRequest = 0;
 }
 
 /**
@@ -67,6 +71,22 @@ export function snapAim(
   const len = Math.hypot(x, y);
   if (len < INPUT.deadzone) return { x: fallbackX, y: 0 };
 
+  const sector = (Math.PI * 2) / INPUT.aimDirections;
+  const angle = Math.atan2(y, x);
+  const snapped = Math.round(angle / sector) * sector;
+  return { x: Math.cos(snapped), y: Math.sin(snapped) };
+}
+
+/**
+ * Same 8-way snap, but when the stick is idle it returns null instead of
+ * falling back horizontal. Used at the moment CAST is pressed: if the
+ * player was already tilting the stick, that direction gets latched. If
+ * they weren't, the caller keeps whatever aim they had (facing) rather
+ * than being forced sideways.
+ */
+export function snapAimStrict(x: number, y: number): { x: number; y: number } | null {
+  const len = Math.hypot(x, y);
+  if (len < INPUT.deadzone) return null;
   const sector = (Math.PI * 2) / INPUT.aimDirections;
   const angle = Math.atan2(y, x);
   const snapped = Math.round(angle / sector) * sector;

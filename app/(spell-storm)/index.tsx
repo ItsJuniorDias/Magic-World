@@ -5,7 +5,6 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
   LayoutChangeEvent,
   PanResponder,
@@ -218,6 +217,9 @@ export default function SpellStormScreen() {
     totalBosses: 7,
     discovered: [],
     defeatedRooms: [],
+    dashActive: false,
+    dashReady: true,
+    aimLatched: false,
     sealed: null,
   });
 
@@ -363,6 +365,22 @@ export default function SpellStormScreen() {
   const [stickOrigin, setStickOrigin] = useState<{ x: number; y: number } | null>(null);
   const [stickKnob, setStickKnob] = useState({ x: 0, y: 0 });
 
+  // Dash triggers on double-tap on the movement zone. We track the moment
+  // of the previous release and its final direction (from the last stick
+  // reading before release), and treat a new touch within the window as
+  // "the player asked for a dash in the direction they most recently held".
+  //
+  // Two implementation details worth calling out:
+  //
+  //   - `Date.now()` rather than the frame clock, because touch input is
+  //     driven by the OS and doesn't share a frame timeline with the sim.
+  //   - The direction is captured on RELEASE, not on the second GRANT.
+  //     Reading the stick on grant is always (0,0) because the finger just
+  //     landed; reading it on release records the actual travel direction.
+  const lastReleaseAt = useRef(0);
+  const lastReleaseDir = useRef<0 | 1 | -1>(0);
+  const currentStickDx = useRef(0);
+
   const stickResponder = useMemo(
     () =>
       PanResponder.create({
@@ -374,10 +392,20 @@ export default function SpellStormScreen() {
         onPanResponderGrant: (evt) => {
           setStickOrigin({ x: evt.nativeEvent.locationX, y: evt.nativeEvent.locationY });
           setStickKnob({ x: 0, y: 0 });
+          const now = Date.now() / 1000;
+          if (
+            now - lastReleaseAt.current < 0.28 &&
+            lastReleaseDir.current !== 0 &&
+            gameRef.current
+          ) {
+            gameRef.current.input.dashRequest = lastReleaseDir.current;
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+          }
         },
         onPanResponderMove: (_evt, gesture) => {
           const game = gameRef.current;
           if (game) applyStick(game.input, gesture.dx, gesture.dy);
+          currentStickDx.current = gesture.dx;
           const len = Math.hypot(gesture.dx, gesture.dy);
           const clamp = Math.min(len, INPUT.stickRadius);
           const scale = len > 0 ? clamp / len : 0;
@@ -386,12 +414,20 @@ export default function SpellStormScreen() {
         onPanResponderRelease: () => {
           const game = gameRef.current;
           if (game) applyStick(game.input, 0, 0);
+          // Only credit a direction for double-tap if the thumb actually
+          // travelled — a stationary tap-and-release should not arm the
+          // next tap into a dash.
+          const dx = currentStickDx.current;
+          lastReleaseAt.current = Date.now() / 1000;
+          lastReleaseDir.current = dx > 18 ? 1 : dx < -18 ? -1 : 0;
+          currentStickDx.current = 0;
           setStickOrigin(null);
           setStickKnob({ x: 0, y: 0 });
         },
         onPanResponderTerminate: () => {
           const game = gameRef.current;
           if (game) applyStick(game.input, 0, 0);
+          currentStickDx.current = 0;
           setStickOrigin(null);
         },
       }),
@@ -410,7 +446,14 @@ export default function SpellStormScreen() {
 
   const pressFire = useCallback((down: boolean) => {
     const game = gameRef.current;
-    if (game) game.input.fireHeld = down;
+    if (!game) return;
+    game.input.fireHeld = down;
+    if (down) {
+      // The press edge is the signal for the aim latch. Set it here so the
+      // simulation catches it on its very next fixed step, before it has a
+      // chance to update aim from the stick and lose the intended direction.
+      game.input.firePressed = true;
+    }
   }, []);
 
   const startRun = useCallback(() => {
@@ -433,9 +476,7 @@ export default function SpellStormScreen() {
     return (
       <View style={styles.root}>
         <StatusBar hidden />
-        <View style={styles.overlay}>
-          <ActivityIndicator color={hex(PALETTE.arcane)} size="large" />
-        </View>
+        <Loader subtitle="Restoring your progress…" />
       </View>
     );
   }
@@ -637,6 +678,27 @@ export default function SpellStormScreen() {
             style={[styles.actions, { right: insets.right + 26, bottom: insets.bottom + 30 }]}
             pointerEvents="box-none"
           >
+            {/*
+              The dash indicator sits beside CAST rather than being a button.
+              Making it a button would eat thumb real estate; making it a
+              status pip teaches the player that dash is available WITHOUT
+              adding another target to hit. When ready, it glows cyan. During
+              the dash, it flashes white. On cooldown, it dims.
+            */}
+            <View
+              pointerEvents="none"
+              style={[
+                styles.dashPip,
+                {
+                  backgroundColor: hud.dashActive
+                    ? "#FFFFFF"
+                    : hud.dashReady
+                      ? hex(PALETTE.arcane)
+                      : "rgba(255,255,255,0.22)",
+                  transform: [{ scale: hud.dashActive ? 1.3 : 1 }],
+                },
+              ]}
+            />
             <ActionButton
               label="CAST"
               size={86}
@@ -656,16 +718,12 @@ export default function SpellStormScreen() {
       )}
 
       {/* ---------------- Overlays ---------------- */}
-      {!ready && (
-        <View style={styles.overlay}>
-          <ActivityIndicator color={hex(PALETTE.arcane)} size="large" />
-        </View>
-      )}
+      {!ready && <Loader subtitle="Preparing the arena…" />}
 
       {ready && hud.phase === "ready" && (
         <Overlay
           title="Spell Storm"
-          subtitle="Twenty rooms. Seven sigils. Drag to move and aim, cast to fight, rest at a bench to save."
+          subtitle="Drag to move. Tilt the stick to aim, cast to lock it. Double-tap the stick to dash. Fire down in the air to pogo off enemies."
           primaryLabel={
             (progressRef.current?.bosses.length ?? 0) > 0 || (progressRef.current?.discovered.length ?? 0) > 1
               ? "Continue"
@@ -868,6 +926,128 @@ function WorldMap({ hud }: { hud: HudSnapshot }) {
 }
 
 // ---------------------------------------------------------------------------
+// Loader
+//
+// The old loader was `<ActivityIndicator />`. Nothing about that read as
+// belonging to the game — it looked like a network request, not like a
+// mage was about to appear.
+//
+// This one uses the paper-theatre palette (skyRose to skyZenith gradient
+// via layered translucent rectangles, since we still don't want a texture
+// dependency), an orb that breathes at ~1Hz, and a rotating tip so the
+// player learns one control per launch. The tips are the actual answer to
+// the last complaint — nobody knew about the aim latch, and putting it in
+// the loader is where you catch a player who is about to press Begin.
+//
+// If loading finishes in under 400ms this is basically invisible (a soft
+// fade in and out). If it takes longer, at least the player has something
+// to read.
+// ---------------------------------------------------------------------------
+
+const TIPS = [
+  "Push the stick up, then hold CAST. You fire straight up while running.",
+  "Double-tap the stick to dash. Short i-frames — use it as a dodge.",
+  "In the air, fire down onto an enemy to pogo. Chain them across pits.",
+  "The reticle glows brighter when your aim is latched under CAST.",
+  "Benches heal and save. Sit at one before you tackle a boss.",
+  "Sealed doors keep their silhouette. That's a door you'll come back to.",
+  "Every boss has a 65% and a 30% phase. The rhythm is the same for all seven.",
+];
+
+function Loader({ subtitle }: { subtitle?: string }) {
+  const pulse = useRef(new Animated.Value(0)).current;
+  const [tip, setTip] = useState(() => TIPS[Math.floor(Math.random() * TIPS.length)]);
+  const [fadeIn, setFadeIn] = useState(false);
+
+  useEffect(() => {
+    // 400ms delay so a fast load never flashes the loader — one animation
+    // frame's worth of visible chrome reads as jank, not as polish.
+    const t = setTimeout(() => setFadeIn(true), 380);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 1100, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 1100, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setTip((prev) => {
+        // Never show the same tip twice in a row.
+        let next = TIPS[Math.floor(Math.random() * TIPS.length)];
+        for (let tries = 0; next === prev && tries < 5; tries++) {
+          next = TIPS[Math.floor(Math.random() * TIPS.length)];
+        }
+        return next;
+      });
+    }, 3600);
+    return () => clearInterval(id);
+  }, []);
+
+  const orbScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1.14] });
+  const haloScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1.0, 1.35] });
+  const haloOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.28, 0.62] });
+
+  return (
+    <View style={styles.loader}>
+      {/* Sky gradient, hand-composed so we don't drag in expo-linear-gradient */}
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: hex(PALETTE.skyZenith) }]} />
+      <View style={[StyleSheet.absoluteFill, styles.loaderBandMid]} />
+      <View style={[StyleSheet.absoluteFill, styles.loaderBandLow]} />
+
+      <View
+        style={[
+          styles.loaderStage,
+          { opacity: fadeIn ? 1 : 0.6 },
+        ]}
+      >
+        {/* Halo */}
+        <Animated.View
+          style={[
+            styles.loaderHalo,
+            {
+              transform: [{ scale: haloScale }],
+              opacity: haloOpacity,
+            },
+          ]}
+        />
+        {/* Orb */}
+        <Animated.View
+          style={[
+            styles.loaderOrb,
+            {
+              transform: [{ scale: orbScale }],
+            },
+          ]}
+        />
+
+        <Text variant="display" size="display" color="#FFFFFF" style={styles.loaderTitle}>
+          Spell Storm
+        </Text>
+        {!!subtitle && (
+          <Text variant="label" size="sm" color="rgba(255,255,255,0.55)" style={styles.loaderSubtitle}>
+            {subtitle}
+          </Text>
+        )}
+
+        <View style={styles.loaderTipWrap}>
+          <Text variant="body" size="sm" color="rgba(255,255,255,0.62)" style={styles.loaderTip}>
+            {tip}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 interface OverlayProps {
   title: string;
@@ -1044,6 +1224,16 @@ const styles = StyleSheet.create({
   },
 
   actions: { position: "absolute", flexDirection: "row", alignItems: "flex-end", gap: 16 },
+  dashPip: {
+    width: 8,
+    height: 8,
+    borderRadius: 3,
+    borderCurve: "continuous",
+    transform: [{ rotate: "45deg" }],
+    alignSelf: "center",
+    marginBottom: 40,
+    marginRight: -8,
+  },
   actionLabel: { letterSpacing: 0.8 },
 
   overlay: {
@@ -1074,4 +1264,53 @@ const styles = StyleSheet.create({
   },
   mapScroll: { paddingHorizontal: 32, paddingVertical: 16, alignItems: "center" },
   mapLabel: { textAlign: "center", lineHeight: 12 },
+
+  loader: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", padding: 32 },
+  // Two extra translucent panels layered on top of the base fill produce a
+  // gradient without a linear-gradient dependency. The top one is warm and
+  // sits at ~40% opacity, the bottom is cooler and pushes the horizon
+  // toward the amber-to-dusk band.
+  loaderBandMid: {
+    top: "45%",
+    backgroundColor: hex(PALETTE.skyRose),
+    opacity: 0.28,
+  },
+  loaderBandLow: {
+    top: "65%",
+    backgroundColor: hex(PALETTE.skyEmber),
+    opacity: 0.22,
+  },
+  loaderStage: { alignItems: "center", maxWidth: 480 },
+  loaderHalo: {
+    position: "absolute",
+    top: -38,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: hex(PALETTE.arcane),
+  },
+  loaderOrb: {
+    marginBottom: 44,
+    width: 68,
+    height: 68,
+    borderRadius: 22,
+    borderCurve: "continuous",
+    backgroundColor: hex(PALETTE.arcaneCore),
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.55)",
+  },
+  loaderTitle: { letterSpacing: -0.6, textAlign: "center", marginBottom: 6 },
+  loaderSubtitle: { letterSpacing: 1, textAlign: "center", marginBottom: 22, textTransform: "uppercase" },
+  loaderTipWrap: {
+    marginTop: 18,
+    maxWidth: 380,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(12,8,24,0.4)",
+  },
+  loaderTip: { textAlign: "center", lineHeight: 20 },
 });

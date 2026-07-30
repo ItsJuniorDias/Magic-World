@@ -6,9 +6,10 @@
  * way to find out that coyote time is off by a frame.
  */
 import { BOSS_KINDS, ENEMIES, PLAYER, RENDER, WAVES } from "../game/spell-storm/config";
+import { pogoBounce } from "../game/spell-storm/systems/player";
+import { createInputState, snapAim, snapAimStrict } from "../game/spell-storm/engine/input";
 import { setActiveRoom } from "../game/spell-storm/systems/arena";
 import { ROOMS, ROOM_IDS, arrivalPoint, findGate } from "../game/spell-storm/world/rooms";
-import { createInputState, snapAim } from "../game/spell-storm/engine/input";
 import { resolveGround, resolveSolidsX } from "../game/spell-storm/systems/physics";
 import { createPlayer, damagePlayer, updatePlayer } from "../game/spell-storm/systems/player";
 import { composeWave, isWaveLocked } from "../game/spell-storm/systems/waves";
@@ -580,6 +581,222 @@ console.log("\nFree vs member split");
   check("locked pits have solid ground to recover onto", stranded.length === 0, stranded.join(", ") || "none");
 }
 
+
+// ---------------------------------------------------------------------------
+console.log("\nAim latch");
+{
+  // ------------------------------------------------------------------
+  // THE ORIGINAL BUG REPORT: "eu ainda não consigo atirar pra cima"
+  //
+  // Real-world thumb sequence:
+  //   1. Left thumb pushes stick up.
+  //   2. Right thumb reaches for CAST — left thumb LIFTS to reposition.
+  //   3. CAST fires while stick is idle.
+  // The previous build fell back to horizontal facing on stick release,
+  // so step 3 fired sideways. This test asserts the fix directly.
+  // ------------------------------------------------------------------
+  {
+    const p = createPlayer();
+    const input = createInputState();
+
+    // Step 1: push stick up, no fire yet.
+    input.moveX = 0;
+    input.moveY = 1;
+    updatePlayer(p, input, STEP, noEvents);
+    check(
+      "aim goes up when the stick is pushed up",
+      Math.abs(p.aimX) < 0.1 && p.aimY > 0.9,
+      `aim=(${p.aimX.toFixed(2)}, ${p.aimY.toFixed(2)})`,
+    );
+
+    // Step 2: release stick BEFORE pressing fire.
+    input.moveX = 0;
+    input.moveY = 0;
+    step(p, input, 3);
+    check(
+      "aim stays up after the stick is released",
+      Math.abs(p.aimX) < 0.1 && p.aimY > 0.9,
+      `aim=(${p.aimX.toFixed(2)}, ${p.aimY.toFixed(2)})`,
+    );
+
+    // Step 3: NOW press fire. This is the scenario that used to fire sideways.
+    input.fireHeld = true;
+    input.firePressed = true;
+    updatePlayer(p, input, STEP, noEvents);
+    check(
+      "pressing CAST after releasing the stick fires in the direction we last aimed",
+      Math.abs(p.aimX) < 0.1 && p.aimY > 0.9 && p.aimLatched,
+      `aim=(${p.aimX.toFixed(2)}, ${p.aimY.toFixed(2)}) latched=${p.aimLatched}`,
+    );
+
+    // Step 4: with CAST still held, the player wants to run right. Aim stays up.
+    input.moveX = 1;
+    input.moveY = 0;
+    input.firePressed = false;
+    step(p, input, 8);
+    check(
+      "running right while CAST is held keeps firing up",
+      Math.abs(p.aimX) < 0.1 && p.aimY > 0.9,
+      `aim=(${p.aimX.toFixed(2)}, ${p.aimY.toFixed(2)})`,
+    );
+    check("...and the mage actually runs right at speed", p.vx > 6, `vx=${p.vx.toFixed(2)}`);
+  }
+
+  // Fresh player, stick idle, tap fire: the latch takes the CURRENT stick
+  // direction. If the stick is neutral, it keeps whatever aim we had rather
+  // than snapping horizontal — snapping to horizontal here fights players
+  // who tap fire on their way into a firing position.
+  const p = createPlayer();
+  const input = createInputState();
+  p.aimX = 0;
+  p.aimY = 1; // was already aiming up
+
+  // Push stick up-right, press fire.
+  input.moveX = 0.7;
+  input.moveY = 0.7;
+  input.fireHeld = true;
+  input.firePressed = true;
+  updatePlayer(p, input, STEP, noEvents);
+  check(
+    "CAST latches aim to the stick direction at press time",
+    Math.abs(p.aimX - 0.707) < 0.1 && Math.abs(p.aimY - 0.707) < 0.1,
+    `aim=(${p.aimX.toFixed(2)}, ${p.aimY.toFixed(2)})`,
+  );
+  check("latch is engaged while fire is held", p.aimLatched);
+
+  // Now keep fire held, push stick down-right. Aim must NOT follow.
+  input.moveX = 1;
+  input.moveY = -0.2;
+  input.firePressed = false;
+  step(p, input, 6);
+  check(
+    "aim stays latched while CAST is held even as the stick moves",
+    Math.abs(p.aimX - 0.707) < 0.15 && Math.abs(p.aimY - 0.707) < 0.15,
+    `aim=(${p.aimX.toFixed(2)}, ${p.aimY.toFixed(2)})`,
+  );
+  // Movement continues to follow the stick.
+  check("stick keeps controlling movement while aim is latched", p.vx > 5, `vx=${p.vx.toFixed(2)}`);
+
+  // Release fire. Latch clears; aim falls back to stick direction.
+  input.fireHeld = false;
+  step(p, input, 2);
+  check("releasing CAST clears the latch", !p.aimLatched);
+
+  // 8-way snap includes up. Push straight up, no fire: aim is (0, 1).
+  const p2 = createPlayer();
+  const input2 = createInputState();
+  input2.moveX = 0;
+  input2.moveY = 1;
+  updatePlayer(p2, input2, STEP, noEvents);
+  check(
+    "pushing the stick straight up aims straight up",
+    Math.abs(p2.aimX) < 0.1 && p2.aimY > 0.9,
+    `aim=(${p2.aimX.toFixed(2)}, ${p2.aimY.toFixed(2)})`,
+  );
+
+  // snapAimStrict returns null when idle — the caller decides what to do.
+  const strictIdle = snapAimStrict(0.05, 0.02);
+  check("snapAimStrict returns null when the stick is idle", strictIdle === null);
+  const strictUp = snapAimStrict(0, 1);
+  check(
+    "snapAimStrict snaps to up when pushed",
+    strictUp !== null && Math.abs(strictUp.x) < 0.1 && strictUp.y > 0.9,
+  );
+}
+
+// ---------------------------------------------------------------------------
+console.log("\nDash");
+{
+  const p = createPlayer();
+  const input = createInputState();
+  input.dashRequest = 1;
+  updatePlayer(p, input, STEP, noEvents);
+
+  check("dash grants i-frames", p.invulnerable >= PLAYER.dashIFrames * 0.9);
+  check("dash sets horizontal velocity to dashSpeed", Math.abs(p.vx - PLAYER.dashSpeed) < 0.1, `vx=${p.vx}`);
+  check("dash consumes the request in one frame", (input.dashRequest as number) === 0);
+  check("dash puts dash on cooldown", p.dashCooldown > 0);
+  check("dash flips facing to the direction of travel", p.facing === 1);
+
+  // A second request during the dash is rejected — no dash chaining.
+  input.dashRequest = -1;
+  updatePlayer(p, input, STEP, noEvents);
+  check("dash cannot be re-triggered while active", Math.abs(p.vx - PLAYER.dashSpeed) < 0.5 && p.facing === 1);
+
+  // Wait out the dash + a bit of cooldown, then try again — should fail.
+  input.dashRequest = 0;
+  step(p, input, 30); // ~0.5s
+  input.dashRequest = -1;
+  updatePlayer(p, input, STEP, noEvents);
+  check("dash cannot be triggered again during cooldown", p.dashTimer <= 0);
+
+  // Now wait past the full cooldown.
+  input.dashRequest = 0;
+  step(p, input, 60);
+  input.dashRequest = -1;
+  updatePlayer(p, input, STEP, noEvents);
+  check("dash can be triggered again after cooldown", p.dashTimer > 0);
+  check("dash accepts a request in the opposite direction after cooldown", p.dashDir === -1);
+}
+
+// ---------------------------------------------------------------------------
+console.log("\nPogo");
+{
+  // Airborne + call pogoBounce = new upward velocity.
+  const p = createPlayer();
+  p.onGround = false;
+  p.vy = -20; // falling fast
+  const bounced = pogoBounce(p, noEvents);
+  check("pogo returns true when it bounces", bounced);
+  check("pogo replaces downward velocity with an upward bounce", p.vy > 0 && Math.abs(p.vy - PLAYER.pogoBounce) < 0.01);
+  check("pogo clears the jumping flag so JUMP release can cut the arc", !p.jumping);
+
+  // Grounded = no pogo. Otherwise you'd get infinite bounces off ground
+  // targets.
+  const p2 = createPlayer();
+  p2.onGround = true;
+  p2.vy = 0;
+  const noGroundPogo = pogoBounce(p2, noEvents);
+  check("pogo does nothing when the player is grounded", !noGroundPogo && p2.vy === 0);
+
+  // Config sanity: the bounce is at least as high as jumpVelocity * 0.7,
+  // or chaining pogos loses altitude fast and the mechanic dies.
+  check(
+    "pogo bounce is high enough to sustain a chain",
+    PLAYER.pogoBounce >= PLAYER.jumpVelocity * 0.7,
+    `pogo=${PLAYER.pogoBounce}  jump=${PLAYER.jumpVelocity}`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+console.log("\nAim snap coverage");
+{
+  // Every one of the eight compass directions is representable. If any of
+  // them snaps to the same direction as another one, we've silently lost a
+  // heading.
+  const dirs = [
+    [1, 0, "E"],
+    [1, 1, "NE"],
+    [0, 1, "N"],
+    [-1, 1, "NW"],
+    [-1, 0, "W"],
+    [-1, -1, "SW"],
+    [0, -1, "S"],
+    [1, -1, "SE"],
+  ] as const;
+  const seen = new Set<string>();
+  let all = true;
+  for (const [x, y, label] of dirs) {
+    const a = snapAim(x, y, 1);
+    const key = `${a.x.toFixed(2)},${a.y.toFixed(2)}`;
+    if (seen.has(key)) {
+      all = false;
+      console.log(`        ${label} collides with a previous heading (${key})`);
+    }
+    seen.add(key);
+  }
+  check("all 8 headings are distinct", all && seen.size === 8, `${seen.size} unique`);
+}
 // ---------------------------------------------------------------------------
 console.log(failures === 0 ? "\nAll checks passed.\n" : `\n${failures} check(s) failed.\n`);
 process.exit(failures === 0 ? 0 : 1);

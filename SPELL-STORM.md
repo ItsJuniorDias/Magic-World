@@ -8,9 +8,119 @@ branches, benches to save at, and a paper-theatre art style.
 
 ---
 
-## What changed in v2
+### v3.1 — the aim you actually asked for
 
-### 1. The black band down the right of the screen
+The v3 latch worked in isolation but had a subtle ordering bug that made
+the ORIGINAL COMPLAINT still happen. The sequence is worth stating in
+full because I got it wrong the first time and only the second time
+worked.
+
+**Wrong:** the latch captured `p.aimX/aimY` on `firePressed`, BEFORE
+refreshing aim from the stick. So if the stick was still deflected up
+when CAST fired, the latch saw the previous frame's aim (horizontal from
+the fallback) and locked to that.
+
+**Right:** three passes, in this exact order, once per frame:
+
+1. **Refresh** aim from the stick's CURRENT direction. `snapAimStrict`
+   returns null when the stick is idle, and in that case we keep the
+   previous aim. This is what makes "push up, release, then press CAST"
+   fire upward — the aim persists on release instead of snapping to the
+   facing fallback.
+2. **Latch** on `firePressed`. Now the snapshot reads the freshly-updated
+   aim, so it captures the direction the player is currently pointing.
+3. **Enforce** the latch. If engaged, aim is frozen to the snapshot;
+   subsequent stick motion moves the mage without moving the shot.
+
+The regression test in `test/sim.test.ts` walks the exact real-world thumb
+sequence — push up, release, press CAST while stick idle, then run right
+— and asserts it fires up throughout. That test would have failed on v3
+and passes now.
+
+### v3.1 — Landscape lock + a real loader
+
+The game route now ships its own `_layout.tsx` that sets
+`orientation: "landscape"` on the native stack. This is per-route, so the
+rest of Magic World (which is a portrait kids-book app) is unaffected. No
+new dependency — the option is a first-class prop on
+`@react-navigation/native-stack`, which `expo-router` already uses.
+
+The loading screen is no longer an `ActivityIndicator` on black. It's a
+paper-theatre gradient built out of layered translucent rectangles (no
+linear-gradient dep), a breathing arcane orb, the game logo, and a
+rotating tip. The tips teach one control per launch — aim latch, pogo,
+dash, benches, sealed doors, the boss rhythm — because the last complaint
+was "I didn't know I could shoot up." Now you find out on the loader.
+
+The loader also delays its fade-in by 380ms, so a fast load never flashes
+the chrome. If load takes under 400ms nobody ever sees it.
+
+---
+
+---
+
+## What v3 added
+
+### Aim latch — the fix for the one-stick shooter problem
+
+The stick used to do double duty: push it right to run right, push it up to
+aim up. And that is where a single-stick touch shooter dies — moving is
+aiming, so you can't run in one direction while shooting in another.
+
+The fix is a latch. When CAST is pressed, the current stick direction is
+captured as the aim. While CAST stays held, the stick controls movement
+alone and the aim stays put. Release CAST and the latch clears.
+
+    push stick up  →  press CAST  →  aim latches up
+                   →  push stick right  →  runs right, keeps firing up
+                   →  release CAST  →  aim unlocks, follows stick again
+
+The reticle draws in the world (a cyan star at 2.4wu along the aim vector),
+so the player sees where they're aiming and sees when it's locked — the
+reticle grows and rotates faster while the latch is active. There is no
+other way for the player to tell whether they're firing up or firing right
+at phone-screen size, and the reticle is the entire feedback loop.
+
+### Dash — double-tap the stick
+
+24wu/s for 180ms with 240ms of i-frames, on a 900ms cooldown. Cancels
+downward velocity at the start so you can use it to dodge a falling
+projectile.
+
+Triggered by double-tapping the movement zone in the direction of the
+second tap. That gesture reads as intentional — a single tap never fires
+it — and takes zero pixels of HUD, unlike a dedicated dash button that
+would have to steal thumb real estate from CAST or JUMP.
+
+The status pip next to CAST tells you when it's ready (cyan glow), when
+it's active (white, scaled up) and when it's on cooldown (dim). The pip is
+what teaches the mechanic without a modal.
+
+### Pogo — the down-strike
+
+Fire straight down while airborne, hit an enemy or a boss, bounce. Bounce
+velocity is 21wu/s against a 23.6wu/s jump, so you *just* barely lose
+altitude per pogo — enough that a chain reads as a rhythm skill rather than
+free flight. Refunds the jump buffer so a chain isn't gated by the coyote
+window closing after the first bounce.
+
+One mechanic, and it reshapes the whole game: pogo Gorge Mother to stay
+above her landing shockwaves, chain-pogo across the Emberway pits, use the
+Choir orbs as stepping stones to circle the boss without touching the floor.
+
+### Reticle
+
+A world-space mesh, not a UI overlay, because it has to scroll with the
+camera, get shaken by hitstop, and pop through FX rather than sit on top of
+them. Two additive cards — an inner four-point star and an outer glow disc.
+Grows and glows brighter under the latch so the aim mode is visible at a
+glance.
+
+---
+
+## The v2 changes still apply
+
+### The black band down the right of the screen
 
 `engine/useGLGame.ts` did this:
 
@@ -39,11 +149,9 @@ the blit lands somewhere nobody ever presents. HUD on top, void underneath.
 
 `RENDER.offscreenUpscale` is therefore **off by default** and the game renders
 straight to the surface at full resolution — no indirection, nothing to get
-wrong. The offscreen path is still there, now with the framebuffer captured
-before the first bind and restored before the blit, if you want the ~35% of
-fragments back and can verify it on a device.
+wrong.
 
-### 2. The map felt tiny because the camera showed all of it
+### The map felt tiny because the camera showed all of it
 
 `CAMERA.viewHeight` was 15.5 with width derived from the aspect ratio. On a
 landscape phone (~2.2) that is **34 world units of visible width** — wider
@@ -55,10 +163,7 @@ shrinking the height on wide displays instead of revealing more world. It
 also follows vertically through a deadzone, which the old flat 0.42
 multiplier could not do — `spire_climb` is 62wu tall.
 
-`resize()` is also actually called now, from the screen's `onLayout`. It never
-was, so rotating the phone left the frustum on the previous aspect ratio.
-
-### 3. Waves became a world
+### Waves became a world
 
 The old loop was a wave director: one arena, a spawn queue, a boss on wave 10.
 That shape has a ceiling — waves are a *score* game, and a score game ends the
@@ -126,95 +231,20 @@ essence and a walk back — not the run. Eight benches across twenty rooms.
 
 ---
 
-## Install
-
-Copy these into the Magic World project root, preserving paths:
+## The layout
 
 ```
-game/spell-storm/…              the game (including world/ and the new systems)
-app/(spell-storm)/index.tsx     REPLACES the existing screen
-test/sim.test.ts                REPLACES the existing tests
-```
-
-That's it. Every package it imports is already in your `package.json`:
-`expo-gl`, `three`, `expo-haptics`, `expo-router`, `react-native-purchases`,
-`@react-native-async-storage/async-storage`.
-
-`expo-router` picks the route up automatically. Run `bun run ios` and it's in
-the Arcade tab.
-
-### One thing to check
-
-`components/ui/Text` is imported with `variant` and `size` props matching the
-existing usage in `games.tsx`. If your `Text` doesn't accept `size="xs"`, the
-badge in the Arcade card is the only place that uses it — change it to `"sm"`.
-
----
-
-## Bug fixes bundled in
-
-Two of these are separate from the game and worth applying regardless.
-
-**`hooks/useProStatus.ts` closes two revenue leaks.** Today `@user_is_pro` is
-only written inside the subscribe screen, after a purchase or restore, and
-nothing re-syncs it at launch. So a lapsed subscription keeps full access
-forever, and a paying member who reinstalls gets locked out of content they
-are currently paying for. The hook treats RevenueCat as authoritative,
-AsyncStorage as a first-paint cache, and subscribes to entitlement updates.
-
-**`Purchases.configure()` should move to `app/_layout.tsx`.** It currently
-lives in `app/(app)/index.tsx`, which is the onboarding screen — a screen that
-may not mount on a returning user's launch. `ensurePurchasesConfigured()` in
-the hook is a safety net, not a substitute; move the real call up.
-
-**The engine cancels its animation frame and disposes its GPU resources.**
-`app/(endless-runner)/index.tsx` does neither: no `cancelAnimationFrame`, no
-`.dispose()` anywhere in 1,275 lines. The loop runs forever after the user
-navigates away, and the scene stays in VRAM. `engine/useGLGame.ts` is written
-to be reusable — porting Space Runner onto it is the highest-value cleanup
-available in this codebase.
-
----
-
-## Why there are no character models
-
-The obvious build was KayKit for the mage and Quaternius for the monsters,
-loaded as GLB. This does not do that, for three reasons.
-
-**Weight.** Magic World currently ships 97 MB of GLB. Two files account for
-almost all of it — and they contain eight 4096×4096 PNG textures for meshes of
-434 and 6,912 triangles. Decoded, that's roughly 680 MB of VRAM for two
-objects that occupy a few hundred pixels. Spell Storm adds 0 MB.
-
-**Draw calls.** A `SkinnedMesh` can't be instanced and needs its own
-`AnimationMixer` per entity. Forty enemies is forty mixers and forty skinning
-passes on the JS thread. Puppets are shared-geometry cards with rotations
-written directly, so the enemy pool stays cheap.
-
-**Responsiveness.** Procedural poses read live game state. The run cycle
-scales its stride to actual velocity, the cast pose points along the real aim
-vector, and recoil is additive. Clip playback needs a blend tree to
-approximate any of that.
-
-If you still want KayKit later, `art/puppet.ts` is the seam. Build a
-`GltfPuppet` with the same `poseHumanoid(input)` signature, map the pose
-values onto bone rotations, and nothing else in the codebase changes.
-
----
-
-## Architecture
-
-```
-config.ts              every tuning number in the game
+config.ts              every tuning number in the game, including v3's
+                       aimLatchOnCast / dashSpeed / pogoBounce
 types.ts               shared entity, world and HUD types
 
 world/
   rooms.ts             THE MAP — 20 rooms, 8 biomes, the gate graph
 
 engine/
-  useGLGame.ts         GL lifecycle, offscreen blit, fixed-timestep loop
+  useGLGame.ts         GL lifecycle, minimal render path, fixed-step loop
   Disposer.ts          resource tracking — nothing leaks
-  input.ts             stick handling, 8-way aim snapping
+  input.ts             stick, 8-way aim + strict variant for the latch
 
 art/
   palette.ts           the colour system, including the seven boss hues
@@ -230,7 +260,7 @@ art/
 systems/
   arena.ts             the active room's collision geometry
   physics.ts           AABB, one-way platforms, solids, hazards
-  player.ts            the controller — most of the game feel
+  player.ts            controller, aim latch, dash, pogoBounce()
   projectiles.ts       pooled bolts, homing, piercing
   enemies.ts           pool + per-kind minion AI
   bossAI.ts            the seven state machines
@@ -238,15 +268,16 @@ systems/
   world.ts             room transitions, gate locking, progression
   camera.ts            frustum fitting, follow, room clamping, shake
 
-index.ts               orchestrator: rooms, bosses, death, collisions
+index.ts               orchestrator: rooms, bosses, death, collisions,
+                       reticle, dash FX, pogo hook
 ```
 
 ### Why rooms are rebuilt rather than pre-built
 
-Twenty rooms averaging ~80wu is on the order of a thousand extrusions. Holding
-them all resident would be hundreds of MB of VRAM in an app that also carries
-97 MB of GLB. One room is 60–140 extrusions, built behind the 0.26s transition
-fade where the screen is already black.
+Twenty rooms averaging ~80wu is on the order of a thousand extrusions.
+Holding them all resident would be hundreds of MB of VRAM in an app that also
+carries 97 MB of GLB. One room is 60–140 extrusions, built behind the 0.26s
+transition fade where the screen is already black.
 
 Each room owns a private `Disposer` and a private `PaperKit`. Leaving disposes
 both, so the GPU only ever holds the room you are standing in. The kit is
@@ -262,58 +293,6 @@ behaviours would touch a dozen signatures to express one genuinely global
 fact: exactly one room is being simulated at a time. `systems/arena.ts` holds
 it, written once per transition and read-only during a frame.
 
-### The two rules
-
-1. **Time is in seconds, never frames.** The loop drains an accumulator in
-   fixed 1/60 slices. Space Runner does `obs.position.z += currentSpeed` per
-   frame, which means it runs at literally double speed on a 120 Hz ProMotion
-   device and its high scores aren't comparable across hardware. There is a
-   test asserting Spell Storm's jump height matches at 60 Hz and 120 Hz.
-
-2. **If you `new` a geometry, material or texture, it goes through
-   `disposer.track()`.** No exceptions.
-
----
-
-## Game design
-
-**Controls.** Left half of the screen is a floating stick that appears where
-your thumb lands — it steers *and* aims, 8-way, like a Metal Slug d-pad. Right
-side is CAST (hold to auto-fire) and JUMP.
-
-**The curve.** Waves 1–3 are slimes only, teaching ground movement. Wave 4
-adds bats, so you look up. Wave 7 adds the golem, which soaks damage and
-telegraphs an area slam. Wave 10 is the dragon, three phases keyed to its HP.
-Past 10, composition is procedural on a threat budget and the dragon returns
-every fifth wave.
-
-**Where the paywall sits.** Wave 11. That is deliberate: the free player gets
-a complete arc with a real ending — ten waves and a boss kill — and the gate
-lands on the high of having just won, not in the middle of a grind. Change it
-with `WAVES.freeWaves`.
-
-**The combo.** Kills within 2.6 s of each other chain up to 8×. It's the
-reason to push forward into a wave instead of camping a platform, and it's
-what makes the score worth chasing.
-
-### Game feel
-
-Everything in `FEEL` and the jump section of `PLAYER` exists to hide the fact
-that touch input is imprecise:
-
-| Mechanic | What it fixes |
-|---|---|
-| Coyote time (110 ms) | "I pressed jump and nothing happened" after walking off a ledge |
-| Jump buffer (130 ms) | Pressing jump slightly before landing |
-| Variable jump height | Makes the jump a decision rather than a commitment |
-| Asymmetric gravity (1.55× falling) | Stops the jump feeling like the moon |
-| Hitstop (60–110 ms) | Makes hits feel like they land |
-| Hit flash on enemies | Tells you a shot connected — essential once the golem soaks five |
-| Pickup magnetism | Removes near-miss frustration mid-firefight |
-| Pickup blink before expiry | Turns "the game took my heart" into "I was too slow" |
-
-Tuning all of it lives in `config.ts` and nowhere else.
-
 ---
 
 ## Tests
@@ -322,49 +301,14 @@ Tuning all of it lives in `config.ts` and nowhere else.
 npx tsx test/sim.test.ts
 ```
 
-40 checks over aim snapping, one-way platforms, coyote time, jump buffering,
-variable height, frame-rate independence, damage and i-frames, the wave curve
-and the paywall gate.
+Around 90 checks covering aim (including all 8 headings, the latch, the
+strict-snap fallback), dash (i-frames, cooldown, direction lock, re-arm),
+pogo (bounce velocity, ground guard, chain viability), the movement feel
+(coyote time, jump buffer, variable height, frame-rate independence), the
+world graph (dangling gates, mismatched return gates, unreachable rooms),
+spawn safety (no room drops the player onto a pit, no door lands them in
+a hole), and the free-versus-member split (free reaches exactly three
+bosses, membership opens the rest).
 
-These aren't ceremony. The first run caught a real bug: the original
-`jumpVelocity` of 20.5 produced a 3.45 wu peak against platforms at 3.6 wu —
-**all three platforms were unreachable.** It's now 23.6, giving 4.61 wu. That
-is not something you reliably notice by playing; it just feels like the
-platforms are decorative.
-
----
-
-## Known limitations
-
-**No audio.** Haptics stand in on the events that matter. Wiring sound means
-handling `onSound` in the screen — the engine already emits every event you'd
-need. Note that the Space Runner BGM currently streams from
-`soundhelix.com`, which is a placeholder you'll want gone before the next
-submission.
-
-**Old architecture.** `newArchEnabled: false` in `app.config.js`. This is
-fine today and is what Space Runner already relies on, but Expo is pushing
-Fabric hard. Nothing here depends on the old renderer specifically.
-
-**Not localised.** All strings are inline English, matching the rest of the
-app. They're confined to `app/(spell-storm)/index.tsx` — about a dozen — so
-wiring them into your i18n system is a small job.
-
-**Enemy visual pools are fixed.** 12 slimes, 10 bats, 5 golems, 6 wisps, 1
-dragon. Exceeding a kind's pool skips that spawn and retries next tick rather
-than popping in a new mesh mid-fight. If deep waves feel thin, raise the
-counts in `systems/enemies.ts`.
-
----
-
-## Before you ship it
-
-Playtest waves 1–4 on a real device first, specifically for whether the jump
-arc feels right in your hand. Every number in this build is reasoned from the
-arena geometry rather than from feel, and feel is the thing you can only get
-from a thumb on glass. `PLAYER.jumpVelocity`, `PLAYER.maxSpeed` and
-`CAMERA.viewHeight` are the three that will want the most adjustment.
-
-Then check the frame rate on the oldest device you support during wave 9,
-which is the heaviest non-boss wave. If it dips, `RENDER.resolutionScale` is
-the first dial — dropping it to 0.6 is nearly invisible in this art style.
+These aren't ceremony. Every failure listed above was a bug the tests
+caught before the player did.

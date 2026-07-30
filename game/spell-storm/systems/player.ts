@@ -1,5 +1,5 @@
 import { FEEL, PLAYER, WEAPONS, type WeaponId } from "../config";
-import { snapAim } from "../engine/input";
+import { snapAimStrict } from "../engine/input";
 import type { InputState, Player } from "../types";
 import {
   approach,
@@ -48,9 +48,16 @@ export function createPlayer(): Player {
     invulnerable: 0,
     aimX: 1,
     aimY: 0,
+    latchedAimX: 1,
+    latchedAimY: 0,
+    aimLatched: false,
     weapon: "bolt",
     weaponTimer: 0,
     fireCooldown: 0,
+    dashTimer: 0,
+    dashCooldown: 0,
+    dashDir: 1,
+    pogoRefund: false,
     squashX: 1,
     squashY: 1,
     alive: true,
@@ -71,9 +78,16 @@ export function resetPlayer(p: Player): void {
   p.invulnerable = 0;
   p.aimX = 1;
   p.aimY = 0;
+  p.latchedAimX = 1;
+  p.latchedAimY = 0;
+  p.aimLatched = false;
   p.weapon = "bolt";
   p.weaponTimer = 0;
   p.fireCooldown = 0;
+  p.dashTimer = 0;
+  p.dashCooldown = 0;
+  p.dashDir = 1;
+  p.pogoRefund = false;
   p.squashX = 1;
   p.squashY = 1;
   p.alive = true;
@@ -85,6 +99,27 @@ export interface PlayerEvents {
   /** Fired once per shot; `count` projectiles have already been spawned. */
   onFire(x: number, y: number, aimX: number, aimY: number, weapon: WeaponId): void;
   onWeaponExpired(): void;
+  /** Fired at the start of a dash. Used for FX and the trail. */
+  onDash?(x: number, y: number, dir: 1 | -1): void;
+  /** Fired when a downward hit bounces the player. */
+  onPogo?(x: number, y: number): void;
+}
+
+/**
+ * Called by the collision layer when a downward projectile of the player's
+ * lands on an enemy while the player is airborne. Refunds vertical velocity
+ * and, if the config allows, refunds a jump so a chain of pogos isn't
+ * gated by a used-up coyote window.
+ */
+export function pogoBounce(p: Player, events: PlayerEvents): boolean {
+  if (!p.alive || p.onGround) return false;
+  p.vy = PLAYER.pogoBounce;
+  p.jumping = false;
+  if (PLAYER.pogoRefundJump) {
+    p.timeSinceJumpPress = Infinity;
+  }
+  events.onPogo?.(p.x, p.y);
+  return true;
 }
 
 export function updatePlayer(
@@ -101,6 +136,8 @@ export function updatePlayer(
   // ---- Timers ----------------------------------------------------------
   if (p.invulnerable > 0) p.invulnerable = Math.max(0, p.invulnerable - dt);
   if (p.fireCooldown > 0) p.fireCooldown = Math.max(0, p.fireCooldown - dt);
+  if (p.dashCooldown > 0) p.dashCooldown = Math.max(0, p.dashCooldown - dt);
+  if (p.dashTimer > 0) p.dashTimer = Math.max(0, p.dashTimer - dt);
   p.timeSinceJumpPress += dt;
   if (input.jumpPressed) {
     p.timeSinceJumpPress = 0;
@@ -116,25 +153,101 @@ export function updatePlayer(
     }
   }
 
+  // ---- Dash request ----------------------------------------------------
+  // A dash is a horizontal burst with i-frames and a cooldown. It is fired
+  // on double-tap of the movement stick — the input layer sets dashRequest
+  // to the direction of the second tap. We consume it here so it doesn't
+  // stack while the flag stays set.
+  if (input.dashRequest !== 0 && p.dashCooldown <= 0 && p.dashTimer <= 0 && p.alive) {
+    p.dashTimer = PLAYER.dashDuration;
+    p.dashCooldown = PLAYER.dashCooldown;
+    p.dashDir = input.dashRequest as 1 | -1;
+    p.facing = p.dashDir;
+    p.invulnerable = Math.max(p.invulnerable, PLAYER.dashIFrames);
+    // Kill vertical speed at the start of a dash. A dash that keeps your
+    // falling velocity feels like a slip; a dash that zeros it feels like a
+    // deliberate act. That is also what makes the dash a viable dodge for
+    // downward projectiles.
+    if (p.vy < 0) p.vy = 0;
+    events.onDash?.(p.x, p.y, p.dashDir);
+  }
+  input.dashRequest = 0;
+
   // ---- Aim -------------------------------------------------------------
-  // The stick does double duty: it steers and it aims, exactly like a
-  // Metal Slug d-pad. Aim is snapped to 8 directions.
-  const aim = snapAim(input.moveX, input.moveY, p.facing);
-  p.aimX = aim.x;
-  p.aimY = aim.y;
+  //
+  // WHY THIS IS SO CAREFUL
+  //
+  // The player's complaint was "I can't shoot up." Not because the code
+  // couldn't produce an upward aim — it always could — but because of a
+  // real-world thumb sequence I hadn't accounted for:
+  //
+  //   1. Left thumb pushes the stick up.  Aim goes up. Good.
+  //   2. Right thumb reaches for CAST.  Left thumb LIFTS to reposition.
+  //   3. CAST fires.  Left thumb is already gone.
+  //   4. On the previous build, step 2 caused aim to snap back to
+  //      horizontal, because "no stick input" fell back to `facing` in
+  //      snapAim(). So step 3 fired sideways instead of up. Which is
+  //      exactly the bug report.
+  //
+  // The three-stage order below fixes it. Aim FIRST refreshes from the
+  // stick (only when actually deflected — an idle stick preserves the
+  // last aim). THEN the latch trigger reads the just-refreshed aim, so a
+  // fire press captures wherever the player is currently pointing, not a
+  // stale value from the previous frame. FINALLY the latch overrides if
+  // it's engaged, so subsequent stick motion moves the mage without
+  // moving the shot.
+  //
+  // Facing is unaffected. It follows moveX with its own threshold below,
+  // so a stationary player who last aimed up still faces right if that's
+  // where they last moved.
+
+  // (1) Refresh aim from the stick's CURRENT direction. When idle, keep
+  // the previous aim — this is what makes "push up, release, then press
+  // CAST" fire upward instead of sideways.
+  if (!p.aimLatched) {
+    const strict = snapAimStrict(input.moveX, input.moveY);
+    if (strict) {
+      p.aimX = strict.x;
+      p.aimY = strict.y;
+    }
+  }
+
+  // (2) If CAST just went down, snapshot the freshly-updated aim.
+  if (input.firePressed) {
+    p.latchedAimX = p.aimX;
+    p.latchedAimY = p.aimY;
+    p.aimLatched = true;
+    input.firePressed = false; // consumed
+  }
+  if (!input.fireHeld) {
+    p.aimLatched = false;
+  }
+
+  // (3) The latch wins when engaged, so continued stick motion doesn't
+  // yank the aim off the direction the player intended.
+  if (p.aimLatched && PLAYER.aimLatchOnCast) {
+    p.aimX = p.latchedAimX;
+    p.aimY = p.latchedAimY;
+  }
 
   // ---- Horizontal ------------------------------------------------------
-  const targetVx = input.moveX * PLAYER.maxSpeed;
-  const accelMult = p.onGround ? 1 : PLAYER.airAccelMult;
-  const frictionMult = p.onGround ? 1 : PLAYER.airFrictionMult;
-
-  if (Math.abs(input.moveX) > 0.01) {
-    p.vx = approach(p.vx, targetVx, PLAYER.accel * accelMult * dt);
-    // Facing only flips on deliberate horizontal input, never on knockback.
-    if (input.moveX > 0.2) p.facing = 1;
-    else if (input.moveX < -0.2) p.facing = -1;
+  if (p.dashTimer > 0) {
+    // During a dash horizontal control is disabled. Anything else and the
+    // dash reads as a lurch you can cancel out of, which defeats the point.
+    p.vx = p.dashDir * PLAYER.dashSpeed;
   } else {
-    p.vx = approach(p.vx, 0, PLAYER.friction * frictionMult * dt);
+    const targetVx = input.moveX * PLAYER.maxSpeed;
+    const accelMult = p.onGround ? 1 : PLAYER.airAccelMult;
+    const frictionMult = p.onGround ? 1 : PLAYER.airFrictionMult;
+
+    if (Math.abs(input.moveX) > 0.01) {
+      p.vx = approach(p.vx, targetVx, PLAYER.accel * accelMult * dt);
+      // Facing only flips on deliberate horizontal input, never on knockback.
+      if (input.moveX > 0.2) p.facing = 1;
+      else if (input.moveX < -0.2) p.facing = -1;
+    } else {
+      p.vx = approach(p.vx, 0, PLAYER.friction * frictionMult * dt);
+    }
   }
 
   // ---- Jump ------------------------------------------------------------

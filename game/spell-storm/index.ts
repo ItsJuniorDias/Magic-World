@@ -36,6 +36,7 @@ import {
   damagePlayer,
   grantWeapon,
   healPlayer,
+  pogoBounce,
   resetPlayer,
   shouldBlink,
   tryFire,
@@ -169,6 +170,38 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
   const mage = createMage(kit);
   world.root.add(mage.root);
 
+  // -----------------------------------------------------------------------
+  // Aim reticle
+  //
+  // With a single stick doing double duty, the ONE thing that made the aim
+  // feel broken to the player was invisible: the mage's arm rotates but you
+  // don't see it at phone size. A bright reticle at fixed distance along
+  // the aim vector is the fix. It moves as you move the stick, it stays put
+  // when the aim latches under CAST, and it disappears when you die.
+  //
+  // Reticle is a mesh not a UI overlay because it belongs in the world:
+  // it must scroll with the camera, get shaken by hitstop, and pop through
+  // FX rather than sit on top of them. Two cards — an inner dot and an
+  // outer ring — read at 90 pixels of screen. Both additive so the reticle
+  // never dims the scene behind it.
+  // -----------------------------------------------------------------------
+  const reticle = new THREE.Group();
+  reticle.name = "reticle";
+  world.root.add(reticle);
+
+  const reticleRing = kit.glowDisc(0.34, PALETTE.arcaneCore, 20);
+  reticleRing.renderOrder = 30;
+  reticle.add(reticleRing);
+
+  const reticleDot = kit.card(PaperKit.star(4, 0.11, 0.42), PALETTE.arcaneCore, PALETTE.arcaneCore, {
+    depth: 0.06,
+    order: 31,
+  });
+  reticle.add(reticleDot);
+
+  /** World-space distance from the mage to the reticle. */
+  const RETICLE_REACH = 2.4;
+
   const cameraRig = createCameraRig(ctx.camera);
   cameraRig.fit(ctx.pixelWidth, ctx.pixelHeight);
 
@@ -216,6 +249,9 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     totalBosses: BOSS_ROOMS.length,
     discovered: [],
     defeatedRooms: [],
+    dashActive: false,
+    dashReady: true,
+    aimLatched: false,
     sealed: null,
   };
 
@@ -507,6 +543,29 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     mage.update(pose, castFlash);
     mage.setVisible(player.alive && !shouldBlink(player) && state.phase !== "dead");
 
+    // Reticle: sits along the aim vector from the mage's chest. Grows and
+    // brightens when the aim is latched under CAST so the player can tell
+    // at a glance whether the aim is locked or free.
+    const reticleVisible =
+      player.alive && state.phase === "playing" && !ARENA_STATE.sealed
+        ? true
+        : player.alive &&
+          (state.phase === "playing" || state.phase === "bossIntro" || state.phase === "bossDefeated");
+    reticle.visible = reticleVisible;
+    if (reticleVisible) {
+      reticle.position.set(
+        player.x + player.aimX * RETICLE_REACH,
+        player.y + PLAYER.halfH + player.aimY * RETICLE_REACH,
+        0.4,
+      );
+      const latch = player.aimLatched ? 1 : 0;
+      const pulse = 1 + Math.sin(state.elapsed * 6) * 0.08 + latch * 0.35;
+      reticleRing.scale.setScalar(pulse);
+      (reticleRing.material as THREE.Material).opacity = 0.35 + latch * 0.4;
+      reticleDot.scale.setScalar(0.8 + latch * 0.35);
+      reticleDot.rotation.z += dt * (latch ? 6 : 2);
+    }
+
     cameraRig.update(dt, player.x, player.y, player.vx, PLAYER.maxSpeed);
     world.update(cameraRig.focusX, cameraRig.focusY, state.elapsed);
     activeSky?.update(dt, state.elapsed, cameraRig.focusX);
@@ -623,6 +682,15 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
         onWeaponExpired: () => {
           fx.burst(player.x, player.y + 1, 8, PALETTE.arcaneDeep, 3.5, 7);
         },
+        onDash: (x, y, dir) => {
+          // A dash is felt at the wrist, not seen. A whoosh + a plume of
+          // motes trailing behind the direction of travel, plus a mild
+          // shake, is all it needs to read as "you moved fast, on purpose".
+          sound("jump");
+          fx.spray(x, y + 0.4, 14, PALETTE.arcane, -dir, 0, 2.2, 8);
+          fx.spray(x, y + 0.6, 8, PALETTE.arcaneCore, -dir, 0.3, 1.6, 6);
+          cameraRig.addShake(0.14);
+        },
       });
       tryFire(player, input, fireEvents);
     }
@@ -660,6 +728,36 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
           died ? FEEL.hitstopOnKill : isBoss ? FEEL.hitstopOnBossHit : 0,
         );
         cameraRig.addShake(died ? FEEL.shakeOnKill : 0.05);
+
+        // Pogo. A downward shot that hits ANYTHING while the player is
+        // airborne bounces the player back up. That single mechanic reshapes
+        // the whole game: you can chain-bounce across a pit of spikes, stay
+        // above the Gorge Mother's landing shockwave by pogoing her, and
+        // reach ledges you can't get to with a normal jump.
+        //
+        // The check is on the projectile's velocity, not the player's aim
+        // at the moment of impact — a projectile in flight belongs to the
+        // aim it left the mage with, not to wherever the stick is now.
+        if (
+          !player.onGround &&
+          player.alive &&
+          p.vy < 0 &&
+          Math.abs(p.vy) > Math.abs(p.vx) * 0.85
+        ) {
+          const bounced = pogoBounce(player, {
+            onJump: () => {},
+            onLand: () => {},
+            onFire: () => {},
+            onWeaponExpired: () => {},
+            onPogo: (px, py) => {
+              sound("jump");
+              fx.spray(px, py - 0.2, 10, PALETTE.arcane, 0, -1, 1.6, 6);
+              fx.shockwave(px, py - 0.1, PALETTE.arcaneCore, 1.2, 0.24);
+              cameraRig.addShake(0.18);
+            },
+          });
+          if (bounced) state.hitstop = Math.max(state.hitstop, 0.05);
+        }
 
         if (died && wasAlive) {
           bumpCombo();
@@ -835,6 +933,9 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     hud.totalBosses = BOSS_ROOMS.length;
     hud.discovered = progress.discovered;
     hud.defeatedRooms = progress.bosses;
+    hud.dashActive = player.dashTimer > 0;
+    hud.dashReady = player.dashCooldown <= 0 && player.dashTimer <= 0;
+    hud.aimLatched = player.aimLatched;
     hud.sealed = state.blockedGate;
   }
 
