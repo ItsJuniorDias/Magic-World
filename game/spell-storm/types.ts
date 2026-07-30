@@ -1,5 +1,5 @@
 import type * as THREE from "three";
-import type { EnemyKind, PickupKind, WeaponId } from "./config";
+import type { BossKind, EnemyKind, PickupKind, WeaponId } from "./config";
 
 /** A 2D vector. The game is 2.5D — Z is fixed per layer, never simulated. */
 export interface Vec2 {
@@ -95,6 +95,17 @@ export interface Enemy {
   phase: number;
   /** Index into the visual pool — the mesh group that represents this enemy. */
   visual: number;
+  /** Third timer. Bosses run three clocks at once (attack, phase, telegraph). */
+  timer3: number;
+  /** Boss phase, 1..3. Zero for minions. */
+  phaseIndex: number;
+  /** Seconds of invulnerability remaining — boss intros and void collapses. */
+  invulnerable: number;
+  /** Scratch value the art layer reads for telegraph intensity, 0..1. */
+  tell: number;
+  /** Scratch position, used by bosses that anchor or orbit. */
+  anchorX: number;
+  anchorY: number;
 }
 
 export interface Projectile {
@@ -132,26 +143,62 @@ export type GamePhase =
   | "loading"
   | "ready"
   | "playing"
-  | "intermission"
-  | "gameover"
+  /** Fading between rooms. The simulation is paused. */
+  | "transition"
+  /** Boss roar; the player can move but nothing can hurt them. */
+  | "bossIntro"
+  /** Boss corpse dissolving. */
+  | "bossDefeated"
+  | "resting"
+  | "dead"
   | "locked"
   | "victory";
 
+/** What the player has done. Persisted between sessions. */
+export interface Progress {
+  /** Room ids of bosses defeated. */
+  bosses: string[];
+  /** Rooms the player has entered, for the map overlay. */
+  discovered: string[];
+  /** Room id of the last bench rested at. */
+  bench: string;
+  /** x within that room. */
+  benchX: number;
+  essence: number;
+}
+
+export interface RoomHudInfo {
+  id: string;
+  name: string;
+  biome: string;
+  bench: boolean;
+}
+
 export interface GameState {
   phase: GamePhase;
-  wave: number;
   score: number;
   combo: number;
   comboTimer: number;
-  /** Enemies still to spawn in the current wave. */
-  spawnQueue: EnemyKind[];
-  spawnTimer: number;
-  intermissionTimer: number;
   /** Freeze-frame timer — the simulation is paused while this is > 0. */
   hitstop: number;
-  shake: number;
   elapsed: number;
+
+  // ---- World ----
+  roomId: string;
+  /** Countdown on the room-name card. */
+  roomTitleTimer: number;
+  /** Transition progress, 0..1. Drives the fade quad. */
+  fade: number;
+  fadeDir: 1 | -1 | 0;
+  /** Gate we are travelling through, if any. */
+  pendingGate: { to: string; toGate: string } | null;
+
+  // ---- Boss ----
   bossActive: boolean;
+  bossKind: BossKind | null;
+  bossTimer: number;
+  /** Set when the player reaches a gate they haven't unlocked. */
+  blockedGate: { label: string; pro: boolean } | null;
 }
 
 /**
@@ -162,14 +209,35 @@ export interface GameState {
 export interface HudSnapshot {
   phase: GamePhase;
   hearts: number;
+  maxHearts: number;
   score: number;
-  wave: number;
   combo: number;
   weapon: WeaponId;
   weaponTimer: number;
+
+  /** Current room, for the title card and the map. */
+  roomId: string;
+  roomName: string;
+  /** Seconds left on the room-name card; 0 hides it. */
+  roomTitle: number;
+  atBench: boolean;
+
+  /** Boss bar. */
+  bossActive: boolean;
   bossHp: number;
   bossMaxHp: number;
-  bossActive: boolean;
+  bossName: string;
+  bossTitle: string;
+  bossInvulnerable: boolean;
+
+  /** Progression. */
+  bossesDefeated: number;
+  totalBosses: number;
+  discovered: string[];
+  defeatedRooms: string[];
+
+  /** Set when the player walks into a sealed door. */
+  sealed: { label: string; pro: boolean } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -190,6 +258,9 @@ export interface GameContext {
   /** World units visible horizontally, derived from the device aspect. */
   viewWidth: number;
   viewHeight: number;
+  /** Drawing-buffer size in pixels. The camera rig needs it to fit the frustum. */
+  pixelWidth: number;
+  pixelHeight: number;
 }
 
 export interface GameHandle {

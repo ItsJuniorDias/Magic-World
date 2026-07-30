@@ -1,7 +1,14 @@
-import { ARENA, FEEL, PLAYER, WEAPONS, type WeaponId } from "../config";
+import { FEEL, PLAYER, WEAPONS, type WeaponId } from "../config";
 import { snapAim } from "../engine/input";
 import type { InputState, Player } from "../types";
-import { approach, clampToArena, damp, resolveGround } from "./physics";
+import {
+  approach,
+  clampToArena,
+  damp,
+  resolveCeiling,
+  resolveGround,
+  resolveSolidsX,
+} from "./physics";
 
 /**
  * The mage's movement, and the majority of the game's feel.
@@ -29,7 +36,7 @@ import { approach, clampToArena, damp, resolveGround } from "./physics";
 export function createPlayer(): Player {
   return {
     x: 0,
-    y: ARENA.floorY,
+    y: 0,
     vx: 0,
     vy: 0,
     facing: 1,
@@ -52,7 +59,7 @@ export function createPlayer(): Player {
 
 export function resetPlayer(p: Player): void {
   p.x = 0;
-  p.y = ARENA.floorY;
+  p.y = 0;
   p.vx = 0;
   p.vy = 0;
   p.facing = 1;
@@ -157,9 +164,24 @@ export function updatePlayer(
   p.vy += gravity * dt;
   if (p.vy < -PLAYER.maxFallSpeed) p.vy = -PLAYER.maxFallSpeed;
 
+  const previousX = p.x;
   p.x += p.vx * dt;
-  p.y += p.vy * dt;
+
+  // ---- Horizontal separation from solids -------------------------------
+  // Resolved before the vertical pass so that after this line the body is
+  // already clear on X. Doing both axes at once is what produces the classic
+  // "catches on the seam between two floor tiles" bug.
+  const pushed = resolveSolidsX(p.x, p.y, PLAYER.halfW, PLAYER.halfH, previousX);
+  if (pushed.blocked) {
+    p.x = pushed.x;
+    // Killing horizontal speed on a wall matters for feel: without it the
+    // player keeps accelerating into the wall and shoots off the moment they
+    // clear it.
+    p.vx = 0;
+  }
   p.x = clampToArena(p.x, PLAYER.halfW);
+
+  p.y += p.vy * dt;
 
   // ---- Ground resolution -----------------------------------------------
   const ground = resolveGround(p.x, p.y, p.vy, PLAYER.halfW, previousY);
@@ -179,10 +201,15 @@ export function updatePlayer(
     p.timeOffGround += dt;
   }
 
-  // Ceiling
-  if (p.y > ARENA.ceilingY) {
-    p.y = ARENA.ceilingY;
+  // ---- Ceiling ----------------------------------------------------------
+  // Undersides of solids AND the room roof. A head bump zeroes upward
+  // velocity rather than reflecting it — bouncing off a ceiling reads as a
+  // bug even when it is physically defensible.
+  const ceiling = resolveCeiling(p.x, p.y, PLAYER.halfW, PLAYER.halfH, p.vy);
+  if (ceiling.bumped) {
+    p.y = ceiling.y;
     if (p.vy > 0) p.vy = 0;
+    p.jumping = false;
   }
 
   // ---- Squash recovery -------------------------------------------------

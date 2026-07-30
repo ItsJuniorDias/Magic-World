@@ -1,11 +1,128 @@
 # Spell Storm
 
-A wave-survival run-and-gun for the Magic World Arcade tab. Metal Slug's
-structure — run, jump, 8-way aim, temporary weapon pickups, a boss — inside a
-single arena, in a paper-theatre art style, gated at wave 11 by the
-subscription.
+A side-scrolling metroidvania for the Magic World Arcade tab. Twenty
+interconnected rooms across eight biomes, seven bosses at the ends of seven
+branches, benches to save at, and a paper-theatre art style.
 
 **0 MB of art assets. 0 new dependencies.**
+
+---
+
+## What changed in v2
+
+### 1. The black band down the right of the screen
+
+`engine/useGLGame.ts` did this:
+
+```ts
+renderer.setSize(bufferW * 0.75, bufferH * 0.75, false);
+```
+
+In a browser that is a legitimate optimisation — `updateStyle: false` shrinks
+the canvas backing store and CSS stretches it back to full size, so you pay
+for 56% of the fragments and the user sees a full, slightly soft image.
+
+React Native has no CSS. The expo-gl surface stays at full pixel size; all
+`setSize` does is call `gl.viewport(0, 0, w*0.75, h*0.75)`. The scene was
+drawn into the bottom-left three quarters of the display and the rest of the
+framebuffer kept the clear colour, which is black. That is the band on the
+right and the dead strip along the top.
+
+The renderer is now always sized to the full drawing buffer.
+
+The first attempt at keeping the fragment saving was to render into an
+offscreen `WebGLRenderTarget` and blit it up with a textured quad. That
+produced a *second* black screen, and the reason is worth writing down:
+**expo-gl does not guarantee that its presentable framebuffer is FBO 0.**
+`renderer.setRenderTarget(null)` binds zero, three.js caches that state, and
+the blit lands somewhere nobody ever presents. HUD on top, void underneath.
+
+`RENDER.offscreenUpscale` is therefore **off by default** and the game renders
+straight to the surface at full resolution — no indirection, nothing to get
+wrong. The offscreen path is still there, now with the framebuffer captured
+before the first bind and restored before the blit, if you want the ~35% of
+fragments back and can verify it on a device.
+
+### 2. The map felt tiny because the camera showed all of it
+
+`CAMERA.viewHeight` was 15.5 with width derived from the aspect ratio. On a
+landscape phone (~2.2) that is **34 world units of visible width** — wider
+than the entire 32wu arena. The level fitted on one screen and the camera
+never moved.
+
+The rig now owns the frustum and clamps the *width* (`CAMERA.maxViewWidth`),
+shrinking the height on wide displays instead of revealing more world. It
+also follows vertically through a deadzone, which the old flat 0.42
+multiplier could not do — `spire_climb` is 62wu tall.
+
+`resize()` is also actually called now, from the screen's `onLayout`. It never
+was, so rotating the phone left the frustum on the previous aspect ratio.
+
+### 3. Waves became a world
+
+The old loop was a wave director: one arena, a spawn queue, a boss on wave 10.
+That shape has a ceiling — waves are a *score* game, and a score game ends the
+moment the player stops caring about the number.
+
+Now: explore, find a door, find a boss, kill it, the door it was guarding
+opens. 1,584wu of traversal across 20 rooms, versus 32wu before.
+
+---
+
+## The map
+
+```
+                    [spire_climb]──[nightwing_perch ★2]
+                          │
+[thorn_hollow ★5]     [spire_hall]
+       │                  │
+  [thornwood]         (up)│
+       │                  │
+ [thorn_gate]─────────────┤
+       │                  │
+[gorge_lair ★1]      [CROSSROADS]──(ledge, needs 6)──[storm_ascent]──[storm_throne ★7]
+       │              │        │
+[fungal_deep]    (down)│        └──(right)──[emberway]──[ember_forge]──[cinder_hall ★3]
+       │               │                          │(down)
+[fungal_hollow]────────┤                     [void_stair]
+                       │                          │
+                [cistern_fall]               [void_vault ★6]
+                       │
+                [cistern_choir]──[lumen_sanctum ★4]
+```
+
+**Free:** Fungal, Spire, Ember — a hub, three branches, three bosses, an
+ending. **Members:** Thorn, Cistern, Void, Storm.
+
+The gate is a sealed door standing in the world, not a modal that fires when
+you try to leave. Same silhouette as an open door, barred and sigil-marked, so
+the player files it as "later" rather than as "wall".
+
+## The seven
+
+Each asks a different question, and each keeps the same three-phase contract
+(65% / 30%) so the rhythm is learnable once and applied seven times.
+
+| Boss | HP | Asks |
+|---|---|---|
+| Gorge Mother | 42 | vertical space — she owns the floor, you live on platforms |
+| Nightwing | 48 | horizontal space — she crosses faster than you can run |
+| Cinder Warden | 64 | patience — armoured, slow, punishes greed |
+| Lumen Choir | 68 | pattern reading — bullet geometry, no contact threat |
+| Thorn Warden | 70 | footing — the floor itself becomes the hazard |
+| Voidmaw | 76 | control — it moves YOU rather than moving itself |
+| Storm Dragon | 96 | all of the above, on a clock |
+
+Every attack telegraphs for at least ~0.4s through `Enemy.tell`, which the art
+layer turns into a physical wind-up — the Warden's core swells, Nightwing goes
+dead still, Voidmaw's rings spin up. Nothing telegraphs with a screen-space
+icon. A boss that warns you with its body is one you read; a boss that warns
+you with UI is one you memorise.
+
+## Death and saving
+
+Benches heal, save, and become your respawn point. Death costs 25% of your
+essence and a walk back — not the run. Eight benches across twenty rooms.
 
 ---
 
@@ -14,10 +131,9 @@ subscription.
 Copy these into the Magic World project root, preserving paths:
 
 ```
-game/spell-storm/…              the game
-app/(spell-storm)/index.tsx     the screen
-hooks/useProStatus.ts           entitlement hook (see "Bug fixes" below)
-app/(tabs)/games.tsx            REPLACES the existing file
+game/spell-storm/…              the game (including world/ and the new systems)
+app/(spell-storm)/index.tsx     REPLACES the existing screen
+test/sim.test.ts                REPLACES the existing tests
 ```
 
 That's it. Every package it imports is already in your `package.json`:
@@ -90,34 +206,61 @@ values onto bone rotations, and nothing else in the codebase changes.
 
 ```
 config.ts              every tuning number in the game
-types.ts               shared entity and state types
+types.ts               shared entity, world and HUD types
+
+world/
+  rooms.ts             THE MAP — 20 rooms, 8 biomes, the gate graph
 
 engine/
-  useGLGame.ts         GL lifecycle, fixed-timestep loop, teardown
+  useGLGame.ts         GL lifecycle, offscreen blit, fixed-timestep loop
   Disposer.ts          resource tracking — nothing leaks
   input.ts             stick handling, 8-way aim snapping
 
 art/
-  palette.ts           the colour system
+  palette.ts           the colour system, including the seven boss hues
   paper.ts             shape builders + the two-tone card factory
-  sky.ts               gradient backdrop, sun, stars, clouds
-  stage.ts             parallax layers, ground, platforms
+  sky.ts               gradient backdrop, per-biome stops
+  roomStage.ts         builds ONE room, disposes it on exit
   puppet.ts            the jointed rig and pose solver
   mage.ts              the player character
-  bestiary.ts          slime, bat, golem, wisp, dragon
+  bestiary.ts          slime, bat, golem, wisp, storm dragon
+  bosses.ts            the six new bosses
   fx.ts                pooled particles and shockwaves
 
 systems/
-  physics.ts           AABB, one-way platform resolution
+  arena.ts             the active room's collision geometry
+  physics.ts           AABB, one-way platforms, solids, hazards
   player.ts            the controller — most of the game feel
   projectiles.ts       pooled bolts, homing, piercing
-  enemies.ts           pool + per-kind AI
+  enemies.ts           pool + per-kind minion AI
+  bossAI.ts            the seven state machines
   pickups.ts           drops, magnetism, blink-out
-  waves.ts             the difficulty curve and the paywall gate
-  camera.ts            follow, look-ahead, shake
+  world.ts             room transitions, gate locking, progression
+  camera.ts            frustum fitting, follow, room clamping, shake
 
-index.ts               orchestrator: loop, collisions, scoring
+index.ts               orchestrator: rooms, bosses, death, collisions
 ```
+
+### Why rooms are rebuilt rather than pre-built
+
+Twenty rooms averaging ~80wu is on the order of a thousand extrusions. Holding
+them all resident would be hundreds of MB of VRAM in an app that also carries
+97 MB of GLB. One room is 60–140 extrusions, built behind the 0.26s transition
+fade where the screen is already black.
+
+Each room owns a private `Disposer` and a private `PaperKit`. Leaving disposes
+both, so the GPU only ever holds the room you are standing in. The kit is
+private because PaperKit caches materials by colour, and a shared cache would
+leak the fungal palette into the ember rooms.
+
+### Why the active room is module state
+
+`physics.ts` used to import `ARENA` and `PLATFORMS` from config, which was
+fine when there was one arena forever. Threading a `room` argument through
+`resolveGround`, `clampToArena`, `updatePlayer`, the enemy loop and seven boss
+behaviours would touch a dozen signatures to express one genuinely global
+fact: exactly one room is being simulated at a time. `systems/arena.ts` holds
+it, written once per transition and read-only during a frame.
 
 ### The two rules
 

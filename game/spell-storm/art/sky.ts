@@ -22,26 +22,33 @@ export interface Sky {
   update(dt: number, elapsed: number, cameraX: number): void;
 }
 
-const GRADIENT_STOPS: { at: number; hex: number }[] = [
-  { at: 0.0, hex: PALETTE.skyAmber },
-  { at: 0.16, hex: PALETTE.skyEmber },
-  { at: 0.38, hex: PALETTE.skyRose },
-  { at: 0.68, hex: PALETTE.skyMid },
-  { at: 1.0, hex: PALETTE.skyZenith },
+/** Horizon-to-zenith stops. Biomes override these; this is the default dusk. */
+const DEFAULT_STOPS: [number, number, number, number, number] = [
+  PALETTE.skyAmber,
+  PALETTE.skyEmber,
+  PALETTE.skyRose,
+  PALETTE.skyMid,
+  PALETTE.skyZenith,
 ];
 
-function sampleGradient(t: number, out: THREE.Color): THREE.Color {
+const STOP_POSITIONS = [0.0, 0.16, 0.38, 0.68, 1.0];
+
+function sampleGradient(
+  t: number,
+  out: THREE.Color,
+  stops: readonly number[],
+): THREE.Color {
   const clamped = Math.min(1, Math.max(0, t));
-  for (let i = 0; i < GRADIENT_STOPS.length - 1; i++) {
-    const a = GRADIENT_STOPS[i];
-    const b = GRADIENT_STOPS[i + 1];
+  for (let i = 0; i < stops.length - 1; i++) {
+    const a = { at: STOP_POSITIONS[i], hex: stops[i] };
+    const b = { at: STOP_POSITIONS[i + 1], hex: stops[i + 1] };
     if (clamped >= a.at && clamped <= b.at) {
       const local = (clamped - a.at) / (b.at - a.at);
       out.setHex(a.hex).lerp(new THREE.Color(b.hex), local);
       return out;
     }
   }
-  return out.setHex(GRADIENT_STOPS[GRADIENT_STOPS.length - 1].hex);
+  return out.setHex(stops[stops.length - 1]);
 }
 
 export function createSky(
@@ -50,6 +57,7 @@ export function createSky(
   camera: THREE.OrthographicCamera,
   viewWidth: number,
   viewHeight: number,
+  stops: readonly number[] = DEFAULT_STOPS,
 ): Sky {
   const root = new THREE.Group();
   root.name = "sky";
@@ -68,7 +76,7 @@ export function createSky(
   for (let i = 0; i < posAttr.count; i++) {
     // Map plane Y (-h/2..h/2) to gradient t (0 at horizon, 1 at zenith).
     const t = (posAttr.getY(i) + h / 2) / h;
-    sampleGradient(t, scratch);
+    sampleGradient(t, scratch, stops);
     colors[i * 3] = scratch.r;
     colors[i * 3 + 1] = scratch.g;
     colors[i * 3 + 2] = scratch.b;

@@ -1,26 +1,34 @@
 import * as THREE from "three";
 import {
-  ARENA,
+  BOSS,
+  BOSS_KINDS,
   COMBO,
   ENEMIES,
   FEEL,
-  GOLEM,
   PICKUP,
   PLAYER,
-  WAVES,
+  PROGRESSION,
+  type BossKind,
   type PickupKind,
 } from "./config";
 import { createFx } from "./art/fx";
 import { createMage } from "./art/mage";
 import { PALETTE } from "./art/palette";
 import { PaperKit } from "./art/paper";
-import { createSky } from "./art/sky";
-import { createStage } from "./art/stage";
+import { createSky, type Sky } from "./art/sky";
 import { Disposer } from "./engine/Disposer";
 import { createInputState } from "./engine/input";
+import { ARENA_STATE, overFloorGap, setSealed } from "./systems/arena";
+import {
+  clearBossQueues,
+  pendingHazards,
+  pendingPull,
+  pendingSpawns,
+  pendingSpikes,
+} from "./systems/bossAI";
 import { createCameraRig } from "./systems/camera";
-import { createEnemies, pendingEggs } from "./systems/enemies";
-import { boxesOverlap, circleHitsBox } from "./systems/physics";
+import { createEnemies } from "./systems/enemies";
+import { boxesOverlap, circleHitsBox, hitsHazard } from "./systems/physics";
 import { createPickups } from "./systems/pickups";
 import { alreadyHit, createProjectiles, markHit } from "./systems/projectiles";
 import {
@@ -33,7 +41,8 @@ import {
   tryFire,
   updatePlayer,
 } from "./systems/player";
-import { composeWave, isWaveLocked, spawnPointFor } from "./systems/waves";
+import { createWorld } from "./systems/world";
+import { BIOMES, BOSS_ROOMS, getRoom, START_ROOM, type BiomeId } from "./world/rooms";
 import type {
   AABB,
   GameContext,
@@ -42,15 +51,52 @@ import type {
   HudSnapshot,
   InputState,
   PoseLike,
+  Progress,
 } from "./types";
 
+/**
+ * SPELL STORM — orchestrator.
+ *
+ * WHAT CHANGED, AND WHY
+ *
+ * This used to be a wave director: one arena, a spawn queue, a timer, a boss
+ * on wave 10. That shape has a ceiling. Waves are a *score* game — the fun is
+ * a number going up — and a score game is over the moment the player stops
+ * caring about the number. A map is a *place* game: the fun is that there is
+ * somewhere you haven't been, and that lasts as long as the map does.
+ *
+ * So the loop is now: explore, find a door, find a boss, kill it, the door it
+ * was guarding opens. Twenty rooms, seven bosses, benches to save at, and a
+ * death that costs you a walk back rather than the whole run.
+ *
+ * THE FRAME, IN ORDER
+ *
+ *   1. hitstop        — freeze the sim, keep the presentation running
+ *   2. phase machine  — transitions, boss intros, death, resting
+ *   3. player         — movement, aim, fire
+ *   4. enemies        — minion AI and boss state machines
+ *   5. deferred       — spawns, hazards, spikes and pull the bosses queued
+ *   6. collisions     — bullets, bodies, hazards, pickups
+ *   7. gates          — did the player leave the room
+ *   8. presentation   — puppets, camera, parallax, sky, HUD
+ *
+ * Nothing in steps 3–7 runs during a transition, which is what makes the fade
+ * safe: the world is being rebuilt underneath it.
+ */
+
 export interface SpellStormOptions {
-  /** Whether the player holds an active subscription. Gates wave 11+. */
+  /** Whether the player holds an active subscription. Gates four branches. */
   isPro: boolean;
-  /** Called once when the run ends, for persistence and analytics. */
-  onRunEnd?: (result: { score: number; wave: number; victory: boolean }) => void;
-  /** Called when a locked wave is reached, so the screen can offer the paywall. */
-  onLocked?: (score: number, wave: number) => void;
+  /** Restored progress. Pass a fresh one for a new save. */
+  progress: Progress;
+  /** Called whenever progress changes, so the screen can persist it. */
+  onProgress?: (progress: Progress) => void;
+  /** Called when the player dies, for analytics. */
+  onDeath?: (roomId: string, essence: number) => void;
+  /** Called when a boss dies. */
+  onBossDefeated?: (roomId: string, boss: BossKind, total: number) => void;
+  /** Called when the player reaches a members-only door. */
+  onLocked?: (roomId: string) => void;
   /** Fired for one-shot sound effects. Kept out of the engine deliberately. */
   onSound?: (id: SoundId) => void;
 }
@@ -63,12 +109,19 @@ export type SoundId =
   | "kill"
   | "hurt"
   | "pickup"
-  | "waveStart"
+  | "gate"
+  | "bench"
   | "bossRoar"
+  | "bossDown"
+  | "sealed"
   | "gameover";
 
 export interface SpellStorm extends GameHandle {
   readonly input: InputState;
+}
+
+export function createDefaultProgress(): Progress {
+  return { bosses: [], discovered: [], bench: START_ROOM, benchX: 0, essence: 0 };
 }
 
 export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): SpellStorm {
@@ -76,66 +129,100 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
   const kit = new PaperKit(disposer);
 
   // ---- Scene graph -------------------------------------------------------
-  const world = new THREE.Group();
-  world.name = "world";
-  ctx.scene.add(world);
+  const progress = options.progress ?? createDefaultProgress();
 
-  const sky = createSky(kit, disposer, ctx.camera, ctx.viewWidth, ctx.viewHeight);
-  const stage = createStage(kit, disposer);
-  world.add(stage.root);
+  const world = createWorld(ctx.scene, ctx.camera, ctx.viewWidth, ctx.viewHeight, {
+    progress,
+    isPro: options.isPro,
+    onProgress: options.onProgress,
+  });
+
+  // Skies are built lazily, one per biome, and toggled by visibility. Eight
+  // of them is about 900 vertices total — far cheaper than rebuilding the
+  // gradient, the star field and seven cloud cards on every room change.
+  const skies = new Map<BiomeId, Sky>();
+  let activeSky: Sky | null = null;
+
+  function useSky(biome: BiomeId): void {
+    let sky = skies.get(biome);
+    if (!sky) {
+      sky = createSky(kit, disposer, ctx.camera, ctx.viewWidth, ctx.viewHeight, BIOMES[biome].sky);
+      skies.set(biome, sky);
+    }
+    if (activeSky && activeSky !== sky) activeSky.root.visible = false;
+    sky.root.visible = true;
+    activeSky = sky;
+  }
 
   const fx = createFx(kit, disposer);
-  world.add(fx.root);
+  world.root.add(fx.root);
 
   const enemies = createEnemies(kit);
-  world.add(enemies.root);
+  world.root.add(enemies.root);
 
   const projectiles = createProjectiles(kit);
-  world.add(projectiles.root);
+  world.root.add(projectiles.root);
 
   const pickups = createPickups(kit);
-  world.add(pickups.root);
+  world.root.add(pickups.root);
 
   const mage = createMage(kit);
-  world.add(mage.root);
+  world.root.add(mage.root);
 
   const cameraRig = createCameraRig(ctx.camera);
+  cameraRig.fit(ctx.pixelWidth, ctx.pixelHeight);
 
   // ---- State -------------------------------------------------------------
   const input = createInputState();
   const player = createPlayer();
+
   const state: GameState = {
     phase: "ready",
-    wave: 0,
     score: 0,
     combo: 1,
     comboTimer: 0,
-    spawnQueue: [],
-    spawnTimer: 0,
-    intermissionTimer: 0,
     hitstop: 0,
-    shake: 0,
     elapsed: 0,
+    roomId: START_ROOM,
+    roomTitleTimer: 0,
+    fade: 0,
+    fadeDir: 0,
+    pendingGate: null,
     bossActive: false,
+    bossKind: null,
+    bossTimer: 0,
+    blockedGate: null,
   };
 
   const hud: HudSnapshot = {
     phase: "ready",
     hearts: PLAYER.startHearts,
+    maxHearts: PLAYER.maxHearts,
     score: 0,
-    wave: 0,
     combo: 1,
     weapon: "bolt",
     weaponTimer: 0,
+    roomId: START_ROOM,
+    roomName: getRoom(START_ROOM).name,
+    roomTitle: 0,
+    atBench: false,
+    bossActive: false,
     bossHp: 0,
     bossMaxHp: 1,
-    bossActive: false,
+    bossName: "",
+    bossTitle: "",
+    bossInvulnerable: false,
+    bossesDefeated: 0,
+    totalBosses: BOSS_ROOMS.length,
+    discovered: [],
+    defeatedRooms: [],
+    sealed: null,
   };
 
   let castFlash = 0;
   let recoil = 0;
-  let spawnIndex = 0;
-  let runEnded = false;
+  let benchTimer = 0;
+  let started = false;
 
   // Reused collision boxes — allocating these per frame would produce
   // thousands of short-lived objects a second.
@@ -151,6 +238,11 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     recoil: 0,
     phase: 0,
   };
+
+  /** Delayed spawns queued by bosses. Drained with their own timers. */
+  const scheduled: { kind: "slime" | "bat" | "golem" | "wisp"; x: number; y: number; t: number }[] = [];
+  /** Live damage zones (slams, spikes). */
+  const hazards: { x: number; y: number; radius: number; groundOnly: boolean; life: number }[] = [];
 
   const sound = (id: SoundId) => options.onSound?.(id);
 
@@ -170,30 +262,14 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     state.comboTimer = COMBO.window;
   }
 
-  function startWave(wave: number): void {
-    state.wave = wave;
-
-    if (isWaveLocked(wave, options.isPro)) {
-      state.phase = "locked";
-      options.onLocked?.(state.score, wave);
-      return;
-    }
-
-    const composition = composeWave(wave);
-    state.spawnQueue = composition.queue;
-    state.spawnTimer = 0.35;
-    state.bossActive = composition.isBoss;
-    spawnIndex = 0;
-    state.phase = "playing";
-    sound(composition.isBoss ? "bossRoar" : "waveStart");
-  }
-
-  function endRun(victory: boolean): void {
-    if (runEnded) return;
-    runEnded = true;
-    state.phase = victory ? "victory" : "gameover";
-    sound("gameover");
-    options.onRunEnd?.({ score: state.score, wave: state.wave, victory });
+  function hurtPlayer(fromX: number, shakeAmount: number = FEEL.shakeOnPlayerHit): void {
+    if (!damagePlayer(player, fromX)) return;
+    sound("hurt");
+    state.hitstop = FEEL.hitstopOnPlayerHit;
+    cameraRig.addShake(shakeAmount);
+    fx.burst(player.x, player.y + PLAYER.halfH, 14, PALETTE.danger, 6, 10);
+    state.combo = 1;
+    state.comboTimer = 0;
   }
 
   function applyPickup(kind: PickupKind, x: number, y: number): void {
@@ -213,245 +289,208 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     }
   }
 
+  /** Wipes everything that belonged to the room we are leaving. */
+  function clearRoomEntities(): void {
+    enemies.reset();
+    projectiles.reset();
+    pickups.reset();
+    clearBossQueues();
+    scheduled.length = 0;
+    hazards.length = 0;
+  }
+
+  function enterRoom(roomId: string, fromGate: string | null): void {
+    clearRoomEntities();
+
+    const spawnAt = world.enter(roomId, fromGate);
+    const room = world.room;
+
+    state.roomId = roomId;
+    state.roomTitleTimer = PROGRESSION.roomTitleTime;
+    state.blockedGate = null;
+    useSky(room.biome);
+
+    // Belt and braces: if an arrival point ever ends up over a hole, slide it
+    // sideways until it isn't. A player who falls out of a room the instant
+    // they enter it has no way to tell a level-design mistake from a crash.
+    let sx = spawnAt.x;
+    if (overFloorGap(sx) && spawnAt.y < 1.5) {
+      for (let step = 1; step <= 20 && overFloorGap(sx); step++) {
+        const probe = spawnAt.x + step * 1.5 * (spawnAt.x > (room.minX + room.maxX) * 0.5 ? -1 : 1);
+        if (probe > room.minX + 2 && probe < room.maxX - 2) sx = probe;
+        else break;
+      }
+    }
+
+    player.x = sx;
+    player.y = spawnAt.y;
+    player.vx = 0;
+    player.vy = 0;
+    player.onGround = false;
+    // Entering from a right-hand door means walking left, and vice versa.
+    player.facing = spawnAt.x > (room.minX + room.maxX) * 0.5 ? -1 : 1;
+
+    // Ambient population. Enemies respawn on every visit, Hollow-Knight
+    // style: the corridor is a fresh problem each time you cross it, and
+    // that is what stops backtracking feeling like empty walking.
+    for (const s of room.spawns) enemies.spawn(s.kind, s.x, s.y);
+
+    // Boss.
+    const bossCleared = progress.bosses.includes(roomId);
+    if (room.boss && !bossCleared) {
+      startBossFight(room.boss);
+    } else {
+      state.bossActive = false;
+      state.bossKind = null;
+      setSealed(false);
+      cameraRig.setBossFraming(false);
+      state.phase = "playing";
+    }
+
+    cameraRig.reset(player.x, player.y);
+  }
+
+  function startBossFight(kind: BossKind): void {
+    const room = world.room;
+    const spawnX = (room.minX + room.maxX) * 0.5 + (player.x > 0 ? -6 : 6);
+    const airborne = kind === "nightwing" || kind === "lumenChoir" || kind === "voidmaw" || kind === "dragon";
+    enemies.spawn(kind, spawnX, airborne ? room.ceilingY - 6 : 3.0);
+
+    state.bossActive = true;
+    state.bossKind = kind;
+    state.bossTimer = BOSS.introTime;
+    state.phase = "bossIntro";
+    // The doors shut. This is the only place in the game that takes an exit
+    // away from the player, and it is why boss rooms are authored with a
+    // single entrance — you always know exactly which door reopens.
+    setSealed(true);
+    cameraRig.setBossFraming(true);
+    cameraRig.addShake(0.7);
+    sound("bossRoar");
+  }
+
+  function onBossKilled(x: number, y: number): void {
+    const roomId = state.roomId;
+    const kind = state.bossKind;
+
+    state.bossActive = false;
+    state.phase = "bossDefeated";
+    state.bossTimer = BOSS.deathTime;
+    state.hitstop = 0.32;
+
+    cameraRig.addShake(FEEL.shakeOnBossLand);
+    cameraRig.setBossFraming(false);
+    setSealed(false);
+
+    fx.burst(x, y, 46, PALETTE.gold, 13, 15);
+    fx.shockwave(x, y, PALETTE.arcaneCore, 9, 0.7);
+
+    world.markBossDefeated(roomId);
+    // Reward: a heart and a scattering of pickups. Healing on a boss kill
+    // means the walk back to the bench is a victory lap rather than a
+    // second, worse fight.
+    for (let i = 0; i < BOSS.heartsOnKill; i++) pickups.spawn("heart", x + i * 1.4, y);
+    pickups.spawn("star", x - 2.2, y + 0.6);
+    pickups.spawn("star", x + 2.2, y + 0.6);
+
+    sound("bossDown");
+    if (kind) options.onBossDefeated?.(roomId, kind, progress.bosses.length);
+  }
+
+  function restAtBench(): void {
+    const room = world.room;
+    if (!room.bench) return;
+    player.hearts = PLAYER.maxHearts;
+    progress.bench = room.id;
+    progress.benchX = room.bench.x;
+    progress.essence = state.score;
+    options.onProgress?.(progress);
+    fx.burst(room.bench.x + 1.3, 3.6, 20, PALETTE.gold, 6, 10);
+    fx.shockwave(room.bench.x + 1.3, 3.0, PALETTE.gold, 3.4, 0.55);
+    sound("bench");
+  }
+
+  function die(): void {
+    if (state.phase === "dead") return;
+    state.phase = "dead";
+    state.bossTimer = 1.7;
+    state.bossActive = false;
+    cameraRig.setBossFraming(false);
+    cameraRig.addShake(1.0);
+    fx.burst(player.x, player.y + 0.8, 30, PALETTE.arcane, 10, 12);
+    sound("gameover");
+    const lost = Math.round(state.score * PROGRESSION.deathPenalty);
+    state.score = Math.max(0, state.score - lost);
+    options.onDeath?.(state.roomId, state.score);
+  }
+
+  function respawn(): void {
+    player.hearts = PLAYER.maxHearts;
+    player.alive = true;
+    player.weapon = "bolt";
+    player.weaponTimer = 0;
+    player.invulnerable = PLAYER.iFrames;
+    state.combo = 1;
+    state.comboTimer = 0;
+    enterRoom(progress.bench, null);
+  }
+
+  /** Begins a fade-out toward another room. */
+  function beginTransition(to: string, toGate: string): void {
+    state.phase = "transition";
+    state.pendingGate = { to, toGate };
+    state.fadeDir = 1;
+    sound("gate");
+  }
+
+  // ---- Deferred effects the bosses queued ---------------------------------
+
+  function drainBossQueues(dt: number): void {
+    while (pendingSpawns.length > 0) {
+      const s = pendingSpawns.pop()!;
+      scheduled.push({ kind: s.kind, x: s.x, y: s.y, t: s.delay });
+    }
+    while (pendingHazards.length > 0) {
+      const h = pendingHazards.pop()!;
+      hazards.push({ x: h.x, y: h.y, radius: h.radius, groundOnly: h.groundOnly, life: h.life });
+    }
+    while (pendingSpikes.length > 0) {
+      const sp = pendingSpikes.pop()!;
+      world.stage.showSpike(sp.x, sp.height, sp.life);
+    }
+
+    // Voidmaw's drag. Applied as acceleration on the player's velocity rather
+    // than as a position offset, so the player can still fight it with the
+    // stick — a positional pull would feel like input lag.
+    if (pendingPull.strength > 0 && player.alive) {
+      player.vx += pendingPull.x * pendingPull.strength * dt;
+      player.vy += pendingPull.y * pendingPull.strength * dt * 0.55;
+      pendingPull.strength = 0;
+    }
+
+    for (let i = scheduled.length - 1; i >= 0; i--) {
+      scheduled[i].t -= dt;
+      if (scheduled[i].t <= 0) {
+        const s = scheduled[i];
+        if (enemies.countActive() < 22) enemies.spawn(s.kind, s.x, s.y);
+        fx.burst(s.x, s.y, 8, PALETTE.arcaneDeep, 4, 8);
+        scheduled.splice(i, 1);
+      }
+    }
+
+    for (let i = hazards.length - 1; i >= 0; i--) {
+      hazards[i].life -= dt;
+      if (hazards[i].life <= 0) hazards.splice(i, 1);
+    }
+  }
+
   // ---- Frame -------------------------------------------------------------
 
-  function frame(dt: number): void {
-    state.elapsed += dt;
-    pose.time = state.elapsed;
-
-    // Hitstop freezes the simulation but not the presentation. The camera
-    // still shakes and particles still move, so the freeze reads as impact
-    // rather than as a dropped frame.
-    if (state.hitstop > 0) {
-      state.hitstop = Math.max(0, state.hitstop - dt);
-      fx.update(dt);
-      cameraRig.update(dt, player.x, player.y, player.vx, PLAYER.maxSpeed);
-      stage.update(cameraRig.focusX, state.elapsed);
-      sky.update(dt, state.elapsed, cameraRig.focusX);
-      publishHud();
-      return;
-    }
-
-    castFlash = Math.max(0, castFlash - dt * 7);
-    recoil = Math.max(0, recoil - dt * 6);
-
-    if (state.comboTimer > 0) {
-      state.comboTimer -= dt;
-      if (state.comboTimer <= 0) state.combo = 1;
-    }
-
-    // ---- Phase machine ---------------------------------------------------
-    if (state.phase === "intermission") {
-      state.intermissionTimer -= dt;
-      if (state.intermissionTimer <= 0) startWave(state.wave + 1);
-    } else if (state.phase === "playing") {
-      // Drip enemies in rather than dumping the wave at once.
-      if (state.spawnQueue.length > 0) {
-        state.spawnTimer -= dt;
-        if (state.spawnTimer <= 0 && enemies.countActive() < WAVES.maxConcurrent) {
-          const kind = state.spawnQueue.shift()!;
-          const point = spawnPointFor(kind, spawnIndex, ARENA.halfWidth);
-          spawnIndex += 1;
-          const spawned = enemies.spawn(kind, point.x, point.y);
-          if (spawned) {
-            fx.burst(point.x, point.y, 8, PALETTE.arcaneDeep, 4, 8);
-          } else {
-            // Visual pool was full; try again shortly instead of losing it.
-            state.spawnQueue.unshift(kind);
-          }
-          state.spawnTimer = WAVES.spawnInterval;
-        }
-      } else if (enemies.countActive() === 0) {
-        // Wave cleared.
-        addScore(250 + state.wave * 50);
-        state.bossActive = false;
-        state.phase = "intermission";
-        state.intermissionTimer = WAVES.intermission;
-      }
-    }
-
-    const simulating = state.phase === "playing" || state.phase === "intermission";
-
-    // ---- Player ----------------------------------------------------------
-    if (simulating && player.alive) {
-      updatePlayer(player, input, dt, {
-        onJump: (x, y) => {
-          sound("jump");
-          fx.spray(x, y, 6, PALETTE.arcaneDeep, 0, -1, 1.4, 3);
-        },
-        onLand: (x, y, impact) => {
-          sound("land");
-          fx.spray(x, y, Math.min(12, 4 + impact * 0.4), PALETTE.paperEdge, 0, 1, 2.6, 3.2);
-          cameraRig.addShake(Math.min(0.25, impact * 0.012));
-        },
-        onFire: (x, y, aimX, aimY, weapon) => {
-          sound("fire");
-          projectiles.spawn(x, y, aimX, aimY, weapon, false);
-          castFlash = 1;
-          recoil = 1;
-          fx.spray(x, y, 4, PALETTE.arcane, aimX, aimY, 0.7, 5);
-          cameraRig.addShake(0.05);
-        },
-        onWeaponExpired: () => {
-          fx.burst(player.x, player.y + 1, 8, PALETTE.arcaneDeep, 3.5, 7);
-        },
-      });
-      tryFire(player, input, {
-        onJump: () => {},
-        onLand: () => {},
-        onFire: (x, y, aimX, aimY, weapon) => {
-          sound("fire");
-          projectiles.spawn(x, y, aimX, aimY, weapon, false);
-          castFlash = 1;
-          recoil = 1;
-          fx.spray(x, y, 4, PALETTE.arcane, aimX, aimY, 0.7, 5);
-          cameraRig.addShake(0.05);
-        },
-        onWeaponExpired: () => {},
-      });
-    }
-
-    // ---- Enemies ---------------------------------------------------------
-    if (simulating) {
-      enemies.update(dt, player, projectiles, fx, state.elapsed);
-
-      // Dragon eggs, drained here to avoid a circular dependency.
-      while (pendingEggs.length > 0) {
-        const egg = pendingEggs.pop()!;
-        enemies.spawn("slime", egg.x, egg.y);
-        fx.burst(egg.x, egg.y, 8, PALETTE.dragonBelly, 4, 8);
-      }
-    }
-
-    projectiles.update(dt, enemies.list, fx);
-
-    // ---- Collisions ------------------------------------------------------
-    if (simulating) {
-      syncPlayerBox();
-
-      // Friendly projectiles vs enemies.
-      for (const p of projectiles.list) {
-        if (!p.active || p.hostile) continue;
-        for (let ei = 0; ei < enemies.list.length; ei++) {
-          const e = enemies.list[ei];
-          if (!e.active) continue;
-          if (p.piercing && alreadyHit(p, ei)) continue;
-
-          const spec = ENEMIES[e.kind];
-          enemyBox.x = e.x;
-          enemyBox.y = e.y + spec.halfH * 0.5;
-          enemyBox.halfW = spec.halfW;
-          enemyBox.halfH = spec.halfH;
-
-          if (!circleHitsBox(p.x, p.y, p.radius, enemyBox)) continue;
-
-          const isBoss = e.kind === "dragon";
-          const died = enemies.damage(ei, p.damage, p.x, fx);
-          sound(died ? "kill" : "hit");
-          state.hitstop = Math.max(
-            state.hitstop,
-            died ? FEEL.hitstopOnKill : isBoss ? FEEL.hitstopOnBossHit : 0,
-          );
-          cameraRig.addShake(died ? FEEL.shakeOnKill : 0.05);
-
-          if (died) {
-            bumpCombo();
-            addScore(spec.score);
-            pickups.rollDrop(e.x, e.y + 0.5, spec.dropChance);
-            if (isBoss) {
-              cameraRig.addShake(FEEL.shakeOnBossLand);
-              state.hitstop = 0.3;
-              state.bossActive = false;
-            }
-          }
-
-          if (p.piercing) {
-            markHit(p, ei);
-          } else {
-            p.active = false;
-            break;
-          }
-        }
-      }
-
-      // Hostile projectiles vs player.
-      if (player.alive) {
-        for (const p of projectiles.list) {
-          if (!p.active || !p.hostile) continue;
-          if (!circleHitsBox(p.x, p.y, p.radius, playerBox)) continue;
-          p.active = false;
-          if (damagePlayer(player, p.x)) {
-            sound("hurt");
-            state.hitstop = FEEL.hitstopOnPlayerHit;
-            cameraRig.addShake(FEEL.shakeOnPlayerHit);
-            fx.burst(player.x, player.y + PLAYER.halfH, 14, PALETTE.danger, 6, 10);
-            state.combo = 1;
-            state.comboTimer = 0;
-          }
-        }
-      }
-
-      // Enemy contact and the golem shockwave.
-      if (player.alive && player.invulnerable <= 0) {
-        for (const e of enemies.list) {
-          if (!e.active) continue;
-          const spec = ENEMIES[e.kind];
-
-          if (e.kind === "golem" && e.timer2 > 0) {
-            // The slam damages by radius on the ground, not by body overlap,
-            // so it reaches further than the golem itself — which is the
-            // whole point of telegraphing it.
-            e.timer2 = 0;
-            const dx = Math.abs(player.x - e.x);
-            if (dx < GOLEM.slamShockwaveRadius && player.onGround) {
-              if (damagePlayer(player, e.x)) {
-                sound("hurt");
-                state.hitstop = FEEL.hitstopOnPlayerHit;
-                cameraRig.addShake(FEEL.shakeOnPlayerHit);
-                state.combo = 1;
-              }
-              break;
-            }
-          }
-
-          enemyBox.x = e.x;
-          enemyBox.y = e.y + spec.halfH * 0.5;
-          enemyBox.halfW = spec.halfW;
-          enemyBox.halfH = spec.halfH;
-          if (!boxesOverlap(playerBox, enemyBox)) continue;
-
-          if (damagePlayer(player, e.x)) {
-            sound("hurt");
-            state.hitstop = FEEL.hitstopOnPlayerHit;
-            cameraRig.addShake(FEEL.shakeOnPlayerHit);
-            fx.burst(player.x, player.y + PLAYER.halfH, 14, PALETTE.danger, 6, 10);
-            state.combo = 1;
-            state.comboTimer = 0;
-          }
-          break;
-        }
-      }
-
-      // Pickups.
-      pickups.update(dt, player, state.elapsed);
-      if (player.alive) {
-        for (const p of pickups.list) {
-          if (!p.active) continue;
-          const dx = p.x - player.x;
-          const dy = p.y - (player.y + PLAYER.halfH);
-          if (dx * dx + dy * dy > (PICKUP.radius + PLAYER.halfW + 0.3) ** 2) continue;
-          p.active = false;
-          applyPickup(p.kind, p.x, p.y);
-        }
-      }
-
-      if (!player.alive) endRun(false);
-    }
-
-    // ---- Presentation ----------------------------------------------------
+  function presentation(dt: number): void {
     fx.update(dt);
     enemies.render(state.elapsed);
 
+    pose.time = state.elapsed;
     pose.speed = Math.abs(player.vx);
     pose.speedRatio = Math.min(1, Math.abs(player.vx) / PLAYER.maxSpeed);
     pose.onGround = player.onGround;
@@ -466,27 +505,337 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     mage.puppet.setFacing(player.facing);
     mage.puppet.setSquash(player.squashX, player.squashY);
     mage.update(pose, castFlash);
-    mage.setVisible(player.alive && !shouldBlink(player));
+    mage.setVisible(player.alive && !shouldBlink(player) && state.phase !== "dead");
 
     cameraRig.update(dt, player.x, player.y, player.vx, PLAYER.maxSpeed);
-    stage.update(cameraRig.focusX, state.elapsed);
-    sky.update(dt, state.elapsed, cameraRig.focusX);
+    world.update(cameraRig.focusX, cameraRig.focusY, state.elapsed);
+    activeSky?.update(dt, state.elapsed, cameraRig.focusX);
+    world.setFade(state.fade);
 
     publishHud();
   }
 
+  function frame(dt: number): void {
+    state.elapsed += dt;
+
+    // ---- Hitstop ---------------------------------------------------------
+    // Freezes the simulation but not the presentation. The camera still
+    // shakes and particles still move, so the freeze reads as impact rather
+    // than as a dropped frame.
+    if (state.hitstop > 0) {
+      state.hitstop = Math.max(0, state.hitstop - dt);
+      presentation(dt);
+      return;
+    }
+
+    castFlash = Math.max(0, castFlash - dt * 7);
+    recoil = Math.max(0, recoil - dt * 6);
+    if (state.roomTitleTimer > 0) state.roomTitleTimer = Math.max(0, state.roomTitleTimer - dt);
+    if (state.comboTimer > 0) {
+      state.comboTimer -= dt;
+      if (state.comboTimer <= 0) state.combo = 1;
+    }
+    if (state.blockedGate && !world.gateAt(player.x, player.y)) state.blockedGate = null;
+
+    // ---- Transition ------------------------------------------------------
+    if (state.phase === "transition") {
+      const speed = 1 / Math.max(0.05, PROGRESSION.transitionFade);
+      state.fade += state.fadeDir * speed * dt;
+
+      if (state.fadeDir === 1 && state.fade >= 1) {
+        state.fade = 1;
+        const gate = state.pendingGate;
+        state.pendingGate = null;
+        if (gate) enterRoom(gate.to, gate.toGate);
+        // enterRoom sets phase; force it back to transition for the fade-in.
+        state.phase = "transition";
+        state.fadeDir = -1;
+      } else if (state.fadeDir === -1 && state.fade <= 0) {
+        state.fade = 0;
+        state.fadeDir = 0;
+        const room = world.room;
+        const cleared = progress.bosses.includes(room.id);
+        state.phase = room.boss && !cleared ? "bossIntro" : "playing";
+      }
+
+      presentation(dt);
+      return;
+    }
+
+    // ---- Death -----------------------------------------------------------
+    if (state.phase === "dead") {
+      state.bossTimer -= dt;
+      if (state.bossTimer <= 0) {
+        state.fade = 0;
+        respawn();
+        state.phase = "transition";
+        state.fadeDir = -1;
+        state.fade = 1;
+      }
+      presentation(dt);
+      return;
+    }
+
+    // ---- Boss intro / defeat beats --------------------------------------
+    if (state.phase === "bossIntro") {
+      state.bossTimer -= dt;
+      if (state.bossTimer <= 0) state.phase = "playing";
+    } else if (state.phase === "bossDefeated") {
+      state.bossTimer -= dt;
+      if (state.bossTimer <= 0) state.phase = "playing";
+    }
+
+    const simulating =
+      state.phase === "playing" || state.phase === "bossIntro" || state.phase === "bossDefeated";
+
+    if (!simulating) {
+      presentation(dt);
+      return;
+    }
+
+    // ---- Player ----------------------------------------------------------
+    if (player.alive) {
+      const fireEvents = {
+        onJump: () => {},
+        onLand: () => {},
+        onFire: (x: number, y: number, aimX: number, aimY: number, weapon: never) => {
+          sound("fire");
+          projectiles.spawn(x, y, aimX, aimY, weapon, false);
+          castFlash = 1;
+          recoil = 1;
+          fx.spray(x, y, 4, PALETTE.arcane, aimX, aimY, 0.7, 5);
+          cameraRig.addShake(0.05);
+        },
+        onWeaponExpired: () => {},
+      };
+
+      updatePlayer(player, input, dt, {
+        onJump: (x, y) => {
+          sound("jump");
+          fx.spray(x, y, 6, PALETTE.arcaneDeep, 0, -1, 1.4, 3);
+        },
+        onLand: (x, y, impact) => {
+          sound("land");
+          fx.spray(x, y, Math.min(12, 4 + impact * 0.4), PALETTE.paperEdge, 0, 1, 2.6, 3.2);
+          cameraRig.addShake(Math.min(0.25, impact * 0.012));
+        },
+        onFire: fireEvents.onFire,
+        onWeaponExpired: () => {
+          fx.burst(player.x, player.y + 1, 8, PALETTE.arcaneDeep, 3.5, 7);
+        },
+      });
+      tryFire(player, input, fireEvents);
+    }
+
+    // ---- Enemies ---------------------------------------------------------
+    enemies.update(dt, player, projectiles, fx, state.elapsed, (amount) => cameraRig.addShake(amount));
+    drainBossQueues(dt);
+    projectiles.update(dt, enemies.list, fx);
+
+    // ---- Collisions ------------------------------------------------------
+    syncPlayerBox();
+
+    // Friendly projectiles vs enemies.
+    for (const p of projectiles.list) {
+      if (!p.active || p.hostile) continue;
+      for (let ei = 0; ei < enemies.list.length; ei++) {
+        const e = enemies.list[ei];
+        if (!e.active) continue;
+        if (p.piercing && alreadyHit(p, ei)) continue;
+
+        const spec = ENEMIES[e.kind];
+        enemyBox.x = e.x;
+        enemyBox.y = e.y + spec.halfH * 0.5;
+        enemyBox.halfW = spec.halfW;
+        enemyBox.halfH = spec.halfH;
+
+        if (!circleHitsBox(p.x, p.y, p.radius, enemyBox)) continue;
+
+        const isBoss = (BOSS_KINDS as string[]).includes(e.kind);
+        const wasAlive = e.active;
+        const died = enemies.damage(ei, p.damage, p.x, fx);
+        sound(died ? "kill" : "hit");
+        state.hitstop = Math.max(
+          state.hitstop,
+          died ? FEEL.hitstopOnKill : isBoss ? FEEL.hitstopOnBossHit : 0,
+        );
+        cameraRig.addShake(died ? FEEL.shakeOnKill : 0.05);
+
+        if (died && wasAlive) {
+          bumpCombo();
+          addScore(spec.score);
+          if (isBoss) {
+            onBossKilled(e.x, e.y);
+          } else {
+            pickups.rollDrop(e.x, e.y + 0.5, spec.dropChance);
+          }
+        }
+
+        if (p.piercing) {
+          markHit(p, ei);
+        } else {
+          p.active = false;
+          break;
+        }
+      }
+    }
+
+    // Hostile projectiles vs player.
+    if (player.alive && state.phase === "playing") {
+      for (const p of projectiles.list) {
+        if (!p.active || !p.hostile) continue;
+        if (!circleHitsBox(p.x, p.y, p.radius, playerBox)) continue;
+        p.active = false;
+        hurtPlayer(p.x);
+      }
+    }
+
+    // Bodies, boss hazards and the room's own spikes.
+    if (player.alive && player.invulnerable <= 0 && state.phase === "playing") {
+      for (const h of hazards) {
+        if (h.groundOnly && !player.onGround) continue;
+        const dx = player.x - h.x;
+        const dy = player.y + PLAYER.halfH - h.y;
+        if (h.groundOnly ? Math.abs(dx) < h.radius : dx * dx + dy * dy < h.radius * h.radius) {
+          hurtPlayer(h.x);
+          break;
+        }
+      }
+    }
+
+    if (player.alive && player.invulnerable <= 0 && state.phase === "playing") {
+      if (hitsHazard(playerBox)) {
+        // Static spikes throw you back the way you came, so a spike bed is a
+        // cost rather than a death sentence.
+        hurtPlayer(player.x - player.facing * 2, 0.6);
+      }
+    }
+
+    if (player.alive && player.invulnerable <= 0 && state.phase === "playing") {
+      for (const e of enemies.list) {
+        if (!e.active) continue;
+        const spec = ENEMIES[e.kind];
+        enemyBox.x = e.x;
+        enemyBox.y = e.y + spec.halfH * 0.5;
+        enemyBox.halfW = spec.halfW;
+        enemyBox.halfH = spec.halfH;
+        if (!boxesOverlap(playerBox, enemyBox)) continue;
+        // The Choir has no contact damage — it is a pure bullet fight.
+        if (e.kind === "lumenChoir") continue;
+        hurtPlayer(e.x);
+        break;
+      }
+    }
+
+    // Pickups.
+    pickups.update(dt, player, state.elapsed);
+    if (player.alive) {
+      for (const p of pickups.list) {
+        if (!p.active) continue;
+        const dx = p.x - player.x;
+        const dy = p.y - (player.y + PLAYER.halfH);
+        if (dx * dx + dy * dy > (PICKUP.radius + PLAYER.halfW + 0.3) ** 2) continue;
+        p.active = false;
+        applyPickup(p.kind, p.x, p.y);
+      }
+    }
+
+    // ---- Bench -----------------------------------------------------------
+    const room = world.room;
+    if (room.bench && player.alive && player.onGround) {
+      const near = Math.abs(player.x - room.bench.x) < 2.2;
+      if (near) {
+        benchTimer += dt;
+        // Half a second of standing still, so you don't save by walking past.
+        if (benchTimer > 0.5 && (player.hearts < PLAYER.maxHearts || progress.bench !== room.id)) {
+          restAtBench();
+          benchTimer = -3;
+        }
+      } else {
+        benchTimer = 0;
+      }
+    } else {
+      benchTimer = 0;
+    }
+
+    // ---- Falling out of the world ---------------------------------------
+    if (player.y < -14 && player.alive) {
+      const hit = world.gateAt(player.x, player.y);
+      if (!hit) {
+        // No pit gate here: it was a mistake, not a route. Cost a heart and
+        // put them back on the floor rather than killing them outright.
+        player.y = 1.0;
+        player.vy = 0;
+        player.x = Math.max(ARENA_STATE.minX + 3, Math.min(ARENA_STATE.maxX - 3, player.x));
+        hurtPlayer(player.x, 0.5);
+      }
+    }
+
+    // ---- Gates -----------------------------------------------------------
+    if (player.alive && state.phase === "playing" && !ARENA_STATE.sealed) {
+      const hit = world.gateAt(player.x, player.y);
+      if (hit) {
+        if (hit.open) {
+          beginTransition(hit.gate.to, hit.gate.toGate);
+        } else if (!state.blockedGate) {
+          state.blockedGate = {
+            label: hit.gate.sealLabel ?? "Sealed",
+            pro: hit.reason === "pro",
+          };
+          fx.burst(player.x, player.y + 1, 10, PALETTE.gold, 5, 8);
+          cameraRig.addShake(0.2);
+          sound("sealed");
+          if (hit.reason === "pro") options.onLocked?.(hit.gate.to);
+          // Push them back off the door so it doesn't retrigger every frame.
+          player.vx = hit.gate.side === "left" ? 7 : hit.gate.side === "right" ? -7 : 0;
+          if (hit.gate.side === "top") player.vy = -4;
+          if (hit.gate.side === "bottom") {
+            // A locked pit has nothing to bounce off. Put them on the ledge
+            // beside it rather than leaving them falling through a sealed
+            // floor forever.
+            player.x = world.ledgeBeside(hit.gate);
+            player.y = 1.2;
+            player.vx = 0;
+            player.vy = 0;
+          }
+        }
+      }
+    }
+
+    if (!player.alive) die();
+
+    presentation(dt);
+  }
+
   function publishHud(): void {
     const boss = enemies.boss();
+    const room = world.room;
+
     hud.phase = state.phase;
     hud.hearts = player.hearts;
+    hud.maxHearts = PLAYER.maxHearts;
     hud.score = state.score;
-    hud.wave = state.wave;
     hud.combo = state.combo;
     hud.weapon = player.weapon;
     hud.weaponTimer = player.weaponTimer;
+
+    hud.roomId = room.id;
+    hud.roomName = room.name;
+    hud.roomTitle = state.roomTitleTimer;
+    hud.atBench = benchTimer > 0.5;
+
     hud.bossActive = boss !== null;
     hud.bossHp = boss ? boss.hp : 0;
     hud.bossMaxHp = boss ? boss.maxHp : 1;
+    hud.bossName = boss ? room.bossName ?? "" : "";
+    hud.bossTitle = boss ? room.bossTitle ?? "" : "";
+    hud.bossInvulnerable = boss ? boss.invulnerable > 0 : false;
+
+    hud.bossesDefeated = progress.bosses.length;
+    hud.totalBosses = BOSS_ROOMS.length;
+    hud.discovered = progress.discovered;
+    hud.defeatedRooms = progress.bosses;
+    hud.sealed = state.blockedGate;
   }
 
   // ---- Public API --------------------------------------------------------
@@ -494,52 +843,47 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
   return {
     input,
     hud,
-
     frame,
 
     resize(width: number, height: number) {
-      const aspect = width / height;
-      const viewHeight = ctx.viewHeight;
-      const viewWidth = viewHeight * aspect;
-      ctx.camera.left = -viewWidth / 2;
-      ctx.camera.right = viewWidth / 2;
-      ctx.camera.top = viewHeight / 2;
-      ctx.camera.bottom = -viewHeight / 2;
-      ctx.camera.updateProjectionMatrix();
+      cameraRig.fit(width, height);
     },
 
     start() {
       resetPlayer(player);
-      enemies.reset();
-      projectiles.reset();
-      pickups.reset();
-      state.score = 0;
+      state.score = progress.essence;
       state.combo = 1;
       state.comboTimer = 0;
       state.hitstop = 0;
       state.elapsed = 0;
-      state.bossActive = false;
-      state.spawnQueue = [];
-      spawnIndex = 0;
-      runEnded = false;
+      state.fade = 0;
+      state.fadeDir = 0;
+      state.pendingGate = null;
+      state.blockedGate = null;
       castFlash = 0;
       recoil = 0;
-      cameraRig.reset(0, ARENA.floorY);
-      startWave(1);
+      benchTimer = 0;
+      started = true;
+      // Resume at the last bench. A brand-new save has bench = crossroads.
+      enterRoom(progress.bench || START_ROOM, null);
       publishHud();
     },
 
     dispose() {
-      // Detach the sky from the camera explicitly: it is parented to the
-      // camera, not to `world`, so removing the world group would leave it
-      // hanging off a camera that outlives this screen.
-      sky.root.removeFromParent();
-      world.removeFromParent();
+      // Skies are parented to the camera, not to `world`, so removing the
+      // world group would leave them hanging off a camera that outlives this
+      // screen.
+      for (const sky of skies.values()) sky.root.removeFromParent();
+      skies.clear();
+      world.dispose();
+      clearBossQueues();
       disposer.disposeAll();
+      void started;
     },
   };
 }
 
 export { PALETTE } from "./art/palette";
 export * from "./config";
-export type { HudSnapshot, InputState } from "./types";
+export { BIOMES, BOSS_ROOMS, MAP_EXTENT, ROOMS, ROOM_IDS, getRoom } from "./world/rooms";
+export type { HudSnapshot, InputState, Progress } from "./types";

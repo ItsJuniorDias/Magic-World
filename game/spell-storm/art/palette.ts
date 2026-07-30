@@ -88,6 +88,42 @@ export const PALETTE = {
   dragonBelly: 0xffc07a,
   dragonWing: 0x7a1f1c,
 
+  // --- The seven ----------------------------------------------------------
+  // Each boss owns a hue that appears nowhere else in its biome, so the eye
+  // finds it instantly in a crowded room. The rule from the top of this file
+  // still holds underneath: cyan is yours, everything warm can hurt you.
+  gorgeFace: 0x7ad14f,
+  gorgeEdge: 0x2f6b2c,
+  gorgeCore: 0xe8ff8a,
+  gorgeCrown: 0xffd76b,
+
+  nightFace: 0x8a4fd6,
+  nightEdge: 0x4a1f8a,
+  nightWing: 0x2e0f52,
+  nightEye: 0xff5c72,
+
+  cinderFace: 0x8c7a6b,
+  cinderEdge: 0x4a3a30,
+  cinderCore: 0xff6b2b,
+  cinderGlow: 0xffb25c,
+
+  choirFace: 0xfff0b0,
+  choirEdge: 0xd9a92f,
+  choirCore: 0x6fe9ff,
+  choirOrb: 0xffd76b,
+
+  thornFace: 0x6b5230,
+  thornEdge: 0x3a2c19,
+  thornLeaf: 0x4f8a3a,
+  thornSpike: 0xd9a24f,
+  thornEye: 0xffe08a,
+
+  voidFace: 0x1a0d2e,
+  voidEdge: 0x0a0417,
+  voidRing: 0xa06bff,
+  voidEye: 0xff4dd6,
+  voidTooth: 0xe8d9ff,
+
   // --- UI and feedback ----------------------------------------------------
   gold: 0xffc94a,
   heart: 0xff5c72,

@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import type { EnemyKind } from "../config";
+import { isBossKind, type EnemyKind } from "../config";
+import { createBoss } from "./bosses";
 import { PALETTE } from "./palette";
 import { PaperKit } from "./paper";
 import { Puppet, type PoseInput } from "./puppet";
@@ -55,7 +56,12 @@ export function createCreature(kit: PaperKit, kind: EnemyKind): Creature {
     case "wisp":
       return createWisp(kit);
     case "dragon":
+      // The Storm Dragon is the finale, built here because it predates the
+      // other six and there was no reason to rewrite a working boss.
       return createDragon(kit);
+    default:
+      if (isBossKind(kind)) return createBoss(kit, kind);
+      return createSlime(kit);
   }
 }
 
