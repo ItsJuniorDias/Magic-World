@@ -1,7 +1,7 @@
 import Text from "@/components/text";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Asset } from "expo-asset";
-import { Audio } from "expo-av";
+import { setAudioModeAsync, useAudioPlayer } from "expo-audio";
 import { GLView } from "expo-gl";
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -169,7 +169,6 @@ const FLAME_PALETTE_WARP = {
   light: 0x54c8ff,
 };
 
-const EXHAUST_COUNT = 54;
 const DUST_COUNT = 160;
 
 export default function FantasyRunnerEndGame() {
@@ -197,14 +196,13 @@ export default function FantasyRunnerEndGame() {
   const shieldMeshRef = useRef<THREE.Mesh | null>(null);
   const shieldItemRef = useRef<THREE.Group | null>(null);
 
-  // v2: refs de partículas que precisam de reset no restart
-  const exhaustResetRef = useRef<(() => void) | null>(null);
+  // v2.1: trilha de exaustão da nave removida a pedido
 
   const gameActive = useRef(true);
   const speedRef = useRef(0.35);
   const panX = useRef(0);
   const scoreCounter = useRef(0);
-  const bgmRef = useRef<Audio.Sound | null>(null);
+  // (v2.2) BGM agora vem do hook useAudioPlayer — sem ref manual.
   const cameraShakeRef = useRef(0);
   const activeShield = useRef(false);
 
@@ -218,49 +216,60 @@ export default function FantasyRunnerEndGame() {
     }).start();
   }, [loadProgress]);
 
-  // === ÁUDIO (expo-av) — inalterado vs v1 ===
+  // === ÁUDIO (v2.2 — expo-audio, substituiu expo-av) ===
   const BGM_URL =
     "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3";
 
+  // Hook do expo-audio: cria o AudioPlayer e cuida do cleanup automático
+  // ao desmontar. downloadFirst=true baixa o mp3 antes de tocar → menos
+  // buffering em rede ruim.
+  const bgmPlayer = useAudioPlayer(
+    { uri: BGM_URL },
+    { downloadFirst: true },
+  );
+
+  // Setup uma vez: carrega high score + configura sessão de áudio pra
+  // tocar mesmo com iPhone em modo silencioso (é o motivo #1 da BGM
+  // ficar muda em device físico).
   useEffect(() => {
-    let sound: Audio.Sound | null = null;
-    let cancelled = false;
-
-    async function loadBgm() {
-      const saved = await AsyncStorage.getItem("@high_score");
+    AsyncStorage.getItem("@high_score").then((saved) => {
       if (saved) setHighScore(Number(saved));
+    });
 
-      try {
-        const { sound: s } = await Audio.Sound.createAsync(
-          { uri: BGM_URL },
-          { shouldPlay: false, isLooping: true },
-        );
-        if (cancelled) {
-          await s.unloadAsync();
-          return;
-        }
-        sound = s;
-        bgmRef.current = s;
-      } catch (e) {
-        console.warn("[space-runner] BGM falhou ao carregar:", e);
-      }
-    }
-
-    loadBgm();
-
-    return () => {
-      cancelled = true;
-      sound?.stopAsync().catch(() => {});
-      sound?.unloadAsync().catch(() => {});
-      bgmRef.current = null;
-    };
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      interruptionMode: "mixWithOthers",
+      shouldPlayInBackground: false,
+      allowsRecording: false,
+      shouldRouteThroughEarpiece: false,
+    }).catch((e) =>
+      console.warn("[space-runner] setAudioModeAsync falhou:", e),
+    );
   }, []);
 
+  // Configura loop e volume assim que o player existe. Propriedades
+  // são idempotentes — setar antes do load completar é OK.
   useEffect(() => {
-    if (isLoaded && bgmRef.current) {
-      bgmRef.current.playAsync().catch(() => {});
+    if (!bgmPlayer) return;
+    try {
+      bgmPlayer.loop = true;
+      bgmPlayer.volume = 0.7;
+    } catch (e) {
+      console.warn("[space-runner] player config falhou:", e);
     }
-  }, [isLoaded]);
+  }, [bgmPlayer]);
+
+  // Play quando os assets 3D terminaram de carregar (a "tela de LOADING"
+  // sai). player.play() é síncrono no expo-audio (não retorna Promise).
+  useEffect(() => {
+    if (isLoaded && bgmPlayer) {
+      try {
+        bgmPlayer.play();
+      } catch (e) {
+        console.warn("[space-runner] BGM play falhou:", e);
+      }
+    }
+  }, [isLoaded, bgmPlayer]);
 
   const updateScore = (points: number) => {
     scoreCounter.current += points;
@@ -327,13 +336,16 @@ export default function FantasyRunnerEndGame() {
       );
       (obj as any).hitRadius = s * 14; // Re-calcula raio de colisão no reset
     });
-    // v2: limpa a trilha de exaustão
-    exhaustResetRef.current?.();
-    // Reinicia BGM do início
-    if (bgmRef.current) {
-      bgmRef.current
-        .setPositionAsync(0)
-        .then(() => bgmRef.current?.playAsync())
+    // v2.1: trilha de exaustão removida
+    // Reinicia BGM do início (expo-audio: seekTo em segundos, não ms)
+    if (bgmPlayer) {
+      bgmPlayer
+        .seekTo(0)
+        .then(() => {
+          try {
+            bgmPlayer.play();
+          } catch {}
+        })
         .catch(() => {});
     }
   };
@@ -558,43 +570,7 @@ export default function FantasyRunnerEndGame() {
     let engineLight: THREE.PointLight | null = null;
     const asteroidTails: THREE.Mesh[] = [];
 
-    // Exaustão dos motores (trilha de partículas no mundo)
-    const exhaustGeo = new THREE.BufferGeometry();
-    const exhaustPos = new Float32Array(EXHAUST_COUNT * 3);
-    const exhaustCol = new Float32Array(EXHAUST_COUNT * 3);
-    const exhaustLife = new Float32Array(EXHAUST_COUNT); // 0..1
-    for (let i = 0; i < EXHAUST_COUNT; i++) {
-      exhaustPos[i * 3 + 2] = 9999; // fora de cena até spawnar
-      exhaustLife[i] = Math.random(); // fases espalhadas
-    }
-    exhaustGeo.setAttribute(
-      "position",
-      new THREE.BufferAttribute(exhaustPos, 3),
-    );
-    exhaustGeo.setAttribute("color", new THREE.BufferAttribute(exhaustCol, 3));
-    const exhaustPoints = new THREE.Points(
-      exhaustGeo,
-      new THREE.PointsMaterial({
-        size: 0.32,
-        map: softDot,
-        vertexColors: true,
-        transparent: true,
-        opacity: 0.9,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        sizeAttenuation: true,
-        fog: false,
-      }),
-    );
-    scene.add(exhaustPoints);
-    const exhaustVel: number[] = new Array(EXHAUST_COUNT * 3).fill(0);
-    exhaustResetRef.current = () => {
-      for (let i = 0; i < EXHAUST_COUNT; i++) {
-        exhaustPos[i * 3 + 2] = 9999;
-        exhaustLife[i] = Math.random();
-      }
-      exhaustGeo.attributes.position.needsUpdate = true;
-    };
+    // (v2.1) Trilha de exaustão da nave removida.
 
     try {
       const assetsList = [
@@ -884,8 +860,6 @@ export default function FantasyRunnerEndGame() {
     scene.add(expG);
     explosionRef.current = expG;
 
-    let exhaustCursor = 0;
-
     const animate = () => {
       if (!gl) return;
       requestAnimationFrame(animate);
@@ -1096,42 +1070,7 @@ export default function FantasyRunnerEndGame() {
             1.9 + Math.sin(now * 0.02) * 0.5 + difficultyFactor * 0.25;
         }
 
-        // Exaustão: spawna 2 partículas/frame alternando entre os bocais
-        {
-          const px = playerRef.current.position.x;
-          const py = playerRef.current.position.y - 0.05;
-          const pz = playerRef.current.position.z + 0.9;
-          for (let s = 0; s < 2; s++) {
-            const i = exhaustCursor;
-            exhaustCursor = (exhaustCursor + 1) % EXHAUST_COUNT;
-            const side = i % 2 === 0 ? -1 : 1;
-            exhaustPos[i * 3] = px + side * 0.28 + randomRange(-0.05, 0.05);
-            exhaustPos[i * 3 + 1] = py + randomRange(-0.05, 0.05);
-            exhaustPos[i * 3 + 2] = pz;
-            exhaustVel[i * 3] = randomRange(-0.012, 0.012);
-            exhaustVel[i * 3 + 1] = randomRange(-0.008, 0.014);
-            exhaustVel[i * 3 + 2] = randomRange(0.16, 0.3);
-            exhaustLife[i] = 1;
-          }
-          for (let i = 0; i < EXHAUST_COUNT; i++) {
-            if (exhaustLife[i] <= 0) continue;
-            exhaustLife[i] -= 0.045;
-            exhaustPos[i * 3] += exhaustVel[i * 3];
-            exhaustPos[i * 3 + 1] += exhaustVel[i * 3 + 1];
-            exhaustPos[i * 3 + 2] += exhaustVel[i * 3 + 2];
-            const t = Math.max(0, exhaustLife[i]);
-            // fade quente→frio: branco-amarelo → laranja → tijolo escuro
-            const r = isWarp ? 0.45 + 0.55 * t : 1.0;
-            const g = isWarp ? 0.75 + 0.25 * t : 0.35 + 0.55 * t;
-            const b = isWarp ? 1.0 : 0.08 + 0.25 * t * t;
-            exhaustCol[i * 3] = r * t;
-            exhaustCol[i * 3 + 1] = g * t;
-            exhaustCol[i * 3 + 2] = b * t;
-            if (exhaustLife[i] <= 0) exhaustPos[i * 3 + 2] = 9999;
-          }
-          exhaustGeo.attributes.position.needsUpdate = true;
-          exhaustGeo.attributes.color.needsUpdate = true;
-        }
+        // (v2.1) Trilha de exaustão da nave removida.
 
         if (shieldMeshRef.current?.visible) {
           shieldMeshRef.current.rotation.y += 0.05;
