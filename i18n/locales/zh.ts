@@ -335,6 +335,22 @@ const zh: TranslationTree = {
     title: "语言",
     subtitle: "更改整个应用使用的语言。",
   },
+  notifications: {
+    sectionTitle: "通知",
+    bedtimeLabel: "睡前提醒",
+    bedtimeDescription: "每晚 7 点温柔提醒你开始今晚的故事。",
+    streakLabel: "连续阅读提醒",
+    streakDescription: "如果今天还没听,我们会提醒你。",
+    permissionDeniedTitle: "通知已关闭",
+    permissionDeniedBody:
+      "要收到阅读提醒,请在“设置”中启用 Magic World 的通知。",
+    permissionOpenSettings: "打开设置",
+    bedtimePushTitle: "睡觉前的故事时光 ✨",
+    bedtimePushBody: "点击打开今晚的魔法有声书。",
+    streakPushTitle: "每天一个故事 📚",
+    streakPushBody:
+      "保持你的阅读连续记录 —— 一章足矣。",
+  },
 };
 
 export default zh;

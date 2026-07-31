@@ -354,6 +354,21 @@ const en: TranslationTree = {
     title: "Language",
     subtitle: "Change the language used throughout the app.",
   },
+  notifications: {
+    sectionTitle: "Notifications",
+    bedtimeLabel: "Bedtime reminder",
+    bedtimeDescription: "A gentle nudge at 7pm to start tonight's story.",
+    streakLabel: "Streak reminder",
+    streakDescription: "We'll remind you if you haven't listened today.",
+    permissionDeniedTitle: "Notifications are off",
+    permissionDeniedBody:
+      "To get reading reminders, enable notifications for Magic World in Settings.",
+    permissionOpenSettings: "Open Settings",
+    bedtimePushTitle: "Bedtime, story time ✨",
+    bedtimePushBody: "Tap to open tonight's magical audiobook.",
+    streakPushTitle: "One story a day 📚",
+    streakPushBody: "Keep your reading streak alive — a chapter is all it takes.",
+  },
 };
 
 export default en;

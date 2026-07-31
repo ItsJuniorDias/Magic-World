@@ -384,6 +384,25 @@ const ar: TranslationTree = {
     title: "اللغة",
     subtitle: "غيّر اللغة المستخدمة في التطبيق بأكمله.",
   },
+  notifications: {
+    sectionTitle: "الإشعارات",
+    bedtimeLabel: "تذكير القراءة",
+    bedtimeDescription:
+      "تذكير لطيف في الساعة 7 مساءً لبدء قصة الليلة.",
+    streakLabel: "تذكير المتابعة",
+    streakDescription:
+      "سنذكّرك إذا لم تستمع اليوم.",
+    permissionDeniedTitle: "الإشعارات مغلقة",
+    permissionDeniedBody:
+      "للحصول على تذكيرات القراءة، فعّل الإشعارات لـ Magic World من الإعدادات.",
+    permissionOpenSettings: "فتح الإعدادات",
+    bedtimePushTitle: "وقت النوم، وقت القصة ✨",
+    bedtimePushBody:
+      "اضغط لفتح الكتاب الصوتي السحري لهذه الليلة.",
+    streakPushTitle: "قصة كل يوم 📚",
+    streakPushBody:
+      "حافظ على متابعتك — فصل واحد يكفي.",
+  },
 };
 
 export default ar;

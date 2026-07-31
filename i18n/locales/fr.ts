@@ -370,6 +370,22 @@ const fr: TranslationTree = {
     title: "Langue",
     subtitle: "Change la langue utilisée dans toute l'app.",
   },
+  notifications: {
+    sectionTitle: "Notifications",
+    bedtimeLabel: "Rappel du soir",
+    bedtimeDescription: "Un petit rappel à 19h pour commencer l'histoire du soir.",
+    streakLabel: "Rappel de série",
+    streakDescription: "On te prévient si tu n'as pas écouté aujourd'hui.",
+    permissionDeniedTitle: "Notifications désactivées",
+    permissionDeniedBody:
+      "Pour recevoir des rappels, active les notifications de Magic World dans Réglages.",
+    permissionOpenSettings: "Ouvrir Réglages",
+    bedtimePushTitle: "L'heure de l'histoire ✨",
+    bedtimePushBody: "Appuie pour ouvrir l'audiolivre magique du soir.",
+    streakPushTitle: "Une histoire par jour 📚",
+    streakPushBody:
+      "Garde ta série intacte — un chapitre suffit.",
+  },
 };
 
 export default fr;

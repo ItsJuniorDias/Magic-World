@@ -15,6 +15,7 @@ import trackPlayerService from "../services/trackPlayer";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useLocaleStore } from "@/i18n";
+import { useNotifications } from "@/hooks/useNotifications";
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -23,6 +24,18 @@ export const unstable_settings = {
 const queryClient = new QueryClient();
 
 TrackPlayer.registerPlaybackService(() => trackPlayerService);
+
+/**
+ * Wrapper interno pra rodar `useNotifications` só depois do i18n
+ * estar pronto. O hook já checa `useLocaleStore.ready` internamente,
+ * mas isolar aqui deixa a intenção explícita e permite adicionar
+ * outros hooks de bootstrap (ex.: analytics, remote config) sem
+ * poluir o RootLayout.
+ */
+function AppBootstrap({ children }: { children: React.ReactNode }) {
+  useNotifications();
+  return <>{children}</>;
+}
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -54,15 +67,17 @@ export default function RootLayout() {
         <ThemeProvider
           value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
         >
-          {/*
-            Nota: com expo-router v6, o file-based routing detecta
-            automaticamente cada rota em `app/`. Só precisamos declarar
-            Stack.Screen quando queremos customizar options. Como todas
-            as rotas usam `headerShown: false`, aplicamos via
-            `screenOptions` uma vez só.
-          */}
-          <Stack screenOptions={{ headerShown: false }} />
-          <StatusBar style="auto" />
+          <AppBootstrap>
+            {/*
+              Nota: com expo-router v6, o file-based routing detecta
+              automaticamente cada rota em `app/`. Só precisamos declarar
+              Stack.Screen quando queremos customizar options. Como todas
+              as rotas usam `headerShown: false`, aplicamos via
+              `screenOptions` uma vez só.
+            */}
+            <Stack screenOptions={{ headerShown: false }} />
+            <StatusBar style="auto" />
+          </AppBootstrap>
         </ThemeProvider>
       </QueryClientProvider>
     </>

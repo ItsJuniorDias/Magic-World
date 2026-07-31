@@ -391,6 +391,21 @@ const hi: TranslationTree = {
     title: "भाषा",
     subtitle: "पूरे ऐप की भाषा बदलें।",
   },
+  notifications: {
+    sectionTitle: "सूचनाएँ",
+    bedtimeLabel: "पढ़ाई का रिमाइंडर",
+    bedtimeDescription: "शाम 7 बजे एक हल्का इशारा — कहानी शुरू करने के लिए।",
+    streakLabel: "स्ट्रिक रिमाइंडर",
+    streakDescription: "अगर आज नहीं सुना, तो हम याद दिलाएंगे।",
+    permissionDeniedTitle: "सूचनाएँ बंद हैं",
+    permissionDeniedBody:
+      "रिमाइंडर पाने के लिए, सेटिंग्स में Magic World की सूचनाएँ ऑन करें।",
+    permissionOpenSettings: "सेटिंग्स खोलें",
+    bedtimePushTitle: "सोने का समय, कहानी का समय ✨",
+    bedtimePushBody: "आज रात की जादुई ऑडियोबुक खोलने के लिए टैप करें।",
+    streakPushTitle: "रोज़ एक कहानी 📚",
+    streakPushBody: "अपनी स्ट्रिक बनाए रखें — एक अध्याय ही काफी है।",
+  },
 };
 
 export default hi;

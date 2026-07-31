@@ -49,6 +49,17 @@ export default {
     plugins: [
       "expo-router",
       "expo-localization",
+      [
+        "expo-notifications",
+        {
+          // TODO(alexandre): trocar por um 96x96 PNG monocromático branco
+          // em fundo transparente pra ficar polido no Android
+          // (recomendação do Google). Por enquanto usa o icon principal
+          // — Android vai renderizar em cinza, mas funciona.
+          icon: "./assets/images/icon.png",
+          color: "#8B5CF6",
+        },
+      ],
       "./plugin/withFmtConstevalFix",
     ],
     experiments: {

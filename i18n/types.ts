@@ -288,4 +288,23 @@ export type TranslationTree = {
     title: string;
     subtitle: string;
   };
+  notifications: {
+    /** Título da seção no Profile. */
+    sectionTitle: string;
+    /** Rótulo do toggle "Lembrete de leitura". */
+    bedtimeLabel: string;
+    bedtimeDescription: string;
+    /** Rótulo do toggle "Lembrete de streak". */
+    streakLabel: string;
+    streakDescription: string;
+    /** Alerta pedindo permissão manual em Ajustes se o usuário negou. */
+    permissionDeniedTitle: string;
+    permissionDeniedBody: string;
+    permissionOpenSettings: string;
+    /** Textos das notificações agendadas — usados no payload local. */
+    bedtimePushTitle: string;
+    bedtimePushBody: string;
+    streakPushTitle: string;
+    streakPushBody: string;
+  };
 };

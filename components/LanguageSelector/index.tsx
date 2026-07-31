@@ -23,6 +23,8 @@ import Text from "@/components/ui/Text";
 import { useThemedTokens } from "@/hooks/use-tokens";
 import { LOCALES, useT } from "@/i18n";
 import type { LocaleCode, LocaleMeta } from "@/i18n";
+import { updatePushLocale } from "@/services/notifications";
+import { useNotificationsStore } from "@/store/useNotificationsStore";
 
 type Props = {
   visible: boolean;
@@ -32,6 +34,7 @@ type Props = {
 export default function LanguageSelector({ visible, onClose }: Props) {
   const t = useThemedTokens();
   const { t: tr, locale, setLocale } = useT();
+  const pushRegistered = useNotificationsStore((s) => s.registered);
 
   const handleSelect = async (code: LocaleCode) => {
     if (code === locale) {
@@ -39,6 +42,13 @@ export default function LanguageSelector({ visible, onClose }: Props) {
       return;
     }
     await setLocale(code);
+    // Se o usuário registrou push antes, sincroniza o novo locale
+    // no Firestore. O hook `useNotifications` reagenda os lembretes
+    // locais automaticamente ao detectar mudança de idioma.
+    if (pushRegistered) {
+      // Fire-and-forget: não queremos bloquear o fechamento do modal.
+      updatePushLocale(code).catch(() => {});
+    }
     onClose();
   };
 

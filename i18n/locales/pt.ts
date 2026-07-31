@@ -365,6 +365,22 @@ const pt: TranslationTree = {
     title: "Idioma",
     subtitle: "Mude o idioma usado em todo o app.",
   },
+  notifications: {
+    sectionTitle: "Notificações",
+    bedtimeLabel: "Lembrete de leitura",
+    bedtimeDescription: "Um lembrete gentil às 19h pra começar a história.",
+    streakLabel: "Lembrete de sequência",
+    streakDescription: "A gente avisa se você não escutou hoje.",
+    permissionDeniedTitle: "Notificações desativadas",
+    permissionDeniedBody:
+      "Pra receber lembretes, ative as notificações do Magic World em Ajustes.",
+    permissionOpenSettings: "Abrir Ajustes",
+    bedtimePushTitle: "Hora de dormir, hora de histórias ✨",
+    bedtimePushBody: "Toque pra abrir o audiolivro mágico de hoje.",
+    streakPushTitle: "Uma história por dia 📚",
+    streakPushBody:
+      "Mantenha sua sequência viva — um capítulo já basta.",
+  },
 };
 
 export default pt;

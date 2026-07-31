@@ -7,6 +7,9 @@ import {
   Animated,
   TouchableOpacity,
   Easing,
+  Switch,
+  Alert,
+  Linking,
 } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 
@@ -22,6 +25,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SecretLevelBadge } from "@/components/(secret-level-badge)";
 import LanguageSelector from "@/components/LanguageSelector";
 import { useT, useLocaleStore } from "@/i18n";
+import { useNotificationsStore } from "@/store/useNotificationsStore";
+import { registerForPushNotificationsAsync } from "@/services/notifications";
 
 const { width } = Dimensions.get("window");
 
@@ -310,6 +315,19 @@ export default function ProfileScreen() {
     useState<Achievement | null>(null);
   const [languageOpen, setLanguageOpen] = useState(false);
 
+  // Notifications — as prefs vêm do store (persistidas em AsyncStorage).
+  // Não usamos os individual setters direto pra podermos interceptar o
+  // toggle e disparar o fluxo de permissão na primeira ativação.
+  const bedtimeEnabled = useNotificationsStore((s) => s.bedtimeEnabled);
+  const streakEnabled = useNotificationsStore((s) => s.streakEnabled);
+  const notifRegistered = useNotificationsStore((s) => s.registered);
+  const setBedtimeEnabled = useNotificationsStore((s) => s.setBedtimeEnabled);
+  const setStreakEnabled = useNotificationsStore((s) => s.setStreakEnabled);
+  const setNotifRegistered = useNotificationsStore((s) => s.setRegistered);
+  const setPermissionStatus = useNotificationsStore(
+    (s) => s.setPermissionStatus,
+  );
+
   const [unlockedIds, setUnlockedIds] = useState<Record<number, boolean>>({});
 
   const shownAchievementIds = useRef<Set<number>>(new Set());
@@ -429,6 +447,62 @@ export default function ProfileScreen() {
         setActiveAchievement(achievement);
       }, 300);
     }
+  };
+
+  /**
+   * Wrapper unificado pros dois toggles de notificação.
+   * Fluxo:
+   *  1. Se está DESligando → só grava a pref (o store cancela o
+   *     agendamento internamente).
+   *  2. Se está LIGando pela 1ª vez (sem registro) → pede permissão
+   *     via `registerForPushNotificationsAsync`. Se o usuário nega,
+   *     abre um Alert oferecendo levá-lo pros Ajustes.
+   *  3. Se já registrou antes → só grava, o schedule é imediato.
+   *
+   * Toda a lógica de agendamento fica no store (`setBedtimeEnabled`
+   * já dispara `scheduleBedtimeReminder(v)`) — aqui só orquestramos
+   * a permissão.
+   */
+  const handleToggleNotification = async (
+    kind: "bedtime" | "streak",
+    value: boolean,
+  ) => {
+    // Turn off: caminho simples.
+    if (!value) {
+      if (kind === "bedtime") await setBedtimeEnabled(false);
+      else await setStreakEnabled(false);
+      return;
+    }
+
+    // Turn on: pede permissão se ainda não pediu.
+    if (!notifRegistered) {
+      const result = await registerForPushNotificationsAsync();
+      setPermissionStatus(result.permissionStatus);
+
+      if (result.permissionStatus !== "granted") {
+        // Usuário negou (ou é simulator sem push). Mostra caminho
+        // pra reabrir permissões no OS. Não muda o toggle — o
+        // Switch volta pro estado anterior por si só, já que não
+        // chamamos setBedtimeEnabled(true).
+        Alert.alert(
+          t("notifications.permissionDeniedTitle"),
+          t("notifications.permissionDeniedBody"),
+          [
+            { text: t("common.cancel"), style: "cancel" },
+            {
+              text: t("notifications.permissionOpenSettings"),
+              onPress: () => Linking.openSettings(),
+            },
+          ],
+        );
+        return;
+      }
+
+      await setNotifRegistered(true);
+    }
+
+    if (kind === "bedtime") await setBedtimeEnabled(true);
+    else await setStreakEnabled(true);
   };
 
   return (
@@ -607,6 +681,71 @@ export default function ProfileScreen() {
           <Text fontSize={20} color="#8E8E93" title="›" />
         </TouchableOpacity>
 
+        {/* Notifications Section */}
+        <View style={styles.sectionHeader}>
+          <Text
+            fontFamily="bold"
+            fontSize={20}
+            color="#FFF"
+            title={t("notifications.sectionTitle")}
+            style={{ letterSpacing: -0.5 }}
+          />
+        </View>
+
+        <View style={styles.notifCard}>
+          <View style={styles.notifRow}>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text
+                fontFamily="bold"
+                fontSize={16}
+                color="#FFF"
+                title={t("notifications.bedtimeLabel")}
+              />
+              <Text
+                fontFamily="regular"
+                fontSize={12}
+                color="#8E8E93"
+                title={t("notifications.bedtimeDescription")}
+                style={{ marginTop: 2 }}
+              />
+            </View>
+            <Switch
+              value={bedtimeEnabled}
+              onValueChange={(v) => handleToggleNotification("bedtime", v)}
+              trackColor={{ false: "#3A3A3C", true: "#8B5CF6" }}
+              thumbColor="#FFF"
+              ios_backgroundColor="#3A3A3C"
+            />
+          </View>
+
+          <View style={styles.notifDivider} />
+
+          <View style={styles.notifRow}>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text
+                fontFamily="bold"
+                fontSize={16}
+                color="#FFF"
+                title={t("notifications.streakLabel")}
+              />
+              <Text
+                fontFamily="regular"
+                fontSize={12}
+                color="#8E8E93"
+                title={t("notifications.streakDescription")}
+                style={{ marginTop: 2 }}
+              />
+            </View>
+            <Switch
+              value={streakEnabled}
+              onValueChange={(v) => handleToggleNotification("streak", v)}
+              trackColor={{ false: "#3A3A3C", true: "#8B5CF6" }}
+              thumbColor="#FFF"
+              ios_backgroundColor="#3A3A3C"
+            />
+          </View>
+        </View>
+
         {/* Achievements Section */}
         <View style={styles.sectionHeader}>
           <Text
@@ -760,6 +899,26 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
+  },
+  notifCard: {
+    width: width * 0.9,
+    backgroundColor: "#1C1C1E",
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  notifRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+  },
+  notifDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    marginLeft: 0,
   },
   achievementsGrid: {
     width: width * 0.9,
