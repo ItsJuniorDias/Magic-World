@@ -14,6 +14,7 @@ import GlassView from "@/components/ui/Glass";
 import { FontAwesome6 } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useT } from "@/i18n";
 
 const icons = ["🍎", "🍌", "🍇", "🍉", "🍓", "🍍"];
 const shuffleArray = (array: any[]) => array.sort(() => Math.random() - 0.5);
@@ -28,6 +29,7 @@ const MemoryGame = () => {
   const [moves, setMoves] = useState(0);
 
   const router = useRouter();
+  const { t: tr } = useT();
 
   useEffect(() => {
     const paired = shuffleArray([...icons, ...icons]).map((icon, index) => ({
@@ -52,8 +54,8 @@ const MemoryGame = () => {
         setSelected([]);
         if (matched.length + 2 === cards.length) {
           Alert.alert(
-            "🎉 Congratulations!",
-            `You completed the memory challenge in ${moves + 1} moves!`,
+            tr("memoryGame.congratulationsTitle"),
+            tr("memoryGame.congratulationsMessage", { count: moves + 1 }),
           );
         }
       } else {
@@ -104,7 +106,7 @@ const MemoryGame = () => {
           fontSize={28}
           fontFamily="bold"
           color={Colors.dark.text}
-          title="🧠 Memory Challenge"
+          title={tr("memoryGame.title")}
           style={{ marginBottom: 12, marginTop: 16 }}
         />
 
@@ -113,7 +115,7 @@ const MemoryGame = () => {
           fontSize={16}
           fontFamily="regular"
           color={Colors.dark.text}
-          title="Try to match all pairs as quickly as possible!"
+          title={tr("memoryGame.instructions")}
           style={{ textAlign: "center", marginBottom: 16 }}
         />
 
@@ -122,7 +124,7 @@ const MemoryGame = () => {
           fontSize={16}
           fontFamily="regular"
           color={Colors.dark.text}
-          title={`Moves: ${moves}`}
+          title={tr("memoryGame.moves", { count: moves })}
           style={{ marginBottom: 24 }}
         />
 
@@ -131,7 +133,7 @@ const MemoryGame = () => {
           fontSize={14}
           fontFamily="regular"
           color={Colors.dark.text}
-          title="Tip: Remember where the cards are to improve your memory!"
+          title={tr("memoryGame.tip")}
           style={{ textAlign: "center", marginBottom: 24 }}
         />
 

@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Text from "@/components/text";
 import { Colors } from "@/constants/theme";
 import { useRouter } from "expo-router";
+import { useT } from "@/i18n";
 
 function Section({ title, content }: { title: string; content: string }) {
   return (
@@ -29,6 +30,7 @@ function Section({ title, content }: { title: string; content: string }) {
 
 export default function PrivacyPolicyScreen() {
   const insets = useSafeAreaInsets();
+  const { t: tr } = useT();
 
   const router = useRouter();
 
@@ -47,7 +49,7 @@ export default function PrivacyPolicyScreen() {
         fontFamily="bold"
         fontSize={28}
         color={Colors.dark.text}
-        title="Privacy Policy"
+        title={tr("legal.privacyPolicyTitle")}
       />
 
       <View style={{ height: 8 }} />
@@ -57,7 +59,7 @@ export default function PrivacyPolicyScreen() {
         fontFamily="regular"
         fontSize={14}
         color={Colors.dark.text}
-        title="Last updated: January 2026"
+        title={tr("legal.lastUpdated")}
       />
 
       <View style={{ height: 32 }} />
@@ -112,7 +114,12 @@ export default function PrivacyPolicyScreen() {
         style={styles.acceptButton}
         onPress={() => router.back()}
       >
-        <Text fontFamily="bold" fontSize={16} color="#FFFFFF" title="Accept" />
+        <Text
+          fontFamily="bold"
+          fontSize={16}
+          color="#FFFFFF"
+          title={tr("common.accept")}
+        />
       </TouchableOpacity>
     </ScrollView>
   );

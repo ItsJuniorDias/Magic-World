@@ -11,9 +11,11 @@ import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Text from "@/components/text";
 import { Colors } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 export default function AdventureProfileIntro() {
   const router = useRouter();
+  const { t } = useT();
 
   // Texto
   const textOpacity = useRef(new Animated.Value(0)).current;
@@ -95,7 +97,7 @@ export default function AdventureProfileIntro() {
           ]}
         >
           <Text
-            title="Your adventure is about to begin ✨"
+            title={t("adventureIntro.title")}
             fontFamily="bold"
             fontSize={28}
             color={Colors.dark.text}
@@ -103,36 +105,35 @@ export default function AdventureProfileIntro() {
           />
 
           <Text
-            title="Every choice you make will shape your adventure style."
+            title={t("adventureIntro.subtitle1")}
             fontFamily="regular"
             fontSize={18}
             color={Colors.dark.text}
           />
 
           <Text
-            title="There are no right or wrong choices — only different paths."
-            fontFamily="regular"
-            fontSize={16}
-            color={Colors.dark.text}
-          />
-
-          {/* Novo conteúdo */}
-          <Text
-            title="💡 Tip: Take your time to explore each option. Some paths may surprise you!"
+            title={t("adventureIntro.subtitle2")}
             fontFamily="regular"
             fontSize={16}
             color={Colors.dark.text}
           />
 
           <Text
-            title="🎯 Goal: Collect experiences, not points. Your journey is unique."
+            title={t("adventureIntro.tip")}
             fontFamily="regular"
             fontSize={16}
             color={Colors.dark.text}
           />
 
           <Text
-            title="🌟 Hint: Look for hidden details along the way. They can unlock secrets."
+            title={t("adventureIntro.goal")}
+            fontFamily="regular"
+            fontSize={16}
+            color={Colors.dark.text}
+          />
+
+          <Text
+            title={t("adventureIntro.hint")}
             fontFamily="regular"
             fontSize={16}
             color={Colors.dark.text}
@@ -156,7 +157,7 @@ export default function AdventureProfileIntro() {
             onPressOut={handlePressOut}
           >
             <Text
-              title="Start the adventure"
+              title={t("adventureIntro.cta")}
               fontFamily="bold"
               fontSize={18}
               color="#FFF"

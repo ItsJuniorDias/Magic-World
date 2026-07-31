@@ -1,6 +1,7 @@
 import { Modal, Pressable, StyleSheet, View } from "react-native";
 
 import Text from "../text";
+import { useT } from "@/i18n";
 
 export default function GuidedReadingModal({
   visible,
@@ -9,6 +10,7 @@ export default function GuidedReadingModal({
   visible: boolean;
   onClose: () => void;
 }) {
+  const { t: tr } = useT();
   return (
     <Modal
       visible={visible}
@@ -19,7 +21,7 @@ export default function GuidedReadingModal({
       <View style={modalStyles.overlay}>
         <View style={modalStyles.container}>
           <Text
-            title="A new way to experience the story"
+            title={tr("guidedReading.title")}
             fontFamily="bold"
             fontSize={22}
             color="#000"
@@ -27,7 +29,7 @@ export default function GuidedReadingModal({
           />
 
           <Text
-            title="Relax and let the reading guide you."
+            title={tr("guidedReading.subtitle")}
             fontFamily="regular"
             fontSize={16}
             color="#555"
@@ -36,7 +38,7 @@ export default function GuidedReadingModal({
 
           <Pressable style={modalStyles.button} onPress={onClose}>
             <Text
-              title="Start Listening"
+              title={tr("guidedReading.cta")}
               fontSize={16}
               fontFamily="bold"
               color="#fff"

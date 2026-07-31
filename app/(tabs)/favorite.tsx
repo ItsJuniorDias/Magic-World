@@ -21,6 +21,7 @@ import { db } from "@/firebaseConfig";
 import { useLikedStore } from "@/store/useLikedStore";
 import { useStoriesStore } from "@/store/useStoriesStore";
 import { getLikedStories } from "@/services/liked";
+import { useT } from "@/i18n";
 
 if (
   Platform.OS === "android" &&
@@ -104,6 +105,7 @@ const AnimatedCard = React.memo(
 // ================= SCREEN =================
 export default function FavoriteScreen() {
   const router = useRouter();
+  const { t } = useT();
   const { likedIds = [], loadLikedStories, toggleLike } = useLikedStore();
   const stories = useStoriesStore((s) => s.stories);
   const userKeyRef = useRef<string | null>(null);
@@ -210,17 +212,17 @@ export default function FavoriteScreen() {
       <StatusBar style="light" translucent />
       <ScrollView showsVerticalScrollIndicator={false} style={styles.container}>
         <Section
-          title="My Favorites"
+          title={t("favorites.myFavorites")}
           data={favoriteStories}
           renderItem={renderStoryItem}
         />
         <Section
-          title="Recommended"
+          title={t("favorites.recommended")}
           data={recommendedStories}
           renderItem={renderStoryItem}
         />
         <Section
-          title="Trending"
+          title={t("favorites.trending")}
           data={popularStories}
           renderItem={renderStoryItem}
         />

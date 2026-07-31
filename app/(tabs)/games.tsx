@@ -6,61 +6,62 @@ import { Ionicons } from "@expo/vector-icons";
 import Text from "@/components/ui/Text";
 import { useThemedTokens } from "@/hooks/use-tokens";
 import { tokens } from "@/constants/tokens";
+import { useT } from "@/i18n";
 
 type Game = {
   id: string;
-  title: string;
+  /** Chave i18n do título dentro de `games.items` — ex.: "spellStorm" */
+  i18nKey: "spellStorm" | "spaceRunner" | "quizMaster" | "memoryMatch";
   emoji: string;
   accent: string;
   route: string;
-  description: string;
   /** Featured entries get a taller card and a badge. */
   featured?: boolean;
-  badge?: string;
+  /** Chave i18n do badge dentro de `games.badges` — ex.: "new" */
+  badgeKey?: "new" | "hot";
 };
 
-const GAMES: Game[] = [
+// Meta estática dos jogos. Texto puro (título, descrição, badge)
+// vem de i18n via `useT()` — não é hardcoded aqui.
+const GAMES_META: Game[] = [
   {
     id: "spell-storm",
-    title: "Spell Storm",
+    i18nKey: "spellStorm",
     emoji: "🪄",
     accent: tokens.palette.blue500,
     route: "/(spell-storm)",
-    description: "Cast, dodge and survive ten waves to face the dragon.",
     featured: true,
-    badge: "New",
+    badgeKey: "new",
   },
   {
     id: "endless-runner",
-    title: "Space Runner",
+    i18nKey: "spaceRunner",
     emoji: "🚀",
     accent: tokens.palette.amber500,
     route: "/(endless-runner)",
-    description: "Navigate through asteroids.",
     featured: true,
-    badge: "Hot",
+    badgeKey: "hot",
   },
   {
     id: "quiz",
-    title: "Quiz Master",
+    i18nKey: "quizMaster",
     emoji: "❓",
     accent: tokens.palette.green500,
     route: "/(quiz)",
-    description: "Test your knowledge.",
   },
   {
     id: "memory-game",
-    title: "Memory Match",
+    i18nKey: "memoryMatch",
     emoji: "🧠",
     accent: tokens.palette.blue500,
     route: "/(memory-game)",
-    description: "Train your brain.",
   },
 ];
 
 export default function GamesHub() {
   const router = useRouter();
   const t = useThemedTokens();
+  const { t: tr } = useT();
   const isDark = t.scheme === "dark";
 
   return (
@@ -91,7 +92,7 @@ export default function GamesHub() {
               color={t.color.textPrimary}
               style={{ letterSpacing: t.typography.letterSpacing.tight }}
             >
-              Arcade
+              {tr("games.title")}
             </Text>
             <Text
               variant="body"
@@ -99,11 +100,11 @@ export default function GamesHub() {
               color={t.color.textSecondary}
               style={{ marginTop: t.spacing.xxs }}
             >
-              Premium Games Collection
+              {tr("games.subtitle")}
             </Text>
           </View>
 
-          {GAMES.map((game) => (
+          {GAMES_META.map((game) => (
             <TouchableOpacity
               key={game.id}
               style={[
@@ -151,9 +152,9 @@ export default function GamesHub() {
                     color={t.color.textPrimary}
                     style={{ marginBottom: 2 }}
                   >
-                    {game.title}
+                    {tr(`games.items.${game.i18nKey}.title`)}
                   </Text>
-                  {game.badge && (
+                  {game.badgeKey && (
                     <View
                       style={[
                         styles.badge,
@@ -161,7 +162,7 @@ export default function GamesHub() {
                       ]}
                     >
                       <Text variant="body" size="xs" color={game.accent}>
-                        {game.badge}
+                        {tr(`games.badges.${game.badgeKey}`)}
                       </Text>
                     </View>
                   )}
@@ -173,7 +174,7 @@ export default function GamesHub() {
                   numberOfLines={2}
                   style={{ lineHeight: 20 }}
                 >
-                  {game.description}
+                  {tr(`games.items.${game.i18nKey}.description`)}
                 </Text>
               </View>
 

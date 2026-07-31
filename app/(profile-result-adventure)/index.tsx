@@ -5,9 +5,21 @@ import { StatusBar } from "expo-status-bar";
 import Text from "@/components/text";
 import { Colors } from "@/constants/theme";
 import { useAdventureProfileStore } from "@/store/useAdventureProfileStore";
+import { useT } from "@/i18n";
+
+type ProfileType = "brave" | "clever" | "wild" | "wise";
+
+// Ícones ficam fora do i18n — são emojis independentes de idioma.
+const PROFILE_ICONS: Record<ProfileType, string> = {
+  brave: "🛡️",
+  clever: "💡",
+  wild: "🪶",
+  wise: "📖",
+};
 
 export default function AdventureProfileResult() {
   const router = useRouter();
+  const { t } = useT();
 
   const calculateProfile = useAdventureProfileStore(
     (state) => state.calculateProfile,
@@ -15,9 +27,7 @@ export default function AdventureProfileResult() {
 
   const loadProfile = useAdventureProfileStore((state) => state.loadProfile);
 
-  const [profileType, setProfileType] = useState<
-    "brave" | "clever" | "wild" | "wise" | null
-  >(null);
+  const [profileType, setProfileType] = useState<ProfileType | null>(null);
 
   useEffect(() => {
     loadProfile(); // carrega do Firebase ao iniciar
@@ -35,7 +45,27 @@ export default function AdventureProfileResult() {
 
   if (!profileType) return null;
 
-  const content = PROFILE_CONTENT[profileType];
+  // Monta o content dinâmico a partir das traduções + ícone estático.
+  const base = `adventureResult.profiles.${profileType}`;
+  const content = {
+    title: t(`${base}.title`),
+    description: t(`${base}.description`),
+    icon: <Text fontSize={64} title={PROFILE_ICONS[profileType]} />,
+    extra: [
+      {
+        title: t("adventureResult.strengths"),
+        description: t(`${base}.strengths`),
+      },
+      {
+        title: t("adventureResult.challenges"),
+        description: t(`${base}.challenges`),
+      },
+      {
+        title: t("adventureResult.advice"),
+        description: t(`${base}.advice`),
+      },
+    ],
+  };
 
   return (
     <View style={styles.container}>
@@ -44,7 +74,7 @@ export default function AdventureProfileResult() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
           <Text
-            title="Your Adventure Profile"
+            title={t("adventureResult.kicker")}
             fontFamily="regular"
             fontSize={18}
             color="rgba(255,255,255,0.6)"
@@ -92,7 +122,7 @@ export default function AdventureProfileResult() {
           onPress={() => router.replace("/(tabs)")}
         >
           <Text
-            title="Begin Your Adventure"
+            title={t("adventureResult.cta")}
             fontFamily="bold"
             fontSize={18}
             color="#000"
@@ -102,92 +132,6 @@ export default function AdventureProfileResult() {
     </View>
   );
 }
-
-const PROFILE_CONTENT = {
-  brave: {
-    title: "Brave Adventurer",
-    description:
-      "You face challenges head-on and never back down from the unknown.",
-    icon: <Text fontSize={64} title="🛡️" />,
-    extra: [
-      {
-        title: "💪 Strengths",
-        description:
-          "Courage, boldness, decisiveness. You inspire others by action.",
-      },
-      {
-        title: "⚔️ Challenges",
-        description:
-          "Sometimes you rush into danger without a plan. Patience is key.",
-      },
-      {
-        title: "🌟 Advice",
-        description:
-          "Trust your instincts, but also observe your surroundings carefully.",
-      },
-    ],
-  },
-  clever: {
-    title: "Clever Explorer",
-    description: "You solve problems with wit, strategy, and a sharp mind.",
-    icon: <Text fontSize={64} title="💡" />,
-    extra: [
-      {
-        title: "🧩 Strengths",
-        description: "Problem-solving, strategy, adaptability.",
-      },
-      {
-        title: "⚖️ Challenges",
-        description:
-          "Overthinking can slow down decisions. Balance analysis with action.",
-      },
-      {
-        title: "🌟 Advice",
-        description:
-          "Use your intellect to guide the journey, but remember to enjoy it.",
-      },
-    ],
-  },
-  wild: {
-    title: "Wild Spirit",
-    description: "You follow your instincts and embrace unpredictable paths.",
-    icon: <Text fontSize={64} title="🪶" />,
-    extra: [
-      {
-        title: "🌪️ Strengths",
-        description: "Flexibility, spontaneity, creative problem-solving.",
-      },
-      {
-        title: "⚠️ Challenges",
-        description: "Impulsiveness can bring unexpected consequences.",
-      },
-      {
-        title: "🌟 Advice",
-        description: "Trust your gut, but occasionally pause to plan ahead.",
-      },
-    ],
-  },
-  wise: {
-    title: "Wise Guardian",
-    description: "You observe, reflect, and choose carefully before acting.",
-    icon: <Text fontSize={64} title="📖" />,
-    extra: [
-      {
-        title: "🦉 Strengths",
-        description: "Patience, foresight, thoughtful decision-making.",
-      },
-      {
-        title: "⚖️ Challenges",
-        description: "Sometimes indecision or over-caution can slow progress.",
-      },
-      {
-        title: "🌟 Advice",
-        description:
-          "Combine wisdom with action, and mentor others along the way.",
-      },
-    ],
-  },
-};
 
 const styles = StyleSheet.create({
   container: {

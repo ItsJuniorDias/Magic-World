@@ -6,29 +6,38 @@ import Text from "@/components/ui/Text";
 import GlassView from "@/components/ui/Glass";
 import { useThemedTokens } from "@/hooks/use-tokens";
 import { ModernCategoryCard } from "./styles";
+import { useT } from "@/i18n";
 
+type CategoryKey = "adventure" | "romance" | "fantasy" | "mystery" | "future";
 type Category = {
   id: string;
-  title: string;
+  /**
+   * Slug canônico usado como filtro no Firestore. Precisa bater
+   * com o `category` gravado em `stories/*` — NÃO traduzir isso.
+   */
+  slug: CategoryKey;
   icon: string;
 };
 
+// Slugs em EN batem com o campo `category` dos docs em Firestore.
+// O label mostrado ao usuário vem por i18n em `categories.items.<slug>`.
 const CATEGORIES: Category[] = [
-  { id: "1", title: "adventure", icon: "map" },
-  { id: "2", title: "romance", icon: "heart-broken" },
-  { id: "3", title: "fantasy", icon: "star" },
-  { id: "4", title: "mystery", icon: "search" },
-  { id: "5", title: "future", icon: "rocket" },
+  { id: "1", slug: "adventure", icon: "map" },
+  { id: "2", slug: "romance", icon: "heart-broken" },
+  { id: "3", slug: "fantasy", icon: "star" },
+  { id: "4", slug: "mystery", icon: "search" },
+  { id: "5", slug: "future", icon: "rocket" },
 ];
 
 export default function CategoriesScreen() {
   const t = useThemedTokens();
+  const { t: tr } = useT();
 
   const renderCategory = ({ item }: { item: Category }) => (
     <ModernCategoryCard
       key={item.id}
       onPress={() =>
-        router.push(`/(categories-detail)?category=${item.title}` as any)
+        router.push(`/(categories-detail)?category=${item.slug}` as any)
       }
     >
       <MaterialIcons
@@ -42,7 +51,7 @@ export default function CategoriesScreen() {
         color={t.color.textPrimary}
         style={{ marginTop: t.spacing.sm, textAlign: "center" }}
       >
-        {item.title}
+        {tr(`categories.items.${item.slug}`)}
       </Text>
     </ModernCategoryCard>
   );
@@ -72,7 +81,7 @@ export default function CategoriesScreen() {
       </Pressable>
 
       <Text variant="heading" size="xxl" color={t.color.textPrimary}>
-        Categories
+        {tr("categories.title")}
       </Text>
 
       <View style={{ width: 48 }} />

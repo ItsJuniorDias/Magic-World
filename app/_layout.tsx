@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   DarkTheme,
   DefaultTheme,
@@ -13,6 +14,7 @@ import TrackPlayer from "react-native-track-player";
 import trackPlayerService from "../services/trackPlayer";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useLocaleStore } from "@/i18n";
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -30,7 +32,17 @@ export default function RootLayout() {
     ComicReliefBold: require("../assets/fonts/ComicRelief-Bold.ttf"),
   });
 
-  if (!loaded) {
+  // i18n hydration — reconstrói o locale escolhido (AsyncStorage)
+  // ou detecta do dispositivo antes de renderizar qualquer tela.
+  // Sem isso a primeira frame pode piscar em EN pra usuário PT.
+  const [i18nReady, setI18nReady] = useState(false);
+  const hydrateLocale = useLocaleStore((s) => s.hydrate);
+
+  useEffect(() => {
+    hydrateLocale().finally(() => setI18nReady(true));
+  }, [hydrateLocale]);
+
+  if (!loaded || !i18nReady) {
     return null;
   }
 

@@ -20,6 +20,8 @@ import {
 } from "@/store/useAdventureProfileStore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SecretLevelBadge } from "@/components/(secret-level-badge)";
+import LanguageSelector from "@/components/LanguageSelector";
+import { useT, useLocaleStore } from "@/i18n";
 
 const { width } = Dimensions.get("window");
 
@@ -60,130 +62,108 @@ const FadeInItem = ({ children, delay, isFocused }: any) => {
 };
 
 // ================= LEVEL META =================
-const LEVEL_META = {
+// Estrutura estável (ícone, cor, thresholds). Título vai por
+// i18n via `profile.levels.<key>` na hora de renderizar.
+type LevelKey = "Apprentice" | "Sorcerer" | "Wizard" | "Archmage";
+const LEVEL_META: Record<
+  LevelKey,
+  {
+    icon: string;
+    color: string;
+    /** Chave em `profile.levels` do i18n. */
+    i18nKey: "apprentice" | "sorcerer" | "wizard" | "archmage";
+    min: number;
+    nextThreshold: number;
+  }
+> = {
   Apprentice: {
     icon: "✨",
     color: "#9CA3AF",
-    title: "Apprentice",
+    i18nKey: "apprentice",
     min: 0,
     nextThreshold: 10,
   },
   Sorcerer: {
     icon: "🔮",
     color: "#8B5CF6",
-    title: "Sorcerer",
+    i18nKey: "sorcerer",
     min: 25,
     nextThreshold: 50,
   },
   Wizard: {
     icon: "🪄",
     color: "#3B82F6",
-    title: "Wizard",
+    i18nKey: "wizard",
     min: 50,
     nextThreshold: 100,
   },
   Archmage: {
     icon: "👑",
     color: "#FACC15",
-    title: "Archmage",
+    i18nKey: "archmage",
     min: 100,
     nextThreshold: 200,
   },
 };
 
 // ================= ACHIEVEMENTS =================
-const ACHIEVEMENTS = [
-  {
-    id: 1,
-    title: "Initiate",
-    req: 1,
-    icon: "🌱",
-    secret: false,
-    description: "Every journey begins with a single step.",
-  },
-  {
-    id: 2,
-    title: "Bookworm",
-    req: 5,
-    icon: "📖",
-    secret: false,
-    description: "Curiosity grows with every page you turn.",
-  },
-  {
-    id: 3,
-    title: "Relentless",
-    req: 15,
-    icon: "🔥",
-    secret: false,
-    description: "You kept going when stopping was easier.",
-  },
-  {
-    id: 4,
-    title: "Spellbinder",
-    req: 30,
-    icon: "⚡",
-    secret: false,
-    description: "Words have power, and you have learned to wield them.",
-  },
-  {
-    id: 5,
-    title: "Sage",
-    req: 50,
-    icon: "📚",
-    secret: false,
-    description: "Knowledge accumulates, wisdom emerges.",
-  },
-  {
-    id: 6,
-    title: "Legendary",
-    req: 100,
-    icon: "🏆",
-    secret: false,
-    description: "Your dedication has become the stuff of legends.",
-  },
+// Estrutura estável: id numérico persistido, icon, req, condition
+// e chave i18n. Título e descrição vêm de `profile.achievements.items.<key>`
+// na hora de renderizar. Nunca renomear `i18nKey` sem atualizar os locales.
+type Achievement = {
+  id: number;
+  i18nKey: string;
+  icon: string;
+  secret: boolean;
+  req: number;
+  condition?: (c: number) => boolean;
+};
+
+const ACHIEVEMENTS: Achievement[] = [
+  { id: 1, i18nKey: "initiate", req: 1, icon: "🌱", secret: false },
+  { id: 2, i18nKey: "bookworm", req: 5, icon: "📖", secret: false },
+  { id: 3, i18nKey: "relentless", req: 15, icon: "🔥", secret: false },
+  { id: 4, i18nKey: "spellbinder", req: 30, icon: "⚡", secret: false },
+  { id: 5, i18nKey: "sage", req: 50, icon: "📚", secret: false },
+  { id: 6, i18nKey: "legendary", req: 100, icon: "🏆", secret: false },
   {
     id: 7,
-    title: "Hidden Apprentice",
+    i18nKey: "hiddenApprentice",
     icon: "🗝️",
     secret: true,
     req: 120,
-    description: "You noticed what others overlooked.",
     condition: (c: number) => c >= 120,
   },
   {
     id: 8,
-    title: "Lucky Reader",
+    i18nKey: "luckyReader",
     icon: "🍀",
     secret: true,
     req: 140,
-    description: "Chance favors those who keep reading.",
     condition: (c: number) => c >= 140,
   },
   {
     id: 9,
-    title: "Magic Milestone",
+    i18nKey: "magicMilestone",
     icon: "💫",
     secret: true,
     req: 160,
-    description: "A quiet moment where progress becomes magic.",
     condition: (c: number) => c >= 160,
   },
   {
     id: 10,
-    title: "Centurion",
+    i18nKey: "centurion",
     icon: "🎖️",
     secret: true,
     req: 200,
-    description: "Few reach this far. You did.",
     condition: (c: number) => c >= 200,
   },
   {
     id: 11,
-    title: "Birthday Magic",
+    i18nKey: "birthdayMagic",
     icon: "🎂",
     secret: true,
     req: 0,
-    description: "Some days carry a little extra magic.",
     condition: () => {
       const today = new Date();
       return today.getDate() === 20 && today.getMonth() === 7; // August 20
@@ -191,11 +171,10 @@ const ACHIEVEMENTS = [
   },
   {
     id: 12,
-    title: "Early Bird",
+    i18nKey: "earlyBird",
     icon: "🌅",
     secret: true,
     req: 0,
-    description: "You were awake before the world noticed.",
     condition: () => {
       const hour = new Date().getHours();
       return hour >= 5 && hour < 7;
@@ -203,11 +182,10 @@ const ACHIEVEMENTS = [
   },
   {
     id: 13,
-    title: "Night Owl",
+    i18nKey: "nightOwl",
     icon: "🌙",
     secret: true,
     req: 0,
-    description: "You kept reading while others slept.",
     condition: () => {
       const hour = new Date().getHours();
       return hour >= 0 && hour < 3;
@@ -215,11 +193,10 @@ const ACHIEVEMENTS = [
   },
   {
     id: 14,
-    title: "Carnaval Reader",
+    i18nKey: "carnavalReader",
     icon: "🎭",
     secret: true,
     req: 0,
-    description: "Even festivities could not pull you away.",
     condition: () => {
       const today = new Date();
       return today.getDate() === 13 && today.getMonth() === 1; // February 13
@@ -227,11 +204,10 @@ const ACHIEVEMENTS = [
   },
   {
     id: 15,
-    title: "Festive Spirit",
+    i18nKey: "festiveSpirit",
     icon: "🎄",
     secret: true,
     req: 0,
-    description: "Stories found their place among the celebrations.",
     condition: () => {
       const today = new Date();
       return today.getDate() === 25 && today.getMonth() === 11; // December 25
@@ -239,47 +215,27 @@ const ACHIEVEMENTS = [
   },
   {
     id: 16,
-    title: "The One Who Persisted",
+    i18nKey: "theOneWhoPersisted",
     icon: "🕯️",
     secret: true,
     req: 0,
-    description:
-      "Some paths reveal themselves only to those who do not give up.",
-    condition: () => {
-      return false; // unlocked manually via SecretLevelBadge
-    },
+    condition: () => false, // unlocked manually via SecretLevelBadge
   },
 ];
 
 // ================= PROFILE CONTENT =================
-const PROFILE_CONTENT: Record<
-  AdventureProfileType,
-  { title: string; description: string; emoji: string }
-> = {
-  brave: {
-    title: "Brave Adventurer",
-    description: "You face challenges head-on and never back down.",
-    emoji: "🛡️",
-  },
-  clever: {
-    title: "Clever Explorer",
-    description: "You solve problems with wit, strategy, and a sharp mind.",
-    emoji: "💡",
-  },
-  wild: {
-    title: "Wild Spirit",
-    description: "You follow your instincts and embrace unpredictable paths.",
-    emoji: "🪶",
-  },
-  wise: {
-    title: "Wise Guardian",
-    description: "You observe, reflect, and choose carefully before acting.",
-    emoji: "📖",
-  },
+// Só emoji fica hardcoded — título e descrição vêm por i18n
+// via `profile.profileTypes.<type>`.
+const PROFILE_EMOJIS: Record<AdventureProfileType, string> = {
+  brave: "🛡️",
+  clever: "💡",
+  wild: "🪶",
+  wise: "📖",
 };
 
 // ================= LOADING SPINNER =================
 const LoadingSpinner = () => {
+  const { t } = useT();
   const scaleAnims = [
     useRef(new Animated.Value(1)).current,
     useRef(new Animated.Value(1)).current,
@@ -332,7 +288,7 @@ const LoadingSpinner = () => {
         fontSize={18}
         color={Colors.dark.text}
         fontFamily="bold"
-        title="Loading..."
+        title={t("common.loading")}
       />
     </View>
   );
@@ -341,6 +297,8 @@ const LoadingSpinner = () => {
 // ================= PROFILE SCREEN =================
 export default function ProfileScreen() {
   const isFocused = useIsFocused();
+  const { t } = useT();
+  const localeMeta = useLocaleStore((s) => s.meta);
   const { chaptersRead, level, initProgress } = useMagicProgressStore();
 
   const { profile } = useAdventureProfileStore();
@@ -348,12 +306,11 @@ export default function ProfileScreen() {
   console.log(profile, "PROFILE");
 
   const [loading, setLoading] = useState(true);
-  const [activeAchievement, setActiveAchievement] = useState<any | null>(null);
+  const [activeAchievement, setActiveAchievement] =
+    useState<Achievement | null>(null);
+  const [languageOpen, setLanguageOpen] = useState(false);
 
   const [unlockedIds, setUnlockedIds] = useState<Record<number, boolean>>({});
-  const [profileData, setProfileData] = useState<typeof PROFILE_CONTENT | null>(
-    null,
-  );
 
   const shownAchievementIds = useRef<Set<number>>(new Set());
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -396,10 +353,6 @@ export default function ProfileScreen() {
 
       // Carrega achievements salvos
       await loadUnlockedAchievements();
-
-      // Profile
-      if (profile) setProfileData(PROFILE_CONTENT[profile]);
-      else setProfileData(null);
 
       setLoading(false);
     };
@@ -490,22 +443,22 @@ export default function ProfileScreen() {
           {/* Avatar */}
 
           {/* Adventure Profile */}
-          {profileData && !loading ? (
+          {profile && !loading ? (
             <View style={{ marginTop: 24, alignItems: "center" }}>
-              <Text fontSize={48} title={profileData.emoji} />
+              <Text fontSize={48} title={PROFILE_EMOJIS[profile]} />
 
               <Text
                 fontFamily="bold"
                 fontSize={22}
                 color="#FFF"
-                title={profileData.title}
+                title={t(`profile.profileTypes.${profile}.title`)}
                 style={{ marginTop: 8 }}
               />
               <Text
                 fontFamily="regular"
                 fontSize={14}
                 color="rgba(255,255,255,0.7)"
-                title={profileData.description}
+                title={t(`profile.profileTypes.${profile}.description`)}
                 style={{
                   marginTop: 4,
                   textAlign: "center",
@@ -523,7 +476,7 @@ export default function ProfileScreen() {
                 fontFamily="bold"
                 fontSize={24}
                 color="#FFF"
-                title="Magic Reader"
+                title={t("profile.defaultName")}
                 style={{ letterSpacing: -0.5 }}
               />
             </>
@@ -546,7 +499,7 @@ export default function ProfileScreen() {
                 fontFamily="bold"
                 fontSize={14}
                 color={meta.color}
-                title={meta.title.toUpperCase()}
+                title={t(`profile.levels.${meta.i18nKey}`)}
               />
             </View>
           </SecretLevelBadge>
@@ -564,7 +517,7 @@ export default function ProfileScreen() {
                 fontSize={14}
                 color="#8E8E93"
                 fontFamily="regular"
-                title="Chapters"
+                title={t("profile.chapters")}
               />
             </View>
             <View style={styles.divider} />
@@ -579,7 +532,7 @@ export default function ProfileScreen() {
                 fontFamily="regular"
                 fontSize={14}
                 color="#8E8E93"
-                title="Badges"
+                title={t("profile.badges")}
               />
             </View>
           </View>
@@ -590,7 +543,7 @@ export default function ProfileScreen() {
               <Text
                 fontSize={14}
                 color="#8E8E93"
-                title="Journey Progress"
+                title={t("profile.journeyProgress")}
                 fontFamily="regular"
               />
               <Text
@@ -617,13 +570,50 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Language Section */}
+        <View style={styles.sectionHeader}>
+          <Text
+            fontFamily="bold"
+            fontSize={20}
+            color="#FFF"
+            title={t("profile.languageSection")}
+            style={{ letterSpacing: -0.5 }}
+          />
+        </View>
+
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => setLanguageOpen(true)}
+          style={styles.languageRow}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Text fontSize={22} title={localeMeta.flag} />
+            <View style={{ marginLeft: 12 }}>
+              <Text
+                fontFamily="bold"
+                fontSize={16}
+                color="#FFF"
+                title={localeMeta.nativeName}
+              />
+              <Text
+                fontFamily="regular"
+                fontSize={12}
+                color="#8E8E93"
+                title={t("profile.changeLanguage")}
+                style={{ marginTop: 2 }}
+              />
+            </View>
+          </View>
+          <Text fontSize={20} color="#8E8E93" title="›" />
+        </TouchableOpacity>
+
         {/* Achievements Section */}
         <View style={styles.sectionHeader}>
           <Text
             fontFamily="bold"
             fontSize={20}
             color="#FFF"
-            title="My Achievements"
+            title={t("profile.achievementsSection")}
             style={{ letterSpacing: -0.5 }}
           />
         </View>
@@ -656,7 +646,9 @@ export default function ProfileScreen() {
                     fontFamily="regular"
                     fontSize={14}
                     color={isUnlocked ? "#FFF" : "#48484A"}
-                    title={item.title}
+                    title={t(
+                      `profile.achievements.items.${item.i18nKey}.title`,
+                    )}
                     style={{ marginTop: 8, textAlign: "center" }}
                     numberOfLines={1}
                   />
@@ -671,16 +663,27 @@ export default function ProfileScreen() {
         <AchievementModal
           achievement={{
             id: activeAchievement.id,
-            title: activeAchievement.title,
-            subtitle: activeAchievement.description,
+            title: t(
+              `profile.achievements.items.${activeAchievement.i18nKey}.title`,
+            ),
+            subtitle: t(
+              `profile.achievements.items.${activeAchievement.i18nKey}.description`,
+            ),
             icon: activeAchievement.icon,
             description: activeAchievement.secret
-              ? "Secret Achievement Unlocked!"
-              : `Unlocked by reading ${activeAchievement.req} chapters!`,
+              ? t("profile.achievements.secretUnlocked")
+              : t("profile.achievements.unlockedByChapters", {
+                  count: activeAchievement.req,
+                }),
           }}
           onClose={() => setActiveAchievement(null)}
         />
       )}
+
+      <LanguageSelector
+        visible={languageOpen}
+        onClose={() => setLanguageOpen(false)}
+      />
     </>
   );
 }
@@ -746,6 +749,18 @@ const styles = StyleSheet.create({
   },
   progressBarFill: { height: "100%", borderRadius: 4 },
   sectionHeader: { width: width * 0.9, marginTop: 40, marginBottom: 20 },
+  languageRow: {
+    width: width * 0.9,
+    backgroundColor: "#1C1C1E",
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
   achievementsGrid: {
     width: width * 0.9,
     flexDirection: "row",

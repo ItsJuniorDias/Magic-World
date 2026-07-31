@@ -36,6 +36,7 @@ import { uploadGeminiToCloudinary } from "@/services/generateURL";
 
 import { useAppReview } from "@/hooks/useAppReview";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useT } from "@/i18n";
 
 // Texto via OpenRouter (services/ai). Imagem continua com
 // Gemini direto porque é chamada só pelo seed manual da home
@@ -123,6 +124,7 @@ const Section = React.memo(SectionComponent, (prev, next) => {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { t } = useT();
   const [generatedStory, setGeneratedStory] = useState<any>(null);
   const { requestReviewOnce } = useAppReview();
 
@@ -375,7 +377,7 @@ Structure:
       <StatusBar style="light" translucent />
       <ScrollView showsVerticalScrollIndicator={false} style={styles.container}>
         <Section
-          title="Most Watched Stories"
+          title={t("home.mostWatched")}
           data={mostWatched}
           variant="default"
           loading={query.isLoading}
@@ -384,7 +386,7 @@ Structure:
         />
 
         <Section
-          title="Categories"
+          title={t("home.categoriesSection")}
           data={categoryStories}
           variant="category"
           loading={false}
@@ -393,7 +395,7 @@ Structure:
         />
 
         <Section
-          title="Recently Published"
+          title={t("home.recentlyPublished")}
           data={recentlyPublished}
           variant="recent"
           loading={query.isLoading}

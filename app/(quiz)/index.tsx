@@ -25,6 +25,7 @@ import { StatusBar } from "expo-status-bar";
 import GlassView from "@/components/ui/Glass";
 import { FontAwesome6 } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useT } from "@/i18n";
 
 const { width } = Dimensions.get("window");
 
@@ -40,6 +41,7 @@ type QuizQuestion = {
 export default function QuizScreen() {
   const { profile } = useAdventureProfileStore();
   const router = useRouter();
+  const { t: tr } = useT();
 
   const [questions, setQuestions] = useState<QuizQuestion[] | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -113,7 +115,7 @@ Return a JSON array with this exact shape:
       setQuestions(parsed);
     } catch (err) {
       console.error("Error generating quiz:", err);
-      setFetchError("Couldn't load the quiz. Tap Retry to try again.");
+      setFetchError(tr("quiz.error"));
     }
   }, []);
 
@@ -208,7 +210,7 @@ Return a JSON array with this exact shape:
                 fontSize={14}
                 fontFamily="bold"
                 color={Colors.dark.text}
-                title="Retry"
+                title={tr("quiz.retry")}
               />
             </GlassView>
           </Pressable>
@@ -334,7 +336,7 @@ Return a JSON array with this exact shape:
         <AchievementModal
           achievement={{
             id: 999,
-            title: "Quiz Completed!",
+            title: tr("quiz.completedTitle"),
             correctCount: quizResults.filter((r) => r.correct).length,
             totalQuestions: questions.length,
             icon: (() => {
@@ -348,7 +350,10 @@ Return a JSON array with this exact shape:
               if (percent >= 25) return "😟";
               return "😢";
             })(),
-            description: `You answered ${quizResults.filter((r) => r.correct).length} out of ${questions.length} correctly!`,
+            description: tr("quiz.scoreLine", {
+              correct: quizResults.filter((r) => r.correct).length,
+              total: questions.length,
+            }),
           }}
           onClose={handleCloseFinalModal}
         />

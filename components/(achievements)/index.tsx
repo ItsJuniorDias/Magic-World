@@ -7,6 +7,7 @@ import {
   Dimensions,
 } from "react-native";
 import Text from "../text";
+import { useT } from "@/i18n";
 
 const { width } = Dimensions.get("window");
 
@@ -26,6 +27,7 @@ export function AchievementModal({
   };
   onClose: () => void;
 }) {
+  const { t: tr } = useT();
   const scale = useRef(new Animated.Value(0.8)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -46,39 +48,55 @@ export function AchievementModal({
   }, []);
 
   // ================= PERFORMANCE DYNAMICS =================
+  // Quiz results override the achievement title/description dynamically
+  // based on % correct. Templates come from i18n (`quiz.*Title/Description`).
+  // If the parent passed explicit `title`/`description`, honor those and
+  // skip the templated version — used for real achievements from profile.
   const correctCount = achievement?.correctCount ?? 0;
   const totalQuestions = achievement?.totalQuestions ?? 1;
+  const isQuizResult = achievement?.correctCount !== undefined;
   const percent = (correctCount / totalQuestions) * 100;
 
   let icon = achievement?.icon || "😢";
-  let mainTitle = achievement?.title || "New Achievement!";
+  let mainTitle = achievement?.title || "";
   let subtitle = achievement?.subtitle || "";
   let description = achievement?.description || "";
 
-  if (percent === 100) {
-    icon = "🏆";
-    mainTitle = achievement?.title || "Perfect Score!";
-    description =
-      achievement?.description ||
-      `You answered all ${totalQuestions} correctly! Amazing!`;
-  } else if (percent >= 80) {
-    icon = achievement?.icon || "🎉";
-    mainTitle = achievement?.title || "Great Job!";
-    description =
-      achievement?.description ||
-      `You got ${correctCount} out of ${totalQuestions} right!`;
-  } else if (percent >= 50) {
-    icon = achievement?.icon || "🙂";
-    mainTitle = achievement?.title || "Not Bad!";
-    description =
-      achievement?.description ||
-      `You answered ${correctCount} out of ${totalQuestions} correctly. Keep practicing!`;
-  } else if (achievement?.correctCount !== undefined) {
-    icon = achievement?.icon || "😢";
-    mainTitle = achievement?.title || "Better Luck Next Time!";
-    description =
-      achievement?.description ||
-      `You answered ${correctCount} out of ${totalQuestions} correctly. Try again!`;
+  if (isQuizResult) {
+    if (percent === 100) {
+      icon = achievement?.icon || "🏆";
+      mainTitle = achievement?.title || tr("quiz.perfectTitle");
+      description =
+        achievement?.description ||
+        tr("quiz.perfectScore", { total: totalQuestions });
+    } else if (percent >= 80) {
+      icon = achievement?.icon || "🎉";
+      mainTitle = achievement?.title || tr("quiz.greatTitle");
+      description =
+        achievement?.description ||
+        tr("quiz.greatDescription", {
+          correct: correctCount,
+          total: totalQuestions,
+        });
+    } else if (percent >= 50) {
+      icon = achievement?.icon || "🙂";
+      mainTitle = achievement?.title || tr("quiz.notBadTitle");
+      description =
+        achievement?.description ||
+        tr("quiz.notBadDescription", {
+          correct: correctCount,
+          total: totalQuestions,
+        });
+    } else {
+      icon = achievement?.icon || "😢";
+      mainTitle = achievement?.title || tr("quiz.betterLuckTitle");
+      description =
+        achievement?.description ||
+        tr("quiz.betterLuckDescription", {
+          correct: correctCount,
+          total: totalQuestions,
+        });
+    }
   }
 
   // ================= EXTRA FIELDS =================
@@ -165,7 +183,12 @@ export function AchievementModal({
           ]}
           onPress={onClose}
         >
-          <Text fontFamily="bold" fontSize={20} color="#000" title="Awesome" />
+          <Text
+            fontFamily="bold"
+            fontSize={20}
+            color="#000"
+            title={tr("common.awesome")}
+          />
         </Pressable>
       </Animated.View>
     </View>

@@ -22,6 +22,19 @@ export default {
         NSAppTransportSecurity: {
           NSAllowsArbitraryLoads: true,
         },
+        // Idiomas suportados pelo app — a App Store usa isso pra
+        // exibir "Languages" na página do produto. Bate 1:1 com
+        // os locales em `i18n/locales/*`.
+        CFBundleLocalizations: [
+          "en",
+          "ar",
+          "es",
+          "fr",
+          "hi",
+          "pt",
+          "zh-Hans",
+        ],
+        CFBundleDevelopmentRegion: "en",
       },
     },
     android: {
@@ -35,6 +48,7 @@ export default {
     splash: null,
     plugins: [
       "expo-router",
+      "expo-localization",
       "./plugin/withFmtConstevalFix",
     ],
     experiments: {

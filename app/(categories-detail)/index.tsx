@@ -11,8 +11,19 @@ import { Container, Gradient, ImageCard, ModernCategoryCard } from "./styles";
 import { useStoriesStore } from "@/store/useStoriesStore";
 import { doc, increment, updateDoc } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
+import { useT } from "@/i18n";
+
+type CategoryKey = "adventure" | "romance" | "fantasy" | "mystery" | "future";
+const KNOWN_CATEGORIES: CategoryKey[] = [
+  "adventure",
+  "romance",
+  "fantasy",
+  "mystery",
+  "future",
+];
 
 export default function CategoryDetailsScreen() {
+  const { t: tr } = useT();
   const params = useLocalSearchParams<{
     category: string;
     storyId: string;
@@ -94,7 +105,7 @@ export default function CategoryDetailsScreen() {
             <FontAwesome6 name="crown" size={10} color="#fff" />
 
             <Text
-              title="PREMIUM"
+              title={tr("categories.premium")}
               fontFamily="bold"
               fontSize={12}
               color="#fff"
@@ -117,7 +128,7 @@ export default function CategoryDetailsScreen() {
 
             {isLocked && (
               <Text
-                title="Exclusivo para membros"
+                title={tr("categories.membersOnly")}
                 fontFamily="regular"
                 fontSize={12}
                 color="#FFD700"
@@ -155,7 +166,16 @@ export default function CategoryDetailsScreen() {
           fontFamily="bold"
           fontSize={24}
           color="#FFFFFF"
-          title={categoryName || params.storyId}
+          title={(() => {
+            const raw = categoryName || params.storyId || "";
+            // Se for uma das categorias canônicas, traduz.
+            const slug = raw.toLowerCase() as CategoryKey;
+            if (KNOWN_CATEGORIES.includes(slug)) {
+              return tr(`categories.items.${slug}`);
+            }
+            // Categoria dinâmica (do Firestore) — devolve como está.
+            return raw;
+          })()}
         />
 
         <View style={{ width: 48 }} />

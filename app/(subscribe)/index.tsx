@@ -21,6 +21,7 @@ import Button from "@/components/ui/Button";
 import { useThemedTokens } from "@/hooks/use-tokens";
 import { SubscribeContainer } from "./styles";
 import { logEvent } from "@/services/analyticsHelper";
+import { useT } from "@/i18n";
 
 const ENTITLEMENT_ID = "Magic World Pro";
 const PRO_STORAGE_KEY = "@user_is_pro";
@@ -42,11 +43,16 @@ const FEATURED_REVIEW: { quote: string; author: string } | null = null;
 //   author: "Sarah M., parent",
 // };
 
-const VALUE_PROPS = [
-  { icon: "🌙", label: "Screen-free bedtime stories" },
-  { icon: "📚", label: "New audiobooks every week" },
-  { icon: "👶", label: "Made for little listeners, ages 0–10" },
-  { icon: "🔒", label: "100% ad-free & kid-safe" },
+// Value props: chaves i18n em vez de labels hardcoded. O texto vem
+// de `paywall.valueProps.<key>` na hora do render.
+const VALUE_PROPS: Array<{
+  icon: string;
+  key: "screenFree" | "newAudiobooks" | "forLittleListeners" | "adFree";
+}> = [
+  { icon: "🌙", key: "screenFree" },
+  { icon: "📚", key: "newAudiobooks" },
+  { icon: "👶", key: "forLittleListeners" },
+  { icon: "🔒", key: "adFree" },
 ];
 
 /** Reads a free trial length from a RC package. Returns null if there's no free trial. */
@@ -98,6 +104,7 @@ function annualSavingsPercent(
 export default function SubscribeScreen() {
   const router = useRouter();
   const t = useThemedTokens();
+  const { t: tr } = useT();
   const insets = useSafeAreaInsets();
 
   const [monthly, setMonthly] = useState<PurchasesPackage | null>(null);
@@ -141,9 +148,7 @@ export default function SubscribeScreen() {
         default_selection: defaultPick?.identifier ?? null,
       });
     } catch (e) {
-      setError(
-        "Couldn't load subscription plans. Check your connection and try again.",
-      );
+      setError(tr("paywall.couldntLoadPlans"));
     } finally {
       setLoading(false);
     }
@@ -195,7 +200,7 @@ export default function SubscribeScreen() {
           plan,
           package: selected.identifier,
         });
-        Alert.alert("You're in!", "Enjoy every story, every night.");
+        Alert.alert(tr("paywall.welcomeTitle"), tr("paywall.welcomeBody"));
         router.back();
       }
     } catch (err: any) {
@@ -207,7 +212,10 @@ export default function SubscribeScreen() {
           reason: "apple_sheet_closed",
         });
       } else {
-        Alert.alert("Something went wrong", "Please try again in a moment.");
+        Alert.alert(
+          tr("paywall.somethingWrongTitle"),
+          tr("paywall.somethingWrongBody"),
+        );
       }
     } finally {
       setPurchasing(false);
@@ -224,16 +232,22 @@ export default function SubscribeScreen() {
         active: isActive,
       });
       if (isActive) {
-        Alert.alert("Welcome back!", "Your subscription has been restored.");
+        Alert.alert(
+          tr("paywall.welcomeBackTitle"),
+          tr("paywall.welcomeBackBody"),
+        );
         router.back();
       } else {
         Alert.alert(
-          "No purchases found",
-          "We couldn't find an active subscription on this Apple ID.",
+          tr("paywall.noPurchasesTitle"),
+          tr("paywall.noPurchasesBody"),
         );
       }
     } catch (e) {
-      Alert.alert("Restore failed", "Please try again in a moment.");
+      Alert.alert(
+        tr("paywall.restoreFailedTitle"),
+        tr("paywall.restoreFailedBody"),
+      );
     } finally {
       setRestoring(false);
     }
@@ -261,24 +275,28 @@ export default function SubscribeScreen() {
         await Linking.openURL(url);
       } catch {
         Alert.alert(
-          "Couldn't open link",
-          "Please check your connection and try again.",
+          tr("paywall.couldntOpenLinkTitle"),
+          tr("paywall.couldntOpenLinkBody"),
         );
       }
     }
   };
 
   const ctaLabel = trialDays
-    ? `Start ${trialDays}-Day Free Trial`
+    ? tr("paywall.startTrialCta", { days: trialDays })
     : selected?.packageType === "ANNUAL"
-      ? "Continue Yearly"
-      : "Continue Monthly";
+      ? tr("paywall.continueYearly")
+      : tr("paywall.continueMonthly");
 
   const ctaFinePrint = trialDays
-    ? `Then ${selected?.product.priceString} ${
-        selected?.packageType === "MONTHLY" ? "/ month" : "/ year"
-      }. Cancel anytime.`
-    : "Auto-renews until cancelled. Cancel anytime in Settings.";
+    ? tr("paywall.finePrintWithTrial", {
+        price: selected?.product.priceString ?? "",
+        period:
+          selected?.packageType === "MONTHLY"
+            ? tr("paywall.period.month")
+            : tr("paywall.period.year"),
+      })
+    : tr("paywall.finePrintNoTrial");
 
   return (
     <View style={{ flex: 1, backgroundColor: t.color.bg }}>
@@ -294,7 +312,7 @@ export default function SubscribeScreen() {
         <TouchableOpacity
           onPress={handleClose}
           hitSlop={16}
-          accessibilityLabel="Close paywall"
+          accessibilityLabel={tr("paywall.close")}
         >
           <Text variant="heading" size="lg" color={t.color.textSecondary}>
             ✕
@@ -316,14 +334,14 @@ export default function SubscribeScreen() {
           color={t.color.textPrimary}
           style={{ marginBottom: t.spacing.xs }}
         >
-          Unlock every magical story
+          {tr("paywall.heroTitle")}
         </Text>
         <Text
           variant="body"
           color={t.color.textSecondary}
           style={{ marginBottom: t.spacing.lg }}
         >
-          Screen-free bedtime tales that grow with your little one.
+          {tr("paywall.heroSubtitle")}
         </Text>
 
         {/* Featured review */}
@@ -367,7 +385,7 @@ export default function SubscribeScreen() {
         >
           {VALUE_PROPS.map((v, i) => (
             <View
-              key={v.label}
+              key={v.key}
               style={{
                 flexDirection: "row",
                 alignItems: "center",
@@ -387,14 +405,16 @@ export default function SubscribeScreen() {
                 color={t.color.textPrimary}
                 style={{ flex: 1 }}
               >
-                {v.label}
+                {tr(`paywall.valueProps.${v.key}`)}
               </Text>
             </View>
           ))}
         </View>
 
         {/* Trial timeline (only if RC package actually has a free trial) */}
-        {trialDays ? <TrialTimeline trialDays={trialDays} t={t} /> : null}
+        {trialDays ? (
+          <TrialTimeline trialDays={trialDays} tokens={t} />
+        ) : null}
 
         {/* Plans */}
         {loading ? (
@@ -419,7 +439,7 @@ export default function SubscribeScreen() {
             >
               {error}
             </Text>
-            <Button label="Try again" onPress={loadOfferings} />
+            <Button label={tr("common.tryAgain")} onPress={loadOfferings} />
           </View>
         ) : (
           <View style={{ marginTop: t.spacing.lg, gap: t.spacing.md }}>
@@ -429,7 +449,7 @@ export default function SubscribeScreen() {
               color={t.color.textPrimary}
               style={{ marginBottom: t.spacing.xxs }}
             >
-              Choose your plan
+              {tr("paywall.choosePlan")}
             </Text>
             {annual && (
               <PlanCard
@@ -438,7 +458,7 @@ export default function SubscribeScreen() {
                 onSelect={() => handleSelect(annual)}
                 savings={savings}
                 monthlyEq={monthlyEq}
-                t={t}
+                tokens={t}
               />
             )}
             {monthly && (
@@ -448,7 +468,7 @@ export default function SubscribeScreen() {
                 onSelect={() => handleSelect(monthly)}
                 savings={null}
                 monthlyEq={null}
-                t={t}
+                tokens={t}
               />
             )}
           </View>
@@ -501,27 +521,29 @@ export default function SubscribeScreen() {
                 color={t.color.textSecondary}
                 style={{ textDecorationLine: "underline" }}
               >
-                {restoring ? "Restoring…" : "Restore"}
+                {restoring
+                  ? tr("paywall.restoring")
+                  : tr("paywall.restore")}
               </Text>
             </TouchableOpacity>
-            <Dot t={t} />
+            <Dot tokens={t} />
             <TouchableOpacity onPress={() => openLegalLink("privacy")}>
               <Text
                 variant="caption"
                 color={t.color.textSecondary}
                 style={{ textDecorationLine: "underline" }}
               >
-                Privacy
+                {tr("paywall.privacy")}
               </Text>
             </TouchableOpacity>
-            <Dot t={t} />
+            <Dot tokens={t} />
             <TouchableOpacity onPress={() => openLegalLink("terms")}>
               <Text
                 variant="caption"
                 color={t.color.textSecondary}
                 style={{ textDecorationLine: "underline" }}
               >
-                Terms (EULA)
+                {tr("paywall.terms")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -532,13 +554,16 @@ export default function SubscribeScreen() {
 }
 
 // ────────────── Sub-components ──────────────
+// Renomeamos a prop de `t` para `tokens` pra não colidir com o
+// `t` do hook de i18n (`useT`) que os componentes filhos consomem
+// individualmente.
 
-function Dot({ t }: { t: ReturnType<typeof useThemedTokens> }) {
+function Dot({ tokens }: { tokens: ReturnType<typeof useThemedTokens> }) {
   return (
     <Text
       variant="caption"
-      color={t.color.textSecondary}
-      style={{ marginHorizontal: t.spacing.xs }}
+      color={tokens.color.textSecondary}
+      style={{ marginHorizontal: tokens.spacing.xs }}
     >
       •
     </Text>
@@ -551,26 +576,29 @@ function PlanCard({
   onSelect,
   savings,
   monthlyEq,
-  t,
+  tokens,
 }: {
   pkg: PurchasesPackage;
   isSelected: boolean;
   onSelect: () => void;
   savings: number | null;
   monthlyEq: string | null;
-  t: ReturnType<typeof useThemedTokens>;
+  tokens: ReturnType<typeof useThemedTokens>;
 }) {
+  const { t: tr } = useT();
   const isMonthly = pkg.packageType === "MONTHLY";
   return (
     <TouchableOpacity
       onPress={onSelect}
       activeOpacity={0.85}
       style={{
-        backgroundColor: isSelected ? t.color.brandSubtle : t.color.surface,
-        borderRadius: t.radius.xl,
-        padding: t.spacing.lg,
+        backgroundColor: isSelected
+          ? tokens.color.brandSubtle
+          : tokens.color.surface,
+        borderRadius: tokens.radius.xl,
+        padding: tokens.spacing.lg,
         borderWidth: 2,
-        borderColor: isSelected ? t.color.brand : "transparent",
+        borderColor: isSelected ? tokens.color.brand : "transparent",
       }}
     >
       {!isMonthly && savings != null && savings > 0 && (
@@ -578,15 +606,15 @@ function PlanCard({
           style={{
             position: "absolute",
             top: -10,
-            right: t.spacing.md,
-            backgroundColor: t.color.brand,
-            paddingHorizontal: t.spacing.sm,
+            right: tokens.spacing.md,
+            backgroundColor: tokens.color.brand,
+            paddingHorizontal: tokens.spacing.sm,
             paddingVertical: 4,
-            borderRadius: t.radius.sm,
+            borderRadius: tokens.radius.sm,
           }}
         >
-          <Text variant="label" color={t.color.textOnBrand}>
-            SAVE {savings}%
+          <Text variant="label" color={tokens.color.textOnBrand}>
+            {tr("paywall.saveBadge", { percent: savings })}
           </Text>
         </View>
       )}
@@ -595,32 +623,34 @@ function PlanCard({
           <Text
             variant="heading"
             size="xl"
-            color={isSelected ? t.color.brand : t.color.textPrimary}
+            color={isSelected ? tokens.color.brand : tokens.color.textPrimary}
           >
-            {isMonthly ? "Monthly" : "Yearly"}
+            {isMonthly ? tr("paywall.monthly") : tr("paywall.yearly")}
           </Text>
           <Text
             variant="caption"
-            color={t.color.textSecondary}
+            color={tokens.color.textSecondary}
             style={{ marginTop: 2 }}
           >
             {isMonthly
-              ? "Billed monthly"
+              ? tr("paywall.billedMonthly")
               : monthlyEq
-                ? `Just ${monthlyEq}/mo, billed yearly`
-                : "Billed yearly"}
+                ? tr("paywall.monthlyEqPrefix", { price: monthlyEq })
+                : tr("paywall.billedYearly")}
           </Text>
         </View>
-        <View style={{ alignItems: "flex-end", marginLeft: t.spacing.sm }}>
+        <View
+          style={{ alignItems: "flex-end", marginLeft: tokens.spacing.sm }}
+        >
           <Text
             variant="heading"
             size="xxl"
-            color={isSelected ? t.color.brand : t.color.textPrimary}
+            color={isSelected ? tokens.color.brand : tokens.color.textPrimary}
           >
             {pkg.product.priceString}
           </Text>
-          <Text variant="caption" color={t.color.textSecondary}>
-            {isMonthly ? "per month" : "per year"}
+          <Text variant="caption" color={tokens.color.textSecondary}>
+            {isMonthly ? tr("paywall.perMonth") : tr("paywall.perYear")}
           </Text>
         </View>
       </View>
@@ -630,52 +660,56 @@ function PlanCard({
 
 function TrialTimeline({
   trialDays,
-  t,
+  tokens,
 }: {
   trialDays: number;
-  t: ReturnType<typeof useThemedTokens>;
+  tokens: ReturnType<typeof useThemedTokens>;
 }) {
+  const { t: tr } = useT();
   const reminderDay = Math.max(trialDays - 2, 1);
   const steps = [
     {
-      day: "Today",
-      title: "Full access, instantly",
-      desc: "Every story, every character. Nothing locked.",
+      day: tr("paywall.todayLabel"),
+      title: tr("paywall.todayTitle"),
+      desc: tr("paywall.todayDesc"),
     },
     {
-      day: `Day ${reminderDay}`,
-      title: "We'll remind you",
-      desc: "You get a heads-up before your trial ends.",
+      day: tr("paywall.dayLabel", { day: reminderDay }),
+      title: tr("paywall.reminderTitle"),
+      desc: tr("paywall.reminderDesc"),
     },
     {
-      day: `Day ${trialDays}`,
-      title: "Your subscription starts",
-      desc: "Only if you love it. Cancel anytime in Settings.",
+      day: tr("paywall.dayLabel", { day: trialDays }),
+      title: tr("paywall.billingTitle"),
+      desc: tr("paywall.billingDesc"),
     },
   ];
   return (
-    <View style={{ marginTop: t.spacing.md, marginBottom: t.spacing.sm }}>
+    <View
+      style={{ marginTop: tokens.spacing.md, marginBottom: tokens.spacing.sm }}
+    >
       <Text
         variant="heading"
         size="md"
-        color={t.color.textPrimary}
-        style={{ marginBottom: t.spacing.md }}
+        color={tokens.color.textPrimary}
+        style={{ marginBottom: tokens.spacing.md }}
       >
-        How your {trialDays}-day free trial works
+        {tr("paywall.trialHeading", { days: trialDays })}
       </Text>
       {steps.map((s, i) => (
         <View
           key={s.day}
           style={{
             flexDirection: "row",
-            marginBottom: i === steps.length - 1 ? 0 : t.spacing.md,
+            marginBottom:
+              i === steps.length - 1 ? 0 : tokens.spacing.md,
           }}
         >
           <View
             style={{
               width: 20,
               alignItems: "center",
-              marginRight: t.spacing.sm,
+              marginRight: tokens.spacing.sm,
             }}
           >
             <View
@@ -683,7 +717,7 @@ function TrialTimeline({
                 width: 12,
                 height: 12,
                 borderRadius: 6,
-                backgroundColor: t.color.brand,
+                backgroundColor: tokens.color.brand,
                 marginTop: 4,
               }}
             />
@@ -692,26 +726,26 @@ function TrialTimeline({
                 style={{
                   flex: 1,
                   width: 2,
-                  backgroundColor: t.color.brandSubtle,
+                  backgroundColor: tokens.color.brandSubtle,
                   marginTop: 2,
                 }}
               />
             )}
           </View>
           <View style={{ flex: 1 }}>
-            <Text variant="label" color={t.color.brand}>
+            <Text variant="label" color={tokens.color.brand}>
               {s.day}
             </Text>
             <Text
               variant="body"
-              color={t.color.textPrimary}
+              color={tokens.color.textPrimary}
               style={{ marginTop: 2 }}
             >
               {s.title}
             </Text>
             <Text
               variant="caption"
-              color={t.color.textSecondary}
+              color={tokens.color.textSecondary}
               style={{ marginTop: 2 }}
             >
               {s.desc}

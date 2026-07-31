@@ -45,6 +45,7 @@ import { useStoriesStore } from "@/store/useStoriesStore";
 
 import { useMagicProgressStore } from "@/store/useMagicProgressStore";
 import { ChapterCompletedModal } from "@/components/(completed-chapter)";
+import { useT } from "@/i18n";
 
 import { useIsFocused } from "@react-navigation/native";
 import {
@@ -61,6 +62,7 @@ const SCREEN_HEIGHT = Dimensions.get("window").height;
 
 export default function StorieScreen() {
   const isFocused = useIsFocused();
+  const { t: tr } = useT();
 
   const { storie, title, thumbnail, currentIndex, storyId, autoPlay } =
     useLocalSearchParams();
@@ -404,8 +406,8 @@ export default function StorieScreen() {
       return await aiTranslate(text, target);
     } catch (err) {
       Alert.alert(
-        "Translation unavailable",
-        "The translation service is overloaded. Please try again later.",
+        tr("storieMenu.translationUnavailableTitle"),
+        tr("storieMenu.translationUnavailableBody"),
       );
       return text;
     }
@@ -962,7 +964,7 @@ Return ONLY a JSON object with this exact shape:
         onClose={() => setShowMenuSheet(false)}
         sections={[
           {
-            title: "Translate",
+            title: tr("storieMenu.translate"),
             options: languageLabels,
             selectedIndex: selectedIndex,
             onSelect: (index) => {
@@ -971,7 +973,7 @@ Return ONLY a JSON object with this exact shape:
             },
           },
           {
-            title: "Ambient Sound",
+            title: tr("storieMenu.ambientSound"),
             options: BACKGROUND_TRACKS.map((track) => track.title),
             selectedIndex: musicIndex,
             onSelect: async (index) => {

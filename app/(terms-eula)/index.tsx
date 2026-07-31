@@ -5,6 +5,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import Text from "@/components/text";
 import { Colors } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 function Section({ title, content }: { title: string; content: string }) {
   return (
@@ -31,6 +32,7 @@ function Section({ title, content }: { title: string; content: string }) {
 export default function EULAScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { t: tr } = useT();
 
   async function acceptEULA() {
     await AsyncStorage.setItem("eulaAccepted", "true");
@@ -53,7 +55,7 @@ export default function EULAScreen() {
         fontFamily="bold"
         fontSize={28}
         color={Colors.dark.text}
-        title="End User License Agreement (EULA)"
+        title={tr("legal.eulaTitle")}
       />
 
       <View style={{ height: 8 }} />
@@ -63,7 +65,7 @@ export default function EULAScreen() {
         fontFamily="regular"
         fontSize={14}
         color={Colors.dark.text}
-        title="Last updated: January 2026"
+        title={tr("legal.lastUpdated")}
       />
 
       <View style={{ height: 32 }} />
@@ -124,7 +126,7 @@ export default function EULAScreen() {
           fontFamily="bold"
           fontSize={16}
           color="#FFFFFF"
-          title="I Agree & Continue"
+          title={tr("legal.iAgree")}
         />
       </TouchableOpacity>
     </ScrollView>

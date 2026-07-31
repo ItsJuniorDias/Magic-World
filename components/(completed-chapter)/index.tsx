@@ -10,6 +10,7 @@ import {
   AdventureProfileType,
   useAdventureProfileStore,
 } from "@/store/useAdventureProfileStore";
+import { useT } from "@/i18n";
 
 interface Choice {
   title: string;
@@ -31,6 +32,7 @@ export const ChapterCompletedModal = ({
   onChoiceSelected,
 }: Props) => {
   const addPoint = useAdventureProfileStore((s) => s.addPoint);
+  const { t: tr } = useT();
 
   return (
     <Modal visible={visible} transparent animationType="fade">
@@ -49,7 +51,11 @@ export const ChapterCompletedModal = ({
             fontFamily="bold"
             fontSize={24}
             color="#FFF"
-            title={choices ? "The Choice is Yours" : "Story Completed"}
+            title={
+              choices
+                ? tr("chapterCompleted.choiceTitle")
+                : tr("chapterCompleted.completedTitle")
+            }
             style={styles.mainTitle}
           />
 
@@ -59,8 +65,8 @@ export const ChapterCompletedModal = ({
             color="rgba(255,255,255,0.6)"
             title={
               choices
-                ? "Your journey has reached a pivotal moment. Which path will you take?"
-                : "You’ve turned the final page of this chapter. Ready for the next adventure?"
+                ? tr("chapterCompleted.choiceSubtitle")
+                : tr("chapterCompleted.completedSubtitle")
             }
             style={styles.subtitle}
           />
@@ -68,12 +74,14 @@ export const ChapterCompletedModal = ({
           <View style={styles.buttonContainer}>
             {choices ? (
               // AI CHOICES (Apple List Style)
+              // choice.title vem gerado por IA no idioma da história —
+              // não passa pelo i18n, é conteúdo dinâmico.
               choices.map((choice, index) => (
                 <Pressable
                   key={index}
                   onPress={() => {
                     if (choice.profile) {
-                      addPoint(choice.profile); // 👈 AQUI A MÁGICA
+                      addPoint(choice.profile);
                     }
 
                     onChoiceSelected?.(choice);
@@ -115,7 +123,7 @@ export const ChapterCompletedModal = ({
                     fontFamily="bold"
                     fontSize={18}
                     color="#000"
-                    title="Continue"
+                    title={tr("common.continue")}
                   />
                 </LinearGradient>
               </Pressable>

@@ -10,6 +10,7 @@ import Button from "@/components/ui/Button";
 import { useThemedTokens } from "@/hooks/use-tokens";
 import { useLikedStore } from "@/store/useLikedStore";
 import { useAdventureProfileStore } from "@/store/useAdventureProfileStore";
+import { useT } from "@/i18n";
 
 import background_header from "../../assets/images/background-header.png";
 import { Container, Content, Gradient, GradientImage } from "./styles";
@@ -18,6 +19,7 @@ const { height } = Dimensions.get("window");
 
 export default function OnboardingScreen() {
   const t = useThemedTokens();
+  const { t: tr } = useT();
   const router = useRouter();
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -111,15 +113,15 @@ export default function OnboardingScreen() {
             size="xxxl"
             color={t.color.textPrimary}
           >
-            {`Welcome to Our\nAudiobook Journey`}
+            {`${tr("onboarding.welcomeLine1")}\n${tr("onboarding.welcomeLine2")}`}
           </Text>
 
           <Text variant="body" color={t.color.textPrimary}>
-            Turn the page, or rather, press play, and let the adventure begin.
+            {tr("onboarding.tagline")}
           </Text>
 
           <Button
-            label="Get Started"
+            label={tr("onboarding.getStarted")}
             size="lg"
             fullWidth
             onPress={() => router.push("/(profile-adventure)")}
