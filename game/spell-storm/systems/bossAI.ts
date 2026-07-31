@@ -578,13 +578,19 @@ function lumenChoir(e: Enemy, ctx: BossContext): void {
       e.tell = 1 - e.timer / 0.7;
       e.timer -= dt;
       if (e.timer <= 0) {
+        // Slow Ward (Choir counter item): applies a global speed
+        // multiplier to every bullet fired here. 1 by default; 0.6
+        // when the item is bought. Legibility of the pattern doesn't
+        // change — you have more time to read where a bullet is
+        // going, which is the whole thing this fight asks.
+        const slowMult = player.choirSlowMult;
         // Alternate ring and spiral. Two patterns is enough: the ring asks
         // you to move, the spiral asks you to keep moving in one direction,
         // and together they cover both failure modes of standing still.
         if (e.timer2 === 0) {
-          fireRing(ctx, e.x, e.y, CHOIR.ringCount + (phase - 1) * 3, CHOIR.ringSpeed, Math.random());
+          fireRing(ctx, e.x, e.y, CHOIR.ringCount + (phase - 1) * 3, CHOIR.ringSpeed * slowMult, Math.random());
           // Phase 3 adds an aimed lance through the gap in the ring.
-          if (phase === 3) fireAt(ctx, e.x, e.y, player.x, player.y + 0.8, CHOIR.ringSpeed * 1.6, 0.24);
+          if (phase === 3) fireAt(ctx, e.x, e.y, player.x, player.y + 0.8, CHOIR.ringSpeed * 1.6 * slowMult, 0.24);
           e.timer2 = 1;
         } else {
           e.state = 2;
@@ -605,13 +611,14 @@ function lumenChoir(e: Enemy, ctx: BossContext): void {
     default: {
       e.timer -= dt;
       if (e.timer <= 0) {
+        const slowMult = player.choirSlowMult;
         const count = Math.round(e.timer2);
         const a = e.anchorY + count * CHOIR.spiralTurn;
         ctx.projectiles.spawnRaw(
           e.x,
           e.y,
-          Math.cos(a) * CHOIR.spiralSpeed,
-          Math.sin(a) * CHOIR.spiralSpeed,
+          Math.cos(a) * CHOIR.spiralSpeed * slowMult,
+          Math.sin(a) * CHOIR.spiralSpeed * slowMult,
           1,
           0.26,
           true,
@@ -622,8 +629,8 @@ function lumenChoir(e: Enemy, ctx: BossContext): void {
           ctx.projectiles.spawnRaw(
             e.x,
             e.y,
-            Math.cos(a + Math.PI) * CHOIR.spiralSpeed,
-            Math.sin(a + Math.PI) * CHOIR.spiralSpeed,
+            Math.cos(a + Math.PI) * CHOIR.spiralSpeed * slowMult,
+            Math.sin(a + Math.PI) * CHOIR.spiralSpeed * slowMult,
             1,
             0.26,
             true,

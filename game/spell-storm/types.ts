@@ -115,6 +115,33 @@ export interface Player {
   squashX: number;
   squashY: number;
 
+  // ---- Boss counter items (shop.ts) ----
+  // Each of these tracks an active per-boss buff. Timers > 0 mean the
+  // effect is live; booleans stay on for the whole fight (cleared on
+  // room exit + on death). Semantics live in shop.ts / player.ts —
+  // the sim just reads these flags in the appropriate systems.
+  /** Seconds of extended jump remaining. Applies +30% to jumpVelocity. */
+  jumpBoostTimer: number;
+  /** iFrames multiplier — 1 = normal, 2 = doubled (Featherfall). */
+  iFramesMult: number;
+  /** True while the mage ignores knockback (Anchor). */
+  knockbackImmune: boolean;
+  /** True while the default bolt is treated as piercing (Piercing Bolt). */
+  piercingBolt: boolean;
+  /** Extra "consume before the shield" charges. Distinct from `shield`
+   *  because these carry OVER the shield in the damage-resolution order
+   *  and are cosmetically labeled Bulwark, not Shield. */
+  bulwarks: number;
+  /** True while spike hazards are treated as no-ops (Featherweight). */
+  spikeImmune: boolean;
+  /** Air-control accel multiplier — 1 = normal, 1.4 = Sure Foot. */
+  airControlMult: number;
+  /** True while the Voidmaw pull acceleration is zeroed (Anchor Charm). */
+  pullImmune: boolean;
+  /** Multiplier applied to Choir bullet speed while alive (Slow Ward).
+   *  1 = normal, 0.6 = 40% slower. */
+  choirSlowMult: number;
+
   alive: boolean;
 }
 
@@ -415,6 +442,8 @@ export interface HudSnapshot {
    * shop is open.
    */
   shop: {
+    /** Which boss this shop is for. Drives the per-boss catalog + hint. */
+    bossKind: BossKind;
     bossName: string;
     bossTitle: string;
     essence: number;

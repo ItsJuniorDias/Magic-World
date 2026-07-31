@@ -28,6 +28,13 @@ export interface ProjectileSystem {
     aimY: number,
     weapon: WeaponId,
     hostile: boolean,
+    /**
+     * When set, forces the piercing flag on this volley regardless of
+     * the weapon spec. Used by the Piercing Bolt counter item (bought
+     * for the Cinder Warden fight) which upgrades the default bolt for
+     * one boss without changing the weapon slot.
+     */
+    piercingOverride?: boolean,
   ): void;
   spawnRaw(
     x: number,
@@ -156,8 +163,9 @@ export function createProjectiles(kit: PaperKit): ProjectileSystem {
     root,
     list,
 
-    spawn(x, y, aimX, aimY, weapon, hostile) {
+    spawn(x, y, aimX, aimY, weapon, hostile, piercingOverride) {
       const spec = WEAPONS[weapon];
+      const piercing = piercingOverride ?? spec.piercing;
       const base = Math.atan2(aimY, aimX);
       for (let i = 0; i < spec.count; i++) {
         // Distribute evenly across the spread, centred on the aim.
@@ -173,7 +181,7 @@ export function createProjectiles(kit: PaperKit): ProjectileSystem {
           Math.sin(angle) * spec.speed,
           spec.damage,
           spec.radius,
-          spec.piercing,
+          piercing,
           spec.homing,
           hostile,
         );

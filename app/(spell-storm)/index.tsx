@@ -45,8 +45,9 @@ import {
   type GateSide,
 } from "@/game/spell-storm";
 import {
-  SHOP_CATALOG,
+  BOSS_HINTS,
   VESSEL_CAP,
+  getShopCatalogForBoss,
   type ShopItem,
   type ShopItemId,
 } from "@/game/spell-storm/systems/shop";
@@ -3164,6 +3165,10 @@ const CATEGORY_TINT: Record<ShopItem["category"], string> = {
   defense: "rgba(120,180,255,0.32)",
   offense: "rgba(196,162,255,0.32)",
   vessel: "rgba(255,201,74,0.32)",
+  // Counter items get a warm gold tint — same family as vessel but a
+  // touch cooler, so the eye still separates "situational this-fight
+  // buff" from "permanent heart upgrade". Both read as "special".
+  counter: "rgba(255,220,120,0.30)",
 };
 
 const CATEGORY_ACCENT: Record<ShopItem["category"], number> = {
@@ -3171,6 +3176,7 @@ const CATEGORY_ACCENT: Record<ShopItem["category"], number> = {
   defense: 0x8ff0e8,
   offense: PALETTE.arcane,
   vessel: PALETTE.gold,
+  counter: PALETTE.gold,
 };
 
 function ShopOverlay({
@@ -3257,6 +3263,26 @@ function ShopOverlay({
           </Glass>
         </View>
 
+        {/* HINT — one-line boss framing, gold on a subtle rule.
+            Sits above the grid so a first-time player understands
+            what mechanic this fight is asking BEFORE they read the
+            two counter items priced for it. Fixture is a diamond
+            glyph + text; the diamond echoes the category dots on
+            the item cards, cheaply signalling "these three are
+            for the fight". */}
+        <View style={styles.shopHint}>
+          <View style={styles.shopHintDot} />
+          <Text
+            variant="label"
+            size="sm"
+            color={hex(PALETTE.gold)}
+            style={styles.shopHintText}
+            numberOfLines={2}
+          >
+            {BOSS_HINTS[panel.bossKind]}
+          </Text>
+        </View>
+
         {/* GRID — six cards in a 3-column layout on landscape phones.
             
             The critical piece here is `style={{ flex: 1, minHeight: 0 }}`.
@@ -3274,7 +3300,7 @@ function ShopOverlay({
           contentContainerStyle={styles.shopGrid}
           showsVerticalScrollIndicator={false}
         >
-          {SHOP_CATALOG.map((item) => {
+          {getShopCatalogForBoss(panel.bossKind).map((item) => {
             const blocked = shopItemBlockedReason(item, {
               essence: panel.essence,
               purchased: panel.purchased,
@@ -4049,6 +4075,36 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
     fontVariant: ["tabular-nums"],
     textAlign: "right",
+  },
+
+  // One-line boss framing under the header. Diamond glyph + gold text
+  // sitting on a hairline background so it reads as a system message,
+  // not a card. Vertical margin is deliberately tight — the goal is
+  // to say "this fight is about X" once, then get out of the way.
+  shopHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderCurve: "continuous",
+    backgroundColor: "rgba(255,201,74,0.08)",
+    borderWidth: 0.5,
+    borderColor: "rgba(255,201,74,0.22)",
+  },
+  shopHintDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 2,
+    borderCurve: "continuous",
+    transform: [{ rotate: "45deg" }],
+    backgroundColor: hex(PALETTE.gold),
+  },
+  shopHintText: {
+    flexShrink: 1,
+    letterSpacing: 0.2,
+    fontStyle: "italic",
   },
 
   // Grid container. The ScrollView itself takes the leftover flex-1

@@ -63,6 +63,19 @@ export function createPlayer(): Player {
     pogoRefund: false,
     squashX: 1,
     squashY: 1,
+    // Counter items are all off/neutral until the shop grants one.
+    // Cleared on death via resetPlayer; also cleared on room exit by
+    // the orchestrator so a buff bought at Gorge doesn't leak into
+    // the next branch's corridor.
+    jumpBoostTimer: 0,
+    iFramesMult: 1,
+    knockbackImmune: false,
+    piercingBolt: false,
+    bulwarks: 0,
+    spikeImmune: false,
+    airControlMult: 1,
+    pullImmune: false,
+    choirSlowMult: 1,
     alive: true,
   };
 }
@@ -103,6 +116,18 @@ export function resetPlayer(p: Player, opts?: { maxHearts?: number }): void {
   p.pogoRefund = false;
   p.squashX = 1;
   p.squashY = 1;
+  // Counter items always clear on respawn — you can't sneak a buff
+  // through a death because that would break the "buy at the door"
+  // fantasy of the shop.
+  p.jumpBoostTimer = 0;
+  p.iFramesMult = 1;
+  p.knockbackImmune = false;
+  p.piercingBolt = false;
+  p.bulwarks = 0;
+  p.spikeImmune = false;
+  p.airControlMult = 1;
+  p.pullImmune = false;
+  p.choirSlowMult = 1;
   p.alive = true;
 }
 
@@ -250,7 +275,11 @@ export function updatePlayer(
     p.vx = p.dashDir * PLAYER.dashSpeed;
   } else {
     const targetVx = input.moveX * PLAYER.maxSpeed;
-    const accelMult = p.onGround ? 1 : PLAYER.airAccelMult;
+    // Air control multiplier applies the Sure Foot buff — a card bought
+    // for the Thorn Warden fight where the ground is the hazard and
+    // the platforms above it are the only safe footing. Higher air
+    // accel = you actually get to the platform you aimed for.
+    const accelMult = p.onGround ? 1 : PLAYER.airAccelMult * p.airControlMult;
     const frictionMult = p.onGround ? 1 : PLAYER.airFrictionMult;
 
     if (Math.abs(input.moveX) > 0.01) {
@@ -261,6 +290,13 @@ export function updatePlayer(
     } else {
       p.vx = approach(p.vx, 0, PLAYER.friction * frictionMult * dt);
     }
+  }
+
+  // Timers on counter-item buffs. Only jumpBoostTimer counts down
+  // here — the rest are booleans/mults cleared per-fight by the
+  // orchestrator when the boss dies or the player leaves the room.
+  if (p.jumpBoostTimer > 0) {
+    p.jumpBoostTimer = Math.max(0, p.jumpBoostTimer - dt);
   }
 
   // ---- Jump / Air dash -------------------------------------------------
@@ -280,7 +316,12 @@ export function updatePlayer(
   const buffered = p.timeSinceJumpPress <= PLAYER.jumpBuffer;
 
   if (buffered && canCoyote && !p.jumping) {
-    p.vy = PLAYER.jumpVelocity;
+    // Jump Boots (bought for the Gorge Mother fight where the ground
+    // is unsafe on every landing): a 30% velocity bump reads as ~60%
+    // more airtime because peak-height scales with v². That's exactly
+    // one more platform of clearance.
+    const jumpMult = p.jumpBoostTimer > 0 ? 1.3 : 1;
+    p.vy = PLAYER.jumpVelocity * jumpMult;
     p.jumping = true;
     p.onGround = false;
     p.timeOffGround = PLAYER.coyoteTime + 1; // spend the coyote window
@@ -406,18 +447,48 @@ export function tryFire(p: Player, input: InputState, events: PlayerEvents): boo
 /**
  * Applies a hit. Returns false when the hit was ignored (i-frames), so the
  * caller knows whether to play feedback.
+ *
+ * Damage resolution order (with counter items):
+ *   1. i-frames  → skip
+ *   2. bulwarks  → absorb, no heart cost, no knockback bypass
+ *   3. shield    → absorb, i-frames + knockback still applied
+ *   4. hearts    → lose one
+ *
+ * Bulwarks come BEFORE shields because a bulwark is the "next hit is
+ * free" counter item you buy for a specific boss. It should burn on
+ * the very next hit, before your general-purpose shield burns.
+ * Knockback and i-frames are still applied on a bulwark absorb so the
+ * player still gets pushed clear of the source and can't be re-hit
+ * on the following frame.
  */
 export function damagePlayer(p: Player, fromX: number): boolean {
   if (!p.alive || p.invulnerable > 0) return false;
 
   const away = p.x >= fromX ? 1 : -1;
+  // iFramesMult expands the recovery window — Featherfall doubles it.
+  // Knockback goes to zero entirely if the player has Anchor, which is
+  // the whole point of that item (Nightwing dives push you off the
+  // platform you were just standing on).
+  const iFrames = PLAYER.iFrames * p.iFramesMult;
   const knock = () => {
-    p.vx = away * PLAYER.knockbackX;
-    p.vy = PLAYER.knockbackY;
-    p.onGround = false;
-    p.jumping = false;
-    p.invulnerable = PLAYER.iFrames;
+    if (p.knockbackImmune) {
+      p.vx = 0;
+      p.vy = 0;
+    } else {
+      p.vx = away * PLAYER.knockbackX;
+      p.vy = PLAYER.knockbackY;
+      p.onGround = false;
+      p.jumping = false;
+    }
+    p.invulnerable = iFrames;
   };
+
+  // Bulwark first — it's the boss-specific "next hit ignored" item.
+  if (p.bulwarks > 0) {
+    p.bulwarks -= 1;
+    knock();
+    return true;
+  }
 
   // Shield absorbs the hit before it touches hearts. The player still
   // gets the i-frames and the knockback so the save reads as a real hit
