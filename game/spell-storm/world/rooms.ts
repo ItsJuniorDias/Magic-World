@@ -395,27 +395,7 @@ function stairs(
   return out;
 }
 
-/**
- * Evenly spaced platforms across a span, alternating height. Great
- * for the shafts and towers in Spire, Cistern and the taller rooms.
- *
- * CLIMBING INVARIANTS (v3.6)
- *
- * Every vertical room in the game must obey two rules so the player
- * can climb it on plain jumps, without needing frame-perfect air
- * dashes:
- *
- *   dy between adjacent platforms  ≤ 4.5wu   (jump peak is 5.6)
- *   dx between adjacent platforms  ≤ 6.5wu   (horizontal max is 8.5)
- *
- * `ledges(from, to, count, ...)` produces `(to - from) / (count - 1)`
- * step. To stay within 6.5wu, pick count so `(to-from)/(count-1) ≤
- * 6.5`. Example: a 44wu span (-22 to 22) needs count ≥ 8 to stay
- * legal (44/7 = 6.29 ≤ 6.5).
- *
- * Wider `halfW` values (2.0+) forgive pouso alignment and are the
- * cheapest way to reduce mistake cost on a first climb.
- */
+/** Evenly spaced platforms across a span, alternating height. */
 function ledges(
   from: number,
   to: number,
@@ -432,6 +412,43 @@ function ledges(
   return out;
 }
 
+/**
+ * THE STANDARD CLIMBING PRIMITIVE (v3.7)
+ *
+ * Three stacked steps up to a top gate. This is the ONLY vertical
+ * traversal pattern in the game — every room that needs the player
+ * to change altitude to reach a gate uses this and only this.
+ *
+ * Design intent (Alexandre, 07/2026): climbing must be trivial. Not
+ * challenging, not "readable" — trivial. A four-year-old on their
+ * first try must be able to see the steps and walk up them. So:
+ *
+ *   Step heights:  y = 3, 6, 9
+ *   Horizontal offset per step: 2wu, gently zig-zagging toward gateX
+ *   halfW: 2.4 (wide) — pouso is forgiving
+ *
+ * `dir` picks which side the run starts on; the top step lands at
+ * gateX itself so the player pulling up feels like they walked
+ * straight into the door. Use dir=1 for a left-anchored gate
+ * (steps come from the right), dir=-1 for a right-anchored gate.
+ *
+ * From step 3 (y=9) the player's jump peak reaches y=14.6, which
+ * catches any top-gate detector at ceilingY ≤ 17.8. New rooms with
+ * a top gate should keep ceilingY around 15 for that reason.
+ *
+ * The steps ALSO serve the reverse direction: a player falling
+ * through the top gate from ABOVE lands on step 3, then step 2, then
+ * step 1, then ground — a three-hop cascade instead of a dropzone.
+ * Same platforms, no extra design.
+ */
+function stepUp(gateX: number, dir: 1 | -1 = 1): Platform[] {
+  return [
+    p(gateX - dir * 4, 3.0, 2.4),
+    p(gateX - dir * 2, 6.0, 2.4),
+    p(gateX, 9.0, 2.4),
+  ];
+}
+
 // ---------------------------------------------------------------------------
 // The rooms
 // ---------------------------------------------------------------------------
@@ -446,15 +463,22 @@ export const ROOMS: Record<string, Room> = {
     biome: "hollow",
     minX: -38,
     maxX: 38,
-    ceilingY: 22,
+    // Ceiling dropped 22 → 15 in the v3.7 climbing simplification.
+    // With the new stepUp() primitive, y=9 is the top step and jump
+    // peak from there is 14.6, which comfortably clears any top-gate
+    // detector at ceilingY ≤ 17.8.
+    ceilingY: 15,
     platforms: [
-      p(-24, 4.2, 3.4),
-      p(-12, 7.6, 3.0),
-      p(0, 4.6, 4.2),
-      p(12, 7.6, 3.0),
-      p(24, 4.2, 3.4),
-      // The climb to the sealed Storm Gate, high on the right wall.
-      ...stairs(21, 11.0, 4, 3.9, 2.6, 1.7),
+      // Three steps up to the top gate (spire_hall) at x=-12.
+      // dir=1 means the run starts to the RIGHT of the gate and
+      // walks up-left into it — mirrors how the player naturally
+      // approaches from the room's centre.
+      ...stepUp(-12, 1),
+      // Three steps up to the sealed storm gate (right wall, y=2.2
+      // → repositioned in the simplification below to y=9 so the
+      // final step sits inside its detector). See the gate entry —
+      // storm.at moved from 20.4 to 9.
+      ...stepUp(30, -1),
     ],
     solids: [],
     // The pit sits well clear of the bench at x=0. A hole under the spawn
@@ -470,7 +494,10 @@ export const ROOMS: Record<string, Room> = {
       {
         id: "storm",
         side: "right",
-        at: 20.4,
+        // Was y=20.4 — that sat above the old 22wu ceiling. Repositioned
+        // to y=9 as part of the v3.7 pass so the top step of the
+        // stepUp(30, -1) run lands the player directly in the trigger.
+        at: 9,
         size: 4.6,
         to: "storm_ascent",
         toGate: "w",
@@ -492,15 +519,12 @@ export const ROOMS: Record<string, Room> = {
     biome: "fungal",
     minX: -52,
     maxX: 52,
-    ceilingY: 26,
+    // Ceiling dropped 26 → 15 in v3.7. See stepUp() docs.
+    ceilingY: 15,
     platforms: [
-      ...ledges(-44, -8, 6, 3.4, 6.8, 2.2),
-      p(4, 4.0, 3.6),
-      p(16, 7.2, 2.8),
-      p(30, 4.4, 3.2),
-      p(42, 8.0, 2.6),
-      // Column up to the Thorn gate in the ceiling.
-      ...stairs(-30, 10.5, 5, 2.6, 2.9, 1.6),
+      // Three steps up to the top gate (thorn_gate) at x=-20.
+      // dir=1 means the run starts at x=-16 and walks left up to -20.
+      ...stepUp(-20, 1),
     ],
     solids: [],
     floorGaps: [],
@@ -666,35 +690,11 @@ export const ROOMS: Record<string, Room> = {
     biome: "spire",
     minX: -40,
     maxX: 40,
-    ceilingY: 30,
-    // v3.6 climbing rewrite: same principle as spire_climb — every jump
-    // fits inside the base movement budget without requiring air-dash.
-    //
-    // Before this pass, the ground-floor platforms sat at dx=14 apart
-    // (well past the 8.5wu horizontal jump ceiling), so getting from
-    // the ground to the ceiling shaft required chaining air-dashes on
-    // each hop. Now every step is dx≤7, dy≤2.8 — a slow, deliberate
-    // climb that a first-time player can complete on plain jumps.
+    ceilingY: 15,
     platforms: [
-      // Left-side spiral upward: five plats leading to the shaft.
-      p(-30, 4.6, 3.0),
-      p(-23, 7.4, 2.4),
-      p(-16, 8.4, 2.6),
-      p(-9, 10.6, 2.4),
-      p(-2, 12.2, 2.4),
-      // Right-side descent: mirror path back down to the ground.
-      p(5, 10.6, 2.4),
-      p(12, 8.4, 2.6),
-      p(19, 6.4, 2.4),
-      p(26, 4.6, 3.0),
-      // Transition plat from the central peak into the shaft head.
-      // Without this, (-2, 12.2) → shaft base (-10, 15.6) is dx=8,
-      // right at the horizontal jump ceiling and NOT forgiving.
-      p(-6, 14.0, 2.0),
-      // The shaft up — 7 plats instead of 6 (step 3.33 → 4 across —
-      // both under 6.5) so alternating sides reads as a rhythm, not
-      // a puzzle.
-      ...ledges(-10, 10, 7, 15.6, 19.4, 2.0),
+      // Three steps up to spire_climb (top gate at x=0). dir=1 starts
+      // the run at x=-4.
+      ...stepUp(0, 1),
     ],
     solids: [],
     floorGaps: [gap(6, 3.2)],
@@ -713,72 +713,34 @@ export const ROOMS: Record<string, Room> = {
     biome: "spire",
     minX: -30,
     maxX: 30,
-    ceilingY: 62,
-    // A genuinely tall room. The camera has to follow vertically here, which
-    // is the reason CAMERA.followY was replaced with a proper deadzone rig.
-    //
-    // v3.6 CLIMBING REWRITE
-    //
-    // The previous layout used 5 platforms per floor across 44wu of
-    // horizontal space, so each floor's step was 44/4 = 11wu — LARGER
-    // than the max horizontal jump distance (8.5wu). And the same-column
-    // gap between alternating floors was 8.4wu vertical — larger than
-    // the max jump peak (5.6wu). Every single transition required a
-    // frame-perfect air-dash, and air-dash regenerates ONLY on ground
-    // contact. In practice: the climb was unwinnable without expert
-    // execution.
-    //
-    // The new layout follows two invariants shared across every room
-    // in the game with vertical traversal:
-    //
-    //   dy between platforms ≤ 4.5wu  (peak jump is 5.6, leaves ~1wu
-    //                                   of slack for imprecise timing)
-    //   dx between platforms ≤ 6.5wu  (max horizontal is 8.5, leaves
-    //                                   ~2wu of slack for pouso alignment)
-    //
-    // Dash is now a SHORTCUT, not a requirement — every platform is
-    // reachable from at least one other platform on a plain jump.
-    //
-    // Density decreases with height (8 plats per floor at the base,
-    // dropping to 4 near the top) so the climb READS as ascending
-    // into thinner air rather than a uniform ladder.
+    // v3.7: was 62wu tall — a vertical shaft the player couldn't
+    // climb without dash-chaining. Cut to 15 and reworked as a
+    // short corridor with the right gate lowered to floor level:
+    // walk right, done. No vertical challenge here; the challenge
+    // is the Nightwing fight on the other side.
+    ceilingY: 15,
     platforms: [
-      // Floor 1 — 8 plats, step 6.29, dy interno 3.6
-      ...ledges(-22, 22, 8, 4.6, 8.2, 2.2),
-      // Floor 2 — dy 3.6 entre andares, step 6.29
-      ...ledges(-22, 22, 8, 11.8, 15.4, 2.0),
-      // Floor 3
-      ...ledges(-22, 22, 8, 19.0, 22.6, 2.0),
-      // Floor 4 — reduzindo densidade (7 plats)
-      ...ledges(-20, 20, 7, 26.2, 29.8, 2.0),
-      // Floor 5 (6 plats)
-      ...ledges(-18, 18, 6, 33.4, 37.0, 2.0),
-      // Floor 6 (5 plats)
-      ...ledges(-14, 14, 5, 40.6, 44.2, 1.9),
-      // Floor 7 (4 plats)
-      ...ledges(-10, 10, 4, 47.8, 51.4, 1.9),
-      // Pico central — landmark visual antes do gate lateral
-      p(0, 55.0, 3.0),
-      // Trilha final subindo pro right gate em (30, 56).
-      // Right gate detector: x >= 28.6, y ~= 53.3-58.7.
-      // (14, 50.6) → (20, 53) → (26, 55): dx=6/6/6, dy=2.4/2/2 —
-      // três pulos curtos que levam ao pouso final colado no gate.
-      p(14, 50.6, 2.0),
-      p(20, 53.0, 2.0),
-      p(26, 55.0, 2.5),
+      // Three steps up to spire_hall (bottom gate at x=0).
+      // The bottom gate is a floorGap; these steps let a player
+      // returning UP from spire_hall land softly instead of falling
+      // straight to the floor.
+      ...stepUp(0, 1),
     ],
     solids: [],
     floorGaps: [gap(0, 3.0)],
-    hazards: [spike(-8, 0.3, 3.0), spike(10, 0.3, 3.0)],
+    hazards: [],
     gates: [
       { id: "s", side: "bottom", at: 0, size: 6.4, to: "spire_hall", toGate: "n" },
-      { id: "e", side: "right", at: 56.0, size: 5.4, to: "nightwing_perch", toGate: "w" },
+      // Right gate lowered 56 → 2.2 as part of the v3.7 pass. The
+      // room used to be 62wu tall specifically to place this gate
+      // high in the wall; now that the vertical shaft is gone the
+      // gate sits at floor level like every other lateral door.
+      { id: "e", side: "right", at: 2.2, size: 5.4, to: "nightwing_perch", toGate: "w" },
     ],
     spawns: [
       at("bat", -14, 8),
-      at("wisp", -8, 24),
-      at("bat", 6, 32),
-      at("bat", -10, 48),
+      at("wisp", -8, 10),
+      at("bat", 6, 9),
     ],
     bench: { x: -24 },
     map: { col: 3, row: 0 },
@@ -906,35 +868,15 @@ export const ROOMS: Record<string, Room> = {
     biome: "void",
     minX: -34,
     maxX: 34,
-    ceilingY: 44,
+    // v3.7: was 44wu tall. Cut to 15 and stripped of the zig-zag
+    // stair columns. Now: three steps up to the top gate (return
+    // to ember_forge), a floor gap down to void_vault. Simple.
+    ceilingY: 15,
     platforms: [
-      ...stairs(-26, 36.0, 6, 5.0, -4.4, 2.0),
-      ...stairs(24, 12.0, 5, -5.0, -1.9, 2.0),
-      p(0, 4.6, 3.6),
-      // Rota de retorno pelo topo direito.
-      //
-      // Bug fix de 07/2026: void_stair era estruturalmente unwinnable.
-      // O top gate está em (22, 44) — detector dispara em y >= 40.8. A
-      // plataforma mais alta do lado direito era (24, 12), e a mais alta
-      // da sala inteira era (-26, 36) do lado ESQUERDO. Com pulo máximo
-      // ~5.6wu, era geometricamente impossível chegar em (22, 40.8) a
-      // partir de qualquer plataforma existente: 48wu horizontais até a
-      // parede oposta, sem plataformas intermediárias no lado direito.
-      //
-      // Entrando por cima vindo de ember_forge, a única saída era morrer
-      // ou fazer o Voidmaw. Sair pra desistir da branch era impossível.
-      //
-      // Zig-zag entre x=25 e x=31 subindo, terminando bem abaixo do gate.
-      // dy=4.6 mantém folga confortável em relação ao pulo máximo.
-      p(30, 4.8, 2.0),
-      p(28, 9.4, 1.9),
-      p(31, 14.0, 1.9),
-      p(27, 18.6, 1.9),
-      p(30, 23.2, 1.9),
-      p(26, 27.8, 1.9),
-      p(29, 32.4, 1.9),
-      p(25, 37.0, 1.9),
-      p(22, 40.6, 2.2),
+      // Three steps up to the top gate at x=22 (return to ember_forge).
+      // dir=-1 means the run starts at x=26 and walks left-up to 22 —
+      // toward the centre so the bench (x=26) sits at the base of it.
+      ...stepUp(22, -1),
     ],
     solids: [],
     floorGaps: [gap(-14, 3.0)],
@@ -944,8 +886,8 @@ export const ROOMS: Record<string, Room> = {
       { id: "s", side: "bottom", at: -14, size: 5.6, to: "void_vault", toGate: "n" },
     ],
     spawns: [
-      at("wisp", -20, 30),
-      at("bat", -6, 24),
+      at("wisp", -20, 10),
+      at("bat", -6, 9),
       at("golem", 18),
     ],
     bench: { x: 26 },
@@ -958,11 +900,21 @@ export const ROOMS: Record<string, Room> = {
     biome: "void",
     minX: -30,
     maxX: 30,
-    ceilingY: 24,
+    // Voidmaw arena — ceiling reduced 24 → 18 to fit the stepUp run
+    // to the top gate without shrinking the fight space too much.
+    ceilingY: 18,
     // Voidmaw drags you toward the centre, so the platforms sit wide: the
     // fight is about fighting the pull to reach the edges, and there has to
-    // be somewhere worth reaching.
-    platforms: [p(-22, 5.6, 3.0), p(-9, 10.0, 2.4), p(9, 10.0, 2.4), p(22, 5.6, 3.0)],
+    // be somewhere worth reaching. Wide arena plats stay; three steps go
+    // up to the top gate for the walk-back after the kill.
+    platforms: [
+      p(-22, 5.6, 3.0),
+      p(-9, 10.0, 2.4),
+      p(9, 10.0, 2.4),
+      p(22, 5.6, 3.0),
+      // Three steps up to the top gate at x=0 (return to void_stair).
+      ...stepUp(0, 1),
+    ],
     solids: [],
     floorGaps: [],
     hazards: [],
@@ -983,32 +935,13 @@ export const ROOMS: Record<string, Room> = {
     biome: "cistern",
     minX: -32,
     maxX: 32,
-    ceilingY: 46,
-    // v3.6 climbing rewrite: same invariants as spire_climb.
-    //
-    // The old layout had 5 platforms per floor at dx≥10 and dy≥6
-    // between floors — both larger than the movement budget. The
-    // room reads as a fall (which is fine going DOWN — you enter
-    // from the top and fall through) but was unwinnable coming back
-    // up. New layout increases plat count per floor to 6-8 and cuts
-    // the vertical gap to 4.
+    // v3.7: was 46wu tall, four floors of ledges. Now just 15 with
+    // three steps up to the top gate. The name is a joke now — the
+    // "fall" is 3 steps, tops.
+    ceilingY: 15,
     platforms: [
-      // Andar 1 — 8 plats, step 6, dy interno 3
-      ...ledges(-21, 21, 8, 8.0, 11.0, 2.0),
-      // Andar 2 — dy 4 do topo do andar 1
-      ...ledges(-21, 21, 8, 15.0, 18.0, 2.0),
-      // Andar 3
-      ...ledges(-21, 21, 8, 22.0, 25.0, 2.0),
-      // Andar 4 — reduz para 7 plats (step 6.33)
-      ...ledges(-19, 19, 7, 29.0, 32.0, 2.0),
-      // Andar 5 — 6 plats, step 6
-      ...ledges(-15, 15, 6, 36.0, 39.0, 2.0),
-      // Plataforma final abaixo do top gate (0, 46). Detector em
-      // y>=42.8, então (0, 42.5) sobe um pulo curto e dispara.
-      p(0, 42.5, 3.0),
-      // Plats de chão junto ao spike bed — pouso seguro pra retomar.
-      p(-24, 4.6, 3.0),
-      p(24, 4.6, 3.0),
+      // Three steps up to the top gate (back to crossroads).
+      ...stepUp(0, 1),
     ],
     solids: [],
     floorGaps: [gap(0, 3.4)],
@@ -1025,8 +958,8 @@ export const ROOMS: Record<string, Room> = {
       { id: "s", side: "bottom", at: 0, size: 6.2, to: "cistern_choir", toGate: "n" },
     ],
     spawns: [
-      at("bat", -14, 40),
-      at("wisp", 6, 15),
+      at("bat", -14, 9),
+      at("wisp", 6, 10),
       at("slime", -20),
     ],
     map: { col: 3, row: 3 },
@@ -1038,13 +971,10 @@ export const ROOMS: Record<string, Room> = {
     biome: "cistern",
     minX: -54,
     maxX: 54,
-    ceilingY: 26,
+    ceilingY: 15,
     platforms: [
-      ...ledges(-46, -10, 6, 4.8, 9.4, 2.2),
-      p(4, 5.8, 3.4),
-      p(18, 10.2, 2.6),
-      p(32, 5.8, 3.0),
-      p(44, 10.0, 2.6),
+      // Three steps up to the top gate at x=-30 (back to cistern_fall).
+      ...stepUp(-30, 1),
     ],
     solids: [],
     floorGaps: [],
@@ -1065,7 +995,7 @@ export const ROOMS: Record<string, Room> = {
     spawns: [
       at("wisp", -40, 9),
       at("golem", 6),
-      at("bat", 40, 13),
+      at("bat", 40, 10),
     ],
     bench: { x: 48 },
     map: { col: 3, row: 4 },
@@ -1099,11 +1029,21 @@ export const ROOMS: Record<string, Room> = {
     biome: "storm",
     minX: -40,
     maxX: 40,
-    ceilingY: 34,
+    // Was 34wu tall with a stairs column climbing to a mid-air ledge.
+    // v3.7: flattened. No top gate here — the exit is right-side to
+    // Storm Throne — so no climbing primitive is needed. A few low
+    // platforms give the player somewhere to stand between the two
+    // spike beds; that's all the vertical the room needs.
+    ceilingY: 15,
     platforms: [
-      ...stairs(-32, 5.0, 6, 5.4, 2.6, 2.0),
-      p(6, 20.6, 3.0),
-      ...stairs(16, 16.4, 4, 5.6, -2.6, 2.0),
+      // Low plats spanning the corridor, letting the player hop over
+      // the spikes at x=-6 and x=30. Each is halfW=2.4 with dx≈8,
+      // inside the horizontal jump budget (8.5wu).
+      p(-24, 3.0, 2.4),
+      p(-14, 3.0, 2.4),
+      p(2, 3.0, 2.4),
+      p(18, 3.0, 2.4),
+      p(34, 3.0, 2.4),
     ],
     solids: [],
     floorGaps: [],
@@ -1114,8 +1054,8 @@ export const ROOMS: Record<string, Room> = {
     ],
     spawns: [
       at("golem", -26),
-      at("bat", 0, 16),
-      at("wisp", 28, 11),
+      at("bat", 0, 9),
+      at("wisp", 28, 10),
     ],
     bench: { x: -36 },
     map: { col: 4, row: 1 },
