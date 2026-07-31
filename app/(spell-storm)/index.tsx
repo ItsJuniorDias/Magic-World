@@ -367,6 +367,17 @@ export default function SpellStormScreen() {
                 typeof parsed.bonusMaxHearts === "number"
                   ? Math.max(0, Math.min(VESSEL_CAP, parsed.bonusMaxHearts))
                   : 0,
+              // Cutscene / NPC tracking added in the story pass. Old
+              // saves start with empty arrays — the player just gets
+              // to (re-)see any cutscenes they hadn't earned yet.
+              watchedCutscenes: Array.isArray(parsed.watchedCutscenes)
+                ? parsed.watchedCutscenes.filter(
+                    (id: unknown) => typeof id === "string",
+                  )
+                : [],
+              metNpcs: Array.isArray(parsed.metNpcs)
+                ? parsed.metNpcs.filter((id: unknown) => typeof id === "string")
+                : [],
             };
           } catch {
             progressRef.current = createDefaultProgress();
@@ -740,6 +751,38 @@ export default function SpellStormScreen() {
     setHud({ ...game.hud });
   }, []);
 
+  // ---- Dialogue ----------------------------------------------------------
+  //
+  // Three imperative surfaces, all trivial. Advance is what a tap on the
+  // dialogue bubble does; skip is the header button on cutscenes; talk is
+  // the "TAP TO TALK" prompt above the mage when an NPC is in range.
+  //
+  // Same push-HUD-immediately pattern as the shop so the overlay reacts
+  // on the tap frame instead of after the 10Hz poll tick.
+  const handleDialogueAdvance = useCallback(() => {
+    const game = gameRef.current;
+    if (!game) return;
+    Haptics.selectionAsync().catch(() => {});
+    game.advanceDialogue();
+    setHud({ ...game.hud });
+  }, []);
+
+  const handleDialogueSkip = useCallback(() => {
+    const game = gameRef.current;
+    if (!game) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    game.skipDialogue();
+    setHud({ ...game.hud });
+  }, []);
+
+  const handleTalkToNpc = useCallback(() => {
+    const game = gameRef.current;
+    if (!game) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    game.talkToNpc();
+    setHud({ ...game.hud });
+  }, []);
+
   // ---- Render ------------------------------------------------------------
   const playing =
     hud.phase === "playing" ||
@@ -1037,9 +1080,13 @@ export default function SpellStormScreen() {
         Hidden during the shop phase — the overlay owns the whole screen
         while the player is deciding what to buy, and a live stick under
         a modal is a great way to fall out of the room the moment they
-        press "Enter the arena".
+        press "Enter the arena". Also hidden during cutscenes and
+        NPC dialogues for the same reason — no accidental jumps mid-line.
       */}
-      {ready && playing && !mapOpen && hud.phase !== "shop" && (
+      {ready && playing && !mapOpen &&
+        hud.phase !== "shop" &&
+        hud.phase !== "cutscene" &&
+        hud.phase !== "dialogue" && (
         <>
           <View style={styles.stickZone} {...stickResponder.panHandlers}>
             {stickOrigin && (
@@ -1140,6 +1187,58 @@ export default function SpellStormScreen() {
               ? `${progressRef.current?.bosses.length}/7 sigils · ${progressRef.current?.discovered.length} rooms found`
               : undefined
           }
+        />
+      )}
+
+      {/* ---------------- TAP TO TALK prompt ----------------
+        Shown when the player is in an NPC's interaction radius. Sits
+        just above the mage, subtle so it doesn't fight with the boss
+        bar when both would render, and clearly tappable to disambiguate
+        it from the passive prompt that also floats over the NPC in the
+        world (that one just glows, this one lets you actually talk).
+      */}
+      {ready && playing && hud.phase === "playing" && hud.nearbyNpc && (
+        <View
+          style={[styles.talkWrap, { bottom: insets.bottom + 118 }]}
+          pointerEvents="box-none"
+        >
+          <Pressable onPress={handleTalkToNpc} hitSlop={12}>
+            <Glass style={styles.talkPill} radius={16}>
+              <View style={styles.talkInner}>
+                <View
+                  style={[
+                    styles.talkGlyph,
+                    { backgroundColor: hex(PALETTE.gold) },
+                  ]}
+                />
+                <Text
+                  variant="label"
+                  size="sm"
+                  color={hex(PALETTE.gold)}
+                  style={styles.talkLabel}
+                >
+                  TALK TO {hud.nearbyNpcName.toUpperCase()}
+                </Text>
+              </View>
+            </Glass>
+          </Pressable>
+        </View>
+      )}
+
+      {/* ---------------- Dialogue overlay ----------------
+        Fires for boss cutscenes (kind="bossIntro", "bossDefeat",
+        "epilogue") and NPC chats (kind="npc"). Same overlay body —
+        speaker card, line body, tap-to-advance affordance — but with
+        a "SKIP" header button only on boss cutscenes, since NPC chats
+        are already short enough that skipping is more effort than
+        reading.
+      */}
+      {ready && hud.dialogue && (
+        <DialogueOverlay
+          dialogue={hud.dialogue}
+          onAdvance={handleDialogueAdvance}
+          onSkip={handleDialogueSkip}
+          insets={insets}
         />
       )}
 
@@ -2375,6 +2474,248 @@ function Loader({
 }
 
 // ---------------------------------------------------------------------------
+// Dialogue overlay
+//
+// Drives both boss cutscenes and NPC chats. The design keeps the game world
+// visible behind a light dim rather than the near-opaque backdrop of the
+// shop — the whole point of the cutscene is to see the boss's room, the
+// whole point of an NPC chat is to see where you are while listening.
+//
+// Layout:
+//
+//   [ header ]     boss name + subtitle when this is a boss cutscene;
+//                  NPC name for NPC chats; empty for narrator lines.
+//
+//   [ body   ]     the current line, big enough to read from arm's length.
+//                  Speaker names live above the body so the eye locks on
+//                  who's talking before what they're saying.
+//
+//   [ footer ]     "TAP TO CONTINUE" hint + progress dots (index/total).
+//
+// The whole surface is pressable — tap anywhere to advance — because a
+// dedicated "next" button in the corner is a target you have to look
+// for. The tap-anywhere pattern reads as "you are reading, tap when
+// done" without any UI vocabulary.
+//
+// SKIP behaves differently by dialogue kind:
+//   - bossIntro   → visible; skips to the shop (some players re-run)
+//   - npc         → hidden; NPC chats are 4-6 lines, skip is overkill
+//   - bossDefeat  → visible; if the fight was hard the player wants to
+//                   read it, but a returning player has read it already
+//   - epilogue    → hidden; you EARNED this one
+// ---------------------------------------------------------------------------
+
+interface DialogueOverlayProps {
+  dialogue: NonNullable<HudSnapshot["dialogue"]>;
+  onAdvance: () => void;
+  onSkip: () => void;
+  insets: { top: number; bottom: number; left: number; right: number };
+}
+
+/** Tints per speaker so the eye can lock on who's talking at a glance. */
+const SPEAKER_TINT: Record<string, { face: string; edge: string }> = {
+  mage: { face: hex(PALETTE.arcane), edge: "rgba(196,162,255,0.75)" },
+  boss: { face: hex(PALETTE.heart), edge: "rgba(232,90,120,0.7)" },
+  npc: { face: hex(PALETTE.gold), edge: "rgba(232,197,110,0.7)" },
+  narrator: { face: "rgba(255,255,255,0.6)", edge: "rgba(255,255,255,0.28)" },
+};
+
+function DialogueOverlay({
+  dialogue,
+  onAdvance,
+  onSkip,
+  insets,
+}: DialogueOverlayProps) {
+  const { line, index, total, kind, bossName, bossTitle } = dialogue;
+  const tint = SPEAKER_TINT[line.speaker] ?? SPEAKER_TINT.narrator;
+  const showSkip = kind === "bossIntro" || kind === "bossDefeat";
+  const showHeader = kind === "bossIntro" && bossName;
+
+  return (
+    // Full-surface pressable — tap anywhere on the darkened area to advance.
+    <Pressable style={styles.dialogueSurface} onPress={onAdvance}>
+      {/* Backdrop. Lighter than the shop backdrop so the boss room is
+          still readable behind the text. */}
+      <View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: "rgba(4,2,10,0.44)" },
+        ]}
+      />
+
+      {/* Optional skip button. Top-right so it doesn't compete with the
+          bubble at the bottom. */}
+      {showSkip && (
+        <View
+          style={[
+            styles.dialogueSkip,
+            { top: insets.top + 16, right: insets.right + 20 },
+          ]}
+        >
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              onSkip();
+            }}
+            hitSlop={12}
+          >
+            <Glass style={styles.dialogueSkipBtn} radius={14}>
+              <Text
+                variant="label"
+                size="xs"
+                color="rgba(255,255,255,0.65)"
+                style={styles.dialogueSkipLabel}
+              >
+                SKIP
+              </Text>
+            </Glass>
+          </Pressable>
+        </View>
+      )}
+
+      {/* Header — boss identity for cutscenes. NPC chats and narrator
+          lines skip this entirely; the speaker name in the bubble is
+          enough. */}
+      {showHeader && (
+        <View
+          pointerEvents="none"
+          style={[styles.dialogueHeader, { top: insets.top + 28 }]}
+        >
+          <Text
+            variant="label"
+            size="xs"
+            color="rgba(255,255,255,0.5)"
+            style={styles.dialogueEyebrow}
+          >
+            ENCOUNTER
+          </Text>
+          <Text
+            variant="display"
+            size="lg"
+            color="#FFFFFF"
+            style={styles.dialogueHeaderName}
+            numberOfLines={1}
+          >
+            {bossName}
+          </Text>
+          {!!bossTitle && (
+            <Text
+              variant="body"
+              size="sm"
+              color="rgba(255,255,255,0.58)"
+              numberOfLines={1}
+            >
+              {bossTitle}
+            </Text>
+          )}
+        </View>
+      )}
+
+      {/* Bubble. Sits at the bottom, wide but not full-width, with a
+          coloured leader stripe on the left that carries the speaker
+          tint. The stripe is what makes "who is talking" readable at
+          a glance without portraits. */}
+      <View
+        pointerEvents="none"
+        style={[
+          styles.dialogueBubbleWrap,
+          {
+            bottom: insets.bottom + 32,
+            marginHorizontal: Math.max(insets.left, insets.right, 20) + 40,
+          },
+        ]}
+      >
+        <View style={styles.dialogueBubble}>
+          <BlurView
+            intensity={30}
+            tint="dark"
+            style={StyleSheet.absoluteFill}
+          />
+          <View
+            style={[
+              StyleSheet.absoluteFill,
+              { backgroundColor: "rgba(10,6,20,0.72)" },
+            ]}
+          />
+          <View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFill,
+              {
+                borderRadius: 22,
+                borderCurve: "continuous",
+                borderWidth: 1,
+                borderColor: "rgba(255,255,255,0.14)",
+              },
+            ]}
+          />
+          {/* Leader stripe */}
+          <View
+            pointerEvents="none"
+            style={[styles.dialogueStripe, { backgroundColor: tint.edge }]}
+          />
+          <View style={styles.dialogueBubbleInner}>
+            {line.speaker !== "narrator" && !!line.name && (
+              <Text
+                variant="label"
+                size="sm"
+                style={[styles.dialogueSpeaker, { color: tint.face }]}
+              >
+                {line.name.toUpperCase()}
+              </Text>
+            )}
+            <Text
+              variant={line.speaker === "narrator" ? "body" : "heading"}
+              size="md"
+              color={
+                line.speaker === "narrator"
+                  ? "rgba(255,255,255,0.72)"
+                  : "#FFFFFF"
+              }
+              style={[
+                styles.dialogueBody,
+                line.speaker === "narrator" && styles.dialogueNarrator,
+              ]}
+            >
+              {line.body}
+            </Text>
+
+            {/* Footer — progress dots + hint. */}
+            <View style={styles.dialogueFooter}>
+              <View style={styles.dialogueDots}>
+                {Array.from({ length: total }).map((_, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.dialogueDot,
+                      {
+                        backgroundColor:
+                          i <= index
+                            ? hex(PALETTE.gold)
+                            : "rgba(255,255,255,0.16)",
+                      },
+                    ]}
+                  />
+                ))}
+              </View>
+              <Text
+                variant="label"
+                size="xs"
+                color="rgba(255,255,255,0.5)"
+                style={styles.dialogueHint}
+              >
+                TAP TO CONTINUE
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Shop overlay
 //
 // The pre-boss shop is a full-screen overlay that fires whenever the player
@@ -3341,5 +3682,114 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 18,
     borderCurve: "continuous",
+  },
+
+  // -------- TAP TO TALK prompt --------
+  talkWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  talkPill: {},
+  talkInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  talkGlyph: {
+    width: 8,
+    height: 8,
+    borderRadius: 2,
+    borderCurve: "continuous",
+    transform: [{ rotate: "45deg" }],
+  },
+  talkLabel: { letterSpacing: 1.6 },
+
+  // -------- Dialogue overlay --------
+  //
+  // Full-screen pressable surface — tap anywhere advances. Content is
+  // laid out with absolute-position blocks (header top, bubble bottom)
+  // because a column layout would trap the tap area between them.
+  dialogueSurface: { ...StyleSheet.absoluteFillObject },
+  dialogueSkip: { position: "absolute" },
+  dialogueSkipBtn: { paddingHorizontal: 14, paddingVertical: 8 },
+  dialogueSkipLabel: {
+    letterSpacing: 2,
+    textTransform: "uppercase",
+  },
+  dialogueHeader: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  dialogueEyebrow: {
+    letterSpacing: 2.4,
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  dialogueHeaderName: {
+    letterSpacing: -0.6,
+    textAlign: "center",
+    marginBottom: 2,
+  },
+  dialogueBubbleWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+  },
+  dialogueBubble: {
+    borderRadius: 22,
+    borderCurve: "continuous",
+    overflow: "hidden",
+    minHeight: 140,
+  },
+  dialogueStripe: {
+    position: "absolute",
+    top: 14,
+    bottom: 14,
+    left: 0,
+    width: 4,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
+  },
+  dialogueBubbleInner: {
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    paddingLeft: 22,
+    gap: 8,
+  },
+  dialogueSpeaker: {
+    letterSpacing: 2,
+    textTransform: "uppercase",
+  },
+  dialogueBody: {
+    lineHeight: 26,
+    letterSpacing: -0.1,
+  },
+  dialogueNarrator: {
+    fontStyle: "italic",
+  },
+  dialogueFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 12,
+  },
+  dialogueDots: { flexDirection: "row", gap: 5 },
+  dialogueDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 2,
+    borderCurve: "continuous",
+    transform: [{ rotate: "45deg" }],
+  },
+  dialogueHint: {
+    letterSpacing: 1.8,
+    textTransform: "uppercase",
   },
 });

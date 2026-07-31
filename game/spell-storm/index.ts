@@ -37,6 +37,14 @@ import {
   type ShopItemId,
   type ShopPurchaseResult,
 } from "./systems/shop";
+import { type DialogueLine } from "./systems/dialogue";
+import {
+  BOSS_CUTSCENES,
+  BOSS_DEFEAT_LINES,
+  NPC_SCRIPTS,
+  pickNpcScript,
+} from "./world/dialogueScripts";
+import { findNpc } from "./world/npcs";
 import {
   createPlayer,
   damagePlayer,
@@ -54,6 +62,7 @@ import type {
   AABB,
   GameContext,
   GameHandle,
+  GamePhase,
   GameState,
   HudSnapshot,
   InputState,
@@ -144,6 +153,27 @@ export interface SpellStorm extends GameHandle {
    * "Enter the arena" button.
    */
   closeShop(): void;
+  /**
+   * Advances the active dialogue by one line. When there are no more
+   * lines this closes the dialogue and moves the phase machine on:
+   *   - boss intro cutscene → shop
+   *   - boss defeat cutscene → free play
+   *   - npc chat            → free play
+   *   - epilogue            → victory
+   * No-op if no dialogue is active.
+   */
+  advanceDialogue(): void;
+  /**
+   * Skips the rest of the current dialogue and runs its exit logic. The
+   * shop overlay reads dialogue exit + skip as the same event; the only
+   * difference is the number of taps to get there.
+   */
+  skipDialogue(): void;
+  /**
+   * Starts a chat with the nearby NPC, if any. Called by the "TAP TO
+   * TALK" prompt in the HUD. No-op if the player isn't next to one.
+   */
+  talkToNpc(): void;
 }
 
 export function createDefaultProgress(): Progress {
@@ -154,6 +184,8 @@ export function createDefaultProgress(): Progress {
     benchX: 0,
     essence: 0,
     bonusMaxHearts: 0,
+    watchedCutscenes: [],
+    metNpcs: [],
   };
 }
 
@@ -164,11 +196,18 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
   // ---- Scene graph -------------------------------------------------------
   const progress = options.progress ?? createDefaultProgress();
 
-  const world = createWorld(ctx.scene, ctx.camera, ctx.viewWidth, ctx.viewHeight, {
-    progress,
-    isPro: options.isPro,
-    onProgress: options.onProgress,
-  });
+  const world = createWorld(
+    ctx.scene,
+    ctx.camera,
+    ctx.viewWidth,
+    ctx.viewHeight,
+    {
+      progress,
+      isPro: options.isPro,
+      onProgress: options.onProgress,
+    },
+    kit,
+  );
 
   // Skies are built lazily, one per biome, and toggled by visibility. Eight
   // of them is about 900 vertices total — far cheaper than rebuilding the
@@ -260,6 +299,8 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     blockedGate: null,
     pendingBoss: null,
     shopPurchased: {},
+    dialogue: null,
+    nearbyNpc: null,
   };
 
   const hud: HudSnapshot = {
@@ -291,12 +332,23 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     sealed: null,
     shield: 0,
     shop: null,
+    dialogue: null,
+    nearbyNpc: null,
+    nearbyNpcName: "",
   };
 
   let castFlash = 0;
   let recoil = 0;
   let benchTimer = 0;
   let started = false;
+  /**
+   * Sticky memory of what phase enterRoom asked us to be in on the
+   * far side of a room fade. During the fade-in we force state.phase
+   * back to "transition" so the presenter keeps drawing the black
+   * quad, but once the fade completes we need to know whether to land
+   * in "playing", "shop" or "cutscene".
+   */
+  let arrivalPhase: GamePhase = "playing";
 
   // Reused collision boxes — allocating these per frame would produce
   // thousands of short-lived objects a second.
@@ -416,14 +468,22 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
 
     // Boss.
     //
-    // Two paths. If this room has a boss and it's still standing, we
-    // open the shop before starting the fight — the arena stays sealed
-    // and the boss doesn't spawn until the player commits via
-    // closeShop(). If the boss is already down, we just resume play as
-    // normal; the room is a peaceful walk-through at that point.
+    // Three paths now.
+    //   1. Uncleared boss + first visit → play the intro cutscene, then
+    //      the shop, then the fight. Cutscene sets state.pendingBoss so
+    //      the shop knows what to spawn on close.
+    //   2. Uncleared boss + returning player → skip straight to the
+    //      shop (cutscene was already watched; forcing it every death
+    //      would be cruel).
+    //   3. Cleared boss → resume play normally. The room is peaceful.
     const bossCleared = progress.bosses.includes(roomId);
     if (room.boss && !bossCleared) {
-      openShop(room.boss);
+      const cutsceneSeen = (progress.watchedCutscenes ?? []).includes(roomId);
+      if (cutsceneSeen) {
+        openShop(room.boss);
+      } else {
+        openBossCutscene(room.boss, roomId);
+      }
     } else {
       state.bossActive = false;
       state.bossKind = null;
@@ -434,6 +494,109 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     }
 
     cameraRig.reset(player.x, player.y);
+  }
+
+  /**
+   * Runs the boss's story beat before the shop opens. Same seal + boss
+   * framing as the shop, so the transition from cutscene → shop → fight
+   * feels like one continuous approach rather than three separate
+   * modals.
+   */
+  function openBossCutscene(kind: BossKind, roomId: string): void {
+    const script = BOSS_CUTSCENES[kind];
+    state.phase = "cutscene";
+    state.pendingBoss = kind;
+    state.dialogue = {
+      kind: "bossIntro",
+      scriptId: script.id,
+      lines: script.lines,
+      index: 0,
+      pendingBoss: kind,
+      npcId: null,
+    };
+    state.bossActive = false;
+    state.bossKind = null;
+    setSealed(true);
+    cameraRig.setBossFraming(true);
+    // Mark the cutscene as watched immediately. If the player dies to
+    // the boss and comes back, they skip straight to the shop — a
+    // second forced viewing would sour a good scene.
+    if (!progress.watchedCutscenes) progress.watchedCutscenes = [];
+    if (!progress.watchedCutscenes.includes(roomId)) {
+      progress.watchedCutscenes.push(roomId);
+      options.onProgress?.(progress);
+    }
+  }
+
+  /**
+   * Chat with an NPC. Pauses the sim, brings up the dialogue overlay,
+   * marks the NPC as met on close. The script variant is chosen by how
+   * many bosses have fallen.
+   */
+  function openNpcDialogue(npcId: string): void {
+    const script = pickNpcScript(npcId, progress.bosses.length);
+    if (!script) return;
+    state.phase = "dialogue";
+    state.dialogue = {
+      kind: "npc",
+      scriptId: script.id,
+      lines: script.lines,
+      index: 0,
+      pendingBoss: null,
+      npcId,
+    };
+    if (!progress.metNpcs) progress.metNpcs = [];
+    if (!progress.metNpcs.includes(npcId)) {
+      progress.metNpcs.push(npcId);
+      options.onProgress?.(progress);
+    }
+  }
+
+  /**
+   * Post-kill line the boss speaks as it dissolves. Runs concurrently
+   * with the bossDefeated phase; when the dialogue closes we don't
+   * change phase (that's the death timer's job), so this is more of
+   * an "extra line" than a full state transition.
+   */
+  function openBossDefeatLine(kind: BossKind): void {
+    const script = BOSS_DEFEAT_LINES[kind];
+    if (!script) return;
+    state.dialogue = {
+      kind: "bossDefeat",
+      scriptId: script.id,
+      lines: script.lines,
+      index: 0,
+      pendingBoss: null,
+      npcId: null,
+    };
+    // Don't change phase — bossDefeated is already running and driving
+    // the sim's own timers. The overlay just paints on top.
+  }
+
+  /**
+   * Called when the active dialogue runs out. Different next-steps for
+   * different kinds of dialogue: a boss intro rolls into the shop; an
+   * NPC chat resumes play; a boss defeat line just clears (the phase
+   * timer already knows where to go).
+   */
+  function closeDialogue(): void {
+    const d = state.dialogue;
+    if (!d) return;
+    state.dialogue = null;
+    switch (d.kind) {
+      case "bossIntro":
+        if (d.pendingBoss) openShop(d.pendingBoss);
+        break;
+      case "npc":
+        state.phase = "playing";
+        break;
+      case "bossDefeat":
+        // No phase change — bossDefeated timer owns the exit.
+        break;
+      case "epilogue":
+        state.phase = "victory";
+        break;
+    }
   }
 
   /**
@@ -503,6 +666,10 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
 
     sound("bossDown");
     if (kind) options.onBossDefeated?.(roomId, kind, progress.bosses.length);
+    // Boss's last words. The defeatLine dialogue paints over the
+    // dissolving corpse; the bossDefeated timer keeps ticking behind
+    // it, so the overlay auto-closes with the phase.
+    if (kind) openBossDefeatLine(kind);
   }
 
   function restAtBench(): void {
@@ -647,7 +814,7 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     }
 
     cameraRig.update(dt, player.x, player.y, player.vx, PLAYER.maxSpeed);
-    world.update(cameraRig.focusX, cameraRig.focusY, state.elapsed);
+    world.update(cameraRig.focusX, cameraRig.focusY, state.elapsed, player.x, player.y);
     activeSky?.update(dt, state.elapsed, cameraRig.focusX);
     world.setFade(state.fade);
 
@@ -687,23 +854,18 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
         const gate = state.pendingGate;
         state.pendingGate = null;
         if (gate) enterRoom(gate.to, gate.toGate);
-        // enterRoom sets phase; force it back to transition for the fade-in.
+        // enterRoom set the phase to whatever the new room needs
+        // ("cutscene", "shop", or "playing"). Remember it, then
+        // force back to transition so the fade-in still runs.
+        arrivalPhase = state.phase;
         state.phase = "transition";
         state.fadeDir = -1;
       } else if (state.fadeDir === -1 && state.fade <= 0) {
         state.fade = 0;
         state.fadeDir = 0;
-        const room = world.room;
-        const cleared = progress.bosses.includes(room.id);
-        // If we've just arrived at an uncleared boss room, enterRoom
-        // already flipped the phase to "shop" via openShop. Keep it
-        // there rather than clobbering it with "bossIntro" — the boss
-        // hasn't spawned yet and the overlay needs the sim paused.
-        if (room.boss && !cleared) {
-          state.phase = "shop";
-        } else {
-          state.phase = "playing";
-        }
+        // Restore whatever phase enterRoom asked for.
+        state.phase = arrivalPhase;
+        arrivalPhase = "playing";
       }
 
       presentation(dt);
@@ -934,7 +1096,7 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
       if (near) {
         benchTimer += dt;
         // Half a second of standing still, so you don't save by walking past.
-        if (benchTimer > 0.5 && (player.hearts < PLAYER.maxHearts || progress.bench !== room.id)) {
+        if (benchTimer > 0.5 && (player.hearts < player.maxHearts || progress.bench !== room.id)) {
           restAtBench();
           benchTimer = -3;
         }
@@ -943,6 +1105,19 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
       }
     } else {
       benchTimer = 0;
+    }
+
+    // ---- NPC proximity ---------------------------------------------------
+    // We publish "there is an NPC in range" every frame the player is
+    // close to one; the React layer paints a "TAP TO TALK" prompt off
+    // it. Actually starting the chat is imperative — the player must
+    // press the prompt — so proximity alone doesn't burn a phase
+    // transition. This is the "bench pattern" without the auto-fire.
+    if (player.alive && player.onGround) {
+      const npc = world.nearestNpc(player.x, player.y);
+      state.nearbyNpc = npc ? npc.id : null;
+    } else {
+      state.nearbyNpc = null;
     }
 
     // ---- Falling out of the world ---------------------------------------
@@ -1054,6 +1229,36 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     } else {
       hud.shop = null;
     }
+
+    // Dialogue snapshot for the React overlay. When there is an active
+    // dialogue, publish the currently visible line + progress metadata
+    // (index / total for a "1/5" affordance). Otherwise null.
+    if (state.dialogue) {
+      const line = state.dialogue.lines[state.dialogue.index];
+      if (line) {
+        hud.dialogue = {
+          kind: state.dialogue.kind,
+          line,
+          index: state.dialogue.index,
+          total: state.dialogue.lines.length,
+          bossName: room.bossName ?? "",
+          bossTitle: room.bossTitle ?? "",
+        };
+      } else {
+        hud.dialogue = null;
+      }
+    } else {
+      hud.dialogue = null;
+    }
+
+    // Nearby NPC. Kept as an id + display name so the prompt bubble can
+    // render "TALK TO WREN" without another lookup on the React side.
+    hud.nearbyNpc = state.nearbyNpc;
+    if (state.nearbyNpc && NPC_SCRIPTS[state.nearbyNpc]) {
+      hud.nearbyNpcName = NPC_SCRIPTS[state.nearbyNpc].name;
+    } else {
+      hud.nearbyNpcName = "";
+    }
   }
 
   // ---- Public API --------------------------------------------------------
@@ -1099,6 +1304,30 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
       // spawns the boss with introTime seconds of invulnerability, same
       // as it always has.
       startBossFight(kind);
+      publishHud();
+    },
+
+    advanceDialogue() {
+      if (!state.dialogue) return;
+      state.dialogue.index += 1;
+      if (state.dialogue.index >= state.dialogue.lines.length) {
+        closeDialogue();
+      }
+      publishHud();
+    },
+
+    skipDialogue() {
+      if (!state.dialogue) return;
+      // Jump to the end and let closeDialogue handle the exit rules.
+      state.dialogue.index = state.dialogue.lines.length;
+      closeDialogue();
+      publishHud();
+    },
+
+    talkToNpc() {
+      if (state.phase !== "playing") return;
+      if (!state.nearbyNpc) return;
+      openNpcDialogue(state.nearbyNpc);
       publishHud();
     },
 

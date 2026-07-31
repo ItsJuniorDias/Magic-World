@@ -1,6 +1,10 @@
 import * as THREE from "three";
 import { createRoomStage, type RoomStage } from "../art/roomStage";
+import { createNpc, NPC_INTERACT_RADIUS, type NpcVisual } from "../art/npc";
+import { PaperKit } from "../art/paper";
+import { Disposer } from "../engine/Disposer";
 import { BIOMES, arrivalPoint, findGate, getRoom, ROOMS, type Gate, type Room } from "../world/rooms";
+import { npcsInRoom, type NpcPlacement } from "../world/npcs";
 import type { Progress } from "../types";
 import { setActiveRoom, setSealed } from "./arena";
 
@@ -44,13 +48,20 @@ export interface WorldSystem {
   enter(roomId: string, fromGate: string | null): { x: number; y: number };
   /** Gate the body is currently inside, if any. */
   gateAt(x: number, y: number): GateHit | null;
-  update(cameraX: number, cameraY: number, elapsed: number): void;
+  update(cameraX: number, cameraY: number, elapsed: number, playerX: number, playerY: number): void;
   /** Somewhere safe to stand next to a locked pit. */
   ledgeBeside(gate: Gate): number;
   /** 0 = clear, 1 = black. */
   setFade(v: number): void;
   markBossDefeated(roomId: string): void;
   refreshGateSeals(): void;
+  /**
+   * Nearest NPC placement to the given world position within the
+   * interact radius, or null. Cheap — there is at most one NPC per
+   * room, so the "nearest" case is really "the room's NPC if we're
+   * close enough".
+   */
+  nearestNpc(x: number, y: number): NpcPlacement | null;
   dispose(): void;
 }
 
@@ -67,6 +78,15 @@ export function createWorld(
   viewWidth: number,
   viewHeight: number,
   options: WorldOptions,
+  /**
+   * A PaperKit shared with the top-level orchestrator. NPCs allocate
+   * cards through this so their materials and geometries live under
+   * the same disposer as the mage and the boss. Rooms build their own
+   * kits (per-biome caches), so NPCs deliberately DON'T reuse the
+   * room's kit — they persist across room transitions in memory even
+   * if invisible, which would leak the fungal palette into ember.
+   */
+  npcKit: PaperKit,
 ): WorldSystem {
   const root = new THREE.Group();
   root.name = "world";
@@ -74,6 +94,17 @@ export function createWorld(
 
   let room: Room = getRoom("crossroads");
   let stage: RoomStage | null = null;
+  /**
+   * Live NPC visuals in the current room. Rebuilt on every enter()
+   * because the room they belong to is being torn down. Two-tuple
+   * so we can walk them in update() without a Map lookup per frame.
+   */
+  const npcs: { placement: NpcPlacement; visual: NpcVisual }[] = [];
+
+  function disposeNpcs(): void {
+    for (const n of npcs) n.visual.dispose();
+    npcs.length = 0;
+  }
 
   // ---- Fade quad ---------------------------------------------------------
   // Parented to the camera so it covers the screen regardless of where the
@@ -134,6 +165,7 @@ export function createWorld(
         stage.dispose();
         stage = null;
       }
+      disposeNpcs();
 
       room = getRoom(roomId);
       setActiveRoom(room);
@@ -142,6 +174,14 @@ export function createWorld(
       stage = createRoomStage(room);
       root.add(stage.root);
       applySeals();
+
+      // NPCs. Placed on the floor at their scripted x. A boss room has
+      // no NPC placements, so this loop is a no-op there.
+      for (const placement of npcsInRoom(roomId)) {
+        const visual = createNpc(npcKit, placement.x, placement.hue);
+        stage.root.add(visual.root);
+        npcs.push({ placement, visual });
+      }
 
       if (!options.progress.discovered.includes(roomId)) {
         options.progress.discovered.push(roomId);
@@ -180,11 +220,30 @@ export function createWorld(
       return null;
     },
 
-    update(cameraX, cameraY, elapsed) {
+    update(cameraX, cameraY, elapsed, playerX, playerY) {
       stage?.update(cameraX, cameraY, elapsed);
+      // NPC visuals: tell each one whether the player is inside its
+      // interaction radius so the prompt lights up. Position update is
+      // just the bob — NPCs don't move.
+      for (const n of npcs) {
+        const dx = playerX - n.placement.x;
+        const dy = playerY + 0.9 - 1.2; // roughly chest-height difference
+        const near = Math.hypot(dx, dy) < NPC_INTERACT_RADIUS;
+        n.visual.setNear(near);
+        n.visual.update(elapsed, playerX, playerY);
+      }
     },
 
     ledgeBeside,
+
+    nearestNpc(x, y) {
+      for (const n of npcs) {
+        const dx = x - n.placement.x;
+        const dy = y + 0.4 - 1.0;
+        if (Math.hypot(dx, dy) < NPC_INTERACT_RADIUS) return n.placement;
+      }
+      return null;
+    },
 
     setFade(v) {
       const clamped = Math.max(0, Math.min(1, v));
@@ -204,6 +263,7 @@ export function createWorld(
     },
 
     dispose() {
+      disposeNpcs();
       stage?.dispose();
       stage = null;
       fadeQuad.removeFromParent();

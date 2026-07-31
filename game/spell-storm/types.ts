@@ -1,6 +1,7 @@
 import type * as THREE from "three";
 import type { BossKind, EnemyKind, PickupKind, WeaponId } from "./config";
 import type { ShopItemId } from "./systems/shop";
+import type { DialogueLine } from "./systems/dialogue";
 
 /** A 2D vector. The game is 2.5D — Z is fixed per layer, never simulated. */
 export interface Vec2 {
@@ -191,15 +192,23 @@ export type GamePhase =
   /** Fading between rooms. The simulation is paused. */
   | "transition"
   /**
+   * Boss intro cutscene — the boss room's story beat runs before the
+   * shop opens. Sim paused, dialogue overlay drives the UX. First
+   * visit only; a returning player skips straight to shop.
+   */
+  | "cutscene"
+  /**
    * You've arrived at a boss room you haven't cleared. The shop overlay
    * is up; the boss hasn't spawned yet and the sim is paused. Leaving
    * this phase either kills you (unlikely — nothing can hit you) or
    * commits you to the fight.
    */
   | "shop"
+  /** An NPC chat somewhere in the world. Sim paused, dialogue overlay up. */
+  | "dialogue"
   /** Boss roar; the player can move but nothing can hurt them. */
   | "bossIntro"
-  /** Boss corpse dissolving. */
+  /** Boss corpse dissolving. Optionally followed by a defeat cutscene. */
   | "bossDefeated"
   | "resting"
   | "dead"
@@ -223,6 +232,19 @@ export interface Progress {
    * to the player's max hearts.
    */
   bonusMaxHearts?: number;
+  /**
+   * Boss room ids whose intro cutscene the player has already sat
+   * through. On the second entry (after death, or after clearing a
+   * different branch first), we skip straight to the shop.
+   */
+  watchedCutscenes?: string[];
+  /**
+   * NPC ids the player has spoken to. Purely for save colour — the
+   * script picker keys off boss count rather than met history, so
+   * meeting the same NPC twice after two boss kills always shows the
+   * "mid" variant.
+   */
+  metNpcs?: string[];
 }
 
 export interface RoomHudInfo {
@@ -279,6 +301,28 @@ export interface GameState {
    * without the UI having to remember.
    */
   shopPurchased: Partial<Record<ShopItemId, number>>;
+
+  // ---- Dialogue ----
+  /**
+   * Active dialogue if any — set for both boss cutscenes and NPC chats.
+   * Null everywhere else. The React overlay reads this off the HUD
+   * (which mirrors it verbatim); the sim just walks the index.
+   */
+  dialogue: null | {
+    kind: "bossIntro" | "bossDefeat" | "npc" | "epilogue";
+    scriptId: string;
+    lines: readonly DialogueLine[];
+    index: number;
+    /** For boss cutscenes only. Determines where the phase machine goes next. */
+    pendingBoss: BossKind | null;
+    /** For NPC chats only. Marks the NPC as met on close. */
+    npcId: string | null;
+  };
+  /**
+   * The id of the NPC the player is currently close enough to talk to,
+   * or null. The React layer paints a "TAP TO TALK" prompt off this.
+   */
+  nearbyNpc: string | null;
 }
 
 /**
@@ -350,6 +394,30 @@ export interface HudSnapshot {
     purchased: Partial<Record<ShopItemId, number>>;
     bonusMaxHearts: number;
   } | null;
+
+  /**
+   * Active dialogue if any — the React overlay renders this. Includes
+   * both the currently visible line AND some metadata so the overlay
+   * can style differently for boss cutscenes vs NPC chats (e.g. a boss
+   * cutscene shows a "SKIP" button; an NPC chat does not).
+   */
+  dialogue: {
+    kind: "bossIntro" | "bossDefeat" | "npc" | "epilogue";
+    line: DialogueLine;
+    index: number;
+    total: number;
+    /** Boss name for cutscenes (used in header framing). Empty for NPCs. */
+    bossName: string;
+    bossTitle: string;
+  } | null;
+
+  /**
+   * NPC id the player is close enough to talk to, or null. Drives the
+   * "TAP TO TALK" prompt above the mage.
+   */
+  nearbyNpc: string | null;
+  /** Display name of the nearby NPC. Handy for the prompt. */
+  nearbyNpcName: string;
 }
 
 // ---------------------------------------------------------------------------

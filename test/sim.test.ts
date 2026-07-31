@@ -976,5 +976,84 @@ console.log("\nShop: healPlayer respects boosted maxHearts");
 }
 
 // ---------------------------------------------------------------------------
+// Dialogue + story
+//
+// The dialogue system is small enough that most of the value is in
+// catalog invariants — did every boss get a cutscene, does every NPC
+// script have all three variants — rather than in state-machine
+// coverage. A single check of the advance / close logic is enough to
+// verify the runtime.
+// ---------------------------------------------------------------------------
+
+import {
+  BOSS_CUTSCENES,
+  BOSS_DEFEAT_LINES,
+  NPC_SCRIPTS,
+  pickNpcScript,
+} from "../game/spell-storm/world/dialogueScripts";
+import { NPCS } from "../game/spell-storm/world/npcs";
+import {
+  advanceDialogue,
+  currentLine,
+  type DialogueState,
+} from "../game/spell-storm/systems/dialogue";
+
+console.log("\nDialogue: story catalog");
+{
+  const bossIds = [
+    "gorgeMother",
+    "nightwing",
+    "cinderWarden",
+    "lumenChoir",
+    "thornWarden",
+    "voidmaw",
+    "dragon",
+  ] as const;
+  check("every boss has an intro cutscene", bossIds.every((b) => BOSS_CUTSCENES[b] !== undefined));
+  check("every boss has a defeat line", bossIds.every((b) => BOSS_DEFEAT_LINES[b] !== undefined));
+  check("every cutscene has at least 3 lines", bossIds.every((b) => BOSS_CUTSCENES[b].lines.length >= 3));
+}
+
+console.log("\nDialogue: NPC catalog");
+{
+  const npcIds = ["wren", "miel", "talon", "cael"] as const;
+  check("every NPC has a script set", npcIds.every((id) => NPC_SCRIPTS[id] !== undefined));
+  check("every NPC has all three variants", npcIds.every((id) => {
+    const s = NPC_SCRIPTS[id];
+    return s.early.lines.length > 0 && s.mid.lines.length > 0 && s.late.lines.length > 0;
+  }));
+  check("all NPCs are placed in a room", NPCS.every((n) => n.roomId.length > 0));
+  check("no two NPCs share a room", new Set(NPCS.map((n) => n.roomId)).size === NPCS.length);
+}
+
+console.log("\nDialogue: pickNpcScript variants");
+{
+  const early = pickNpcScript("wren", 0);
+  const mid = pickNpcScript("wren", 3);
+  const late = pickNpcScript("wren", 6);
+  check("0 bosses picks the early variant", early?.id === "npc_wren_early");
+  check("3 bosses picks the mid variant", mid?.id === "npc_wren_mid");
+  check("6 bosses picks the late variant", late?.id === "npc_wren_late");
+  check("unknown NPC returns null", pickNpcScript("nobody", 0) === null);
+}
+
+console.log("\nDialogue: advance and end");
+{
+  const state: DialogueState = {
+    script: BOSS_CUTSCENES.gorgeMother,
+    index: 0,
+    kind: "bossIntro",
+    pendingBoss: "gorgeMother",
+    npcId: null,
+  };
+  check("current line is not null at start", currentLine(state) !== null);
+  const total = state.script.lines.length;
+  let steps = 0;
+  while (advanceDialogue(state)) steps += 1;
+  check(`advance returns false at end (after ${total - 1} advances)`, steps === total - 1);
+  check("current line is null at end", currentLine(state) === null);
+}
+
+// ---------------------------------------------------------------------------
 console.log(failures === 0 ? "\nAll checks passed.\n" : `\n${failures} check(s) failed.\n`);
 process.exit(failures === 0 ? 0 : 1);

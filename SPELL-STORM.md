@@ -8,6 +8,82 @@ branches, benches to save at, and a paper-theatre art style.
 
 ---
 
+### v5 — the story
+
+Before this pass, Spell Storm was a well-tuned combat loop with rooms
+and bosses in it. That's a fine metroidvania at 0% of the way to being
+a memorable one. What memorable metroidvanias have — and what this
+didn't — is a reason to be here. A dead teacher. A missing friend. A
+sky that used to be blue. Something that stops the ending screen from
+being just a number.
+
+**The arc.** You are Selûne's last apprentice. She went to seal the
+Storm Dragon forty days ago; it's been sixty. Wren, an older
+apprentice, sees you off at the Crossroads. On the way you meet three
+more spirits — a cartographer who used to garden the Fungal, a blind
+smith on the Spire, and a bone pile in the Cistern that used to be a
+mage called Cael. Each boss knows Selûne. Each boss remembers her
+differently. The third act reveal (spoken by Cael, echoed by Voidmaw,
+confirmed by the Storm Dragon) is that the six Guardians didn't
+corrupt from the Dragon — they corrupted the Dragon, to seal
+something the seven of them couldn't fight alone. Selûne went in to
+help hold. Every sigil you take loosens the seal. You do it anyway.
+The Dragon speaks with her voice at the finale.
+
+**Told entirely in dialogue.** Seven boss intros (3-6 lines each),
+seven boss defeat lines (2-3 lines each), and four NPCs with three
+variants each keyed by boss count (early / mid / late). No
+narration outside the dialogue box; no lore item text; no unlock
+screens between chapters. If a beat isn't spoken by someone on
+screen, it doesn't exist. That constraint kept the story to what
+the medium can carry — a small game gets a small story, and small
+stories done well outlast big stories done sloppily.
+
+**Every important beat is repeated in three mouths.** The twist about
+the seal is in the Cistern NPC, the Voidmaw fight, AND the Dragon's
+opening line, so a player who misses one still catches the others.
+Selûne is named by Wren, alluded to by every boss, and only actually
+recognised at the finale. Small children playing this on their
+parents' phones don't need to catch every implication — the tone
+does the work; the plot rewards paying attention rather than
+punishing skipping.
+
+**Cutscenes at boss gates.** When you enter an uncleared boss room
+for the first time, a dialogue overlay drops in over the still-empty
+arena, the room seals, the boss doesn't spawn. Once the cutscene
+ends, the shop opens. Once the shop closes, the fight begins. A
+returning player (died once, walked back) skips straight to the
+shop — `progress.watchedCutscenes` remembers what has been seen.
+That decision was the difference between "the cutscene is content"
+and "the cutscene is a punishment for dying."
+
+**NPCs are still figures with a pulsing prompt.** They don't walk,
+don't idle-animate, don't turn to face you. Every animation would
+compete with the mage and the boss, both of which matter more. A
+still cloak and a bobbing gem overhead say "npc, come here" clearly
+enough. Standing next to one for a moment lights up a TAP TO TALK
+prompt in the HUD; the tap opens the dialogue overlay. Same bench
+pattern as saving, minus the auto-fire — talking is a choice, not
+a proximity accident.
+
+**The React overlay does both jobs.** Same component draws boss
+cutscenes and NPC chats, differentiated only by whether the SKIP
+button shows and whether the header carries a boss name. Speaker
+tint tells you who is talking: warm arcane for the mage, boss
+crimson for the boss, gold for NPCs, dim italic for narrator lines.
+No portraits — the paper-theatre style has no rendered faces and
+adding some would break the whole visual grammar.
+
+**The regression risk.** Making the sim pause during dialogue meant
+extending the fade-in bookkeeping — the transition force-set
+state.phase back to "transition" for the fade-in, which was
+clobbering whatever enterRoom had asked for on the far side. The
+fix is a sticky `arrivalPhase` local that remembers where to land
+when the fade completes. It's the same shape of bug the shop v4
+had, plus one new phase to preserve.
+
+---
+
 ### v4 — the pre-boss shop
 
 The problem: you'd reach a boss with whatever the drop table happened
