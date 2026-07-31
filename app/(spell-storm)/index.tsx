@@ -977,22 +977,34 @@ export default function SpellStormScreen() {
               </Glass>
 
               {/*
-                One button, two faces. When there IS an objective (which is
-                most of the game), the button becomes a compass — a gold
-                arrow pointing toward the next reachable boss. When the
-                player is inside a boss room, or when nothing reachable is
-                unbeaten, it falls back to the classic map grid glyph.
-                Either way, tapping opens the full map. One affordance
-                beats two side-by-side buttons that do the same thing.
+                One button, three faces. When the objective is a boss (which
+                is most of the game), the button is a compass — a gold arrow
+                pointing at the next reachable boss, tap opens the map. When
+                the free player has run out of free content, the button is a
+                gold star; tap goes straight to the paywall, since that IS
+                the next step. When there's no objective at all (inside a
+                boss arena, or every boss dead), it falls back to the map
+                grid glyph.
               */}
-              <Pressable onPress={() => setMapOpen(true)} hitSlop={10}>
+              <Pressable
+                onPress={() => {
+                  if (objective?.kind === "membership") {
+                    router.push("/(subscribe)");
+                  } else {
+                    setMapOpen(true);
+                  }
+                }}
+                hitSlop={10}
+              >
                 <Glass
                   style={objective ? styles.compassButton : styles.iconButton}
                   radius={objective ? 20 : 17}
                 >
                   <View style={styles.iconInner}>
-                    {objective ? (
+                    {objective?.kind === "boss" ? (
                       <CompassArrow side={objective.side} />
+                    ) : objective?.kind === "membership" ? (
+                      <MembershipStar />
                     ) : (
                       <>
                         <View style={styles.mapGlyphRow}>
@@ -1438,7 +1450,7 @@ export default function SpellStormScreen() {
               </Text>
             </View>
             <View style={styles.mapHeaderRight}>
-              {objective && (
+              {objective?.kind === "boss" && (
                 <View style={styles.mapCompassCallout}>
                   <Glass style={styles.compassButton} radius={20}>
                     <View style={styles.iconInner}>
@@ -1463,6 +1475,39 @@ export default function SpellStormScreen() {
                     </Text>
                   </View>
                 </View>
+              )}
+              {objective?.kind === "membership" && (
+                <Pressable
+                  onPress={() => {
+                    setMapOpen(false);
+                    router.push("/(subscribe)");
+                  }}
+                  style={styles.mapCompassCallout}
+                  hitSlop={8}
+                >
+                  <Glass style={styles.compassButton} radius={20}>
+                    <View style={styles.iconInner}>
+                      <MembershipStar />
+                    </View>
+                  </Glass>
+                  <View style={{ marginLeft: 10, maxWidth: 160 }}>
+                    <Text
+                      variant="label"
+                      size="xs"
+                      color="rgba(255,255,255,0.55)"
+                    >
+                      NEXT
+                    </Text>
+                    <Text
+                      variant="heading"
+                      size="sm"
+                      color="#FFFFFF"
+                      numberOfLines={1}
+                    >
+                      Continue the story
+                    </Text>
+                  </View>
+                </Pressable>
               )}
               <Pressable onPress={() => setMapOpen(false)} hitSlop={14}>
                 <Glass style={styles.iconButton} radius={17}>
@@ -1585,10 +1630,79 @@ export default function SpellStormScreen() {
 // path forward is sealed behind pro).
 // ---------------------------------------------------------------------------
 
-interface Objective {
-  side: GateSide;
-  targetRoomId: string;
-  targetBossName: string;
+// Two shapes:
+//   - "boss": normal case, we know a reachable unbeaten boss and which
+//     direction to point at.
+//   - "membership": free player has finished all the free content but the
+//     world still holds bosses behind pro gates. There's no direction to
+//     point in that helps them — the honest next step is the paywall.
+// The consumer branches on `kind`.
+type Objective =
+  | {
+      kind: "boss";
+      side: GateSide;
+      targetRoomId: string;
+      targetBossName: string;
+    }
+  | { kind: "membership" };
+
+/**
+ * BFS that walks outward from `currentRoomId` and returns the first
+ * unbeaten boss it can reach given the seal rules. Extracted so we can
+ * run it twice: once with the player's real `isPro`, and once as-if-pro
+ * to see whether membership would surface an objective. That second
+ * pass is what tells us "free player has finished the free game".
+ */
+function bfsForBossObjective(
+  currentRoomId: string,
+  defeatedRooms: string[],
+  bossesDefeated: number,
+  treatAsPro: boolean,
+): Extract<Objective, { kind: "boss" }> | null {
+  const queue: { room: string; firstSide: GateSide | null }[] = [
+    { room: currentRoomId, firstSide: null },
+  ];
+  const visited = new Set<string>([currentRoomId]);
+
+  while (queue.length) {
+    const node = queue.shift()!;
+    const room = ROOMS[node.room];
+    if (!room) continue;
+
+    // Objective: a boss room we haven't cleared. Skip the origin — we
+    // already excluded standing-in-a-boss-room in the caller, so this
+    // only filters the seed of the BFS which by definition can't be
+    // an objective anyway.
+    if (
+      node.room !== currentRoomId &&
+      room.boss &&
+      !defeatedRooms.includes(node.room) &&
+      node.firstSide
+    ) {
+      return {
+        kind: "boss",
+        side: node.firstSide,
+        targetRoomId: node.room,
+        targetBossName: room.bossName ?? room.name,
+      };
+    }
+
+    for (const gate of room.gates) {
+      if (visited.has(gate.to)) continue;
+      const sealed =
+        (gate.requires !== undefined && bossesDefeated < gate.requires) ||
+        (gate.pro === true && !treatAsPro);
+      if (sealed) continue;
+      visited.add(gate.to);
+      queue.push({
+        room: gate.to,
+        // The first gate we cross fixes the direction for the whole
+        // path. Downstream expansions inherit it.
+        firstSide: node.firstSide ?? gate.side,
+      });
+    }
+  }
+  return null;
 }
 
 function findObjective(
@@ -1602,48 +1716,32 @@ function findObjective(
   // Either they're fighting it or they've beaten it and are just visiting.
   if (currentRoom?.boss) return null;
 
-  const queue: { room: string; firstSide: GateSide | null }[] = [
-    { room: currentRoomId, firstSide: null },
-  ];
-  const visited = new Set<string>([currentRoomId]);
+  // Normal path: is there an unbeaten boss the player can actually walk to?
+  const bossObjective = bfsForBossObjective(
+    currentRoomId,
+    defeatedRooms,
+    bossesDefeated,
+    isPro,
+  );
+  if (bossObjective) return bossObjective;
 
-  while (queue.length) {
-    const node = queue.shift()!;
-    const room = ROOMS[node.room];
-    if (!room) continue;
-
-    // Objective: a boss room we haven't cleared. Skip the origin — we
-    // already excluded standing-in-a-boss-room above, so this only
-    // filters the seed of the BFS which by definition can't be an
-    // objective anyway.
-    if (
-      node.room !== currentRoomId &&
-      room.boss &&
-      !defeatedRooms.includes(node.room) &&
-      node.firstSide
-    ) {
-      return {
-        side: node.firstSide,
-        targetRoomId: node.room,
-        targetBossName: room.bossName ?? room.name,
-      };
-    }
-
-    for (const gate of room.gates) {
-      if (visited.has(gate.to)) continue;
-      const sealed =
-        (gate.requires !== undefined && bossesDefeated < gate.requires) ||
-        (gate.pro === true && !isPro);
-      if (sealed) continue;
-      visited.add(gate.to);
-      queue.push({
-        room: gate.to,
-        // The first gate we cross fixes the direction for the whole
-        // path. Downstream expansions inherit it.
-        firstSide: node.firstSide ?? gate.side,
-      });
-    }
+  // Nothing reachable. If the player is free, ask: would they see an
+  // objective if they were pro? If yes, they've hit the paywall wall —
+  // the compass is the natural place to say so instead of silently
+  // collapsing into the map icon. This is the fix for the "compass
+  // stops working after the 3rd boss" bug: the game IS out of free
+  // content, and the UI should announce that rather than shrug.
+  if (!isPro) {
+    const wouldUnlock = bfsForBossObjective(
+      currentRoomId,
+      defeatedRooms,
+      bossesDefeated,
+      true,
+    );
+    if (wouldUnlock) return { kind: "membership" };
   }
+
+  // Pro player with every boss dead, or truly nothing left to point at.
   return null;
 }
 
@@ -1698,6 +1796,59 @@ function CompassArrow({ side }: { side: GateSide }) {
           borderLeftColor: "transparent",
           borderRightColor: "transparent",
           borderBottomColor: hex(PALETTE.gold),
+        }}
+      />
+    </View>
+  );
+}
+
+/**
+ * A gold sigil — the same visual vocabulary the HUD pill uses for boss
+ * kills, scaled up to fill the compass button. Sits in the same 24x24
+ * slot the CompassArrow uses, so the states read as faces of one
+ * control rather than a swap. Rendered when the free player has cleared
+ * every free boss and the "next objective" is subscribing: a sigil the
+ * player can't earn without pro reads as "you need more of these" more
+ * naturally than a star or dollar-sign glyph would.
+ *
+ * Built from Views (no react-native-svg dep) using the same 45°-rotated
+ * rounded square trick as `styles.sigil`, plus a soft glow ring behind
+ * it so the state is unmistakably "look here, this is different".
+ */
+function MembershipStar() {
+  return (
+    <View
+      style={{
+        width: 24,
+        height: 24,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {/* Halo — a translucent gold square rotated to sit behind the
+          sigil as a bloom. Slightly larger and dimmed so the sigil
+          itself stays the focal point. */}
+      <View
+        style={{
+          position: "absolute",
+          width: 20,
+          height: 20,
+          borderRadius: 5,
+          borderCurve: "continuous",
+          transform: [{ rotate: "45deg" }],
+          backgroundColor: "rgba(232,197,110,0.22)",
+        }}
+      />
+      {/* Sigil — the same rotated rounded square used in the HUD pill,
+          just scaled from 7px to 14px and filled solid gold. */}
+      <View
+        style={{
+          width: 14,
+          height: 14,
+          borderRadius: 3.5,
+          borderCurve: "continuous",
+          transform: [{ rotate: "45deg" }],
+          backgroundColor: hex(PALETTE.gold),
         }}
       />
     </View>
