@@ -38,22 +38,33 @@ export const PLAYER = {
   halfW: 0.42,
   halfH: 0.8,
 
-  /** Top speed on the ground (wu/s). */
-  maxSpeed: 9.5,
+  /** Top speed on the ground (wu/s). Bumped 9.5→10.5 in the v3.4 pass so
+   *  a ground jump crosses the widest floor gap in the world (6.8wu at
+   *  Crossroads) without needing to use platforms first. Metroidvania
+   *  platforming is meant to be a choice, not a toll booth. */
+  maxSpeed: 10.5,
   /** How hard we accelerate toward the stick target. Higher = snappier. */
   accel: 78,
   /** Ground friction when the stick is neutral. Higher = stops on a dime. */
   friction: 62,
-  /** Air control is deliberately weaker than ground control. */
-  airAccelMult: 0.62,
+  /** Air control is deliberately weaker than ground control. Bumped
+   *  0.62→0.75 in v3.4 — the old value was hard to steer mid-jump when
+   *  the player tapped JUMP before pushing the stick, which is what most
+   *  new players do the first time they try to cross a gap. */
+  airAccelMult: 0.75,
   airFrictionMult: 0.22,
 
   gravity: -58,
-  /** Falling faster than rising makes jumps feel weighty, not floaty. */
-  fallGravityMult: 1.55,
+  /** Falling faster than rising makes jumps feel weighty, not floaty. Was
+   *  1.55; softened to 1.4 in v3.4 so the arc stretches horizontally
+   *  enough to clear obstacles that used to require a platform relay. */
+  fallGravityMult: 1.4,
   maxFallSpeed: 34,
 
-  jumpVelocity: 23.6,
+  /** Jump initial velocity. 23.6→25.5 in v3.4 lifts the peak from 4.8wu
+   *  to 5.6wu, which is exactly the height needed to land on any of the
+   *  shortened room buttresses (halfH capped at 2.4 → top at y=4.8). */
+  jumpVelocity: 25.5,
   /**
    * Variable jump height: when the player releases JUMP while still rising,
    * we cut the upward velocity to this fraction. This is the single biggest

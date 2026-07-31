@@ -436,11 +436,7 @@ export const ROOMS: Record<string, Room> = {
       // The climb to the sealed Storm Gate, high on the right wall.
       ...stairs(21, 11.0, 4, 3.9, 2.6, 1.7),
     ],
-    solids: [
-      // Buttresses framing the hub. They make the room read as built.
-      s(-31, 3.0, 1.1, 3.0),
-      s(31, 3.0, 1.1, 3.0),
-    ],
+    solids: [],
     // The pit sits well clear of the bench at x=0. A hole under the spawn
     // point is a hole the player falls through before they have touched a
     // control, and they arrive somewhere they did not choose to go.
@@ -486,7 +482,7 @@ export const ROOMS: Record<string, Room> = {
       // Column up to the Thorn gate in the ceiling.
       ...stairs(-30, 10.5, 5, 2.6, 2.9, 1.6),
     ],
-    solids: [s(-2, 2.2, 1.0, 2.2), s(24, 1.6, 0.9, 1.6)],
+    solids: [],
     floorGaps: [],
     hazards: [spike(10, 0.3, 1.6), spike(-16, 0.3, 1.4)],
     gates: [
@@ -525,7 +521,7 @@ export const ROOMS: Record<string, Room> = {
       p(20, 5.4, 3.0),
       ...stairs(32, 4.2, 5, 5.2, 2.4, 1.9),
     ],
-    solids: [s(-14, 3.0, 1.2, 3.0), s(14, 3.6, 1.2, 3.6), s(46, 2.4, 1.0, 2.4)],
+    solids: [],
     floorGaps: [],
     hazards: [spike(-30, 0.3, 2.2), spike(0, 0.3, 1.8), spike(28, 0.3, 2.0)],
     gates: [
@@ -580,7 +576,7 @@ export const ROOMS: Record<string, Room> = {
       p(24, 8.6, 2.6),
       p(36, 4.6, 2.8),
     ],
-    solids: [s(-18, 2.6, 1.1, 2.6), s(18, 3.2, 1.1, 3.2)],
+    solids: [],
     floorGaps: [gap(-8, 3.0)],
     hazards: [spike(30, 0.3, 2.4)],
     gates: [
@@ -605,7 +601,7 @@ export const ROOMS: Record<string, Room> = {
       p(28, 6.0, 3.0),
       ...stairs(40, 4.6, 4, 5.0, 2.8, 1.8),
     ],
-    solids: [s(-8, 3.4, 1.2, 3.4), s(22, 2.8, 1.1, 2.8), s(52, 3.0, 1.2, 3.0)],
+    solids: [],
     floorGaps: [],
     hazards: [spike(-34, 0.3, 2.6), spike(-4, 0.3, 2.0), spike(34, 0.3, 2.8)],
     gates: [
@@ -660,7 +656,7 @@ export const ROOMS: Record<string, Room> = {
       // The shaft up. Alternating sides so the climb is a rhythm.
       ...ledges(-10, 10, 6, 15.6, 19.4, 1.8),
     ],
-    solids: [s(-22, 2.4, 1.0, 2.4), s(20, 2.4, 1.0, 2.4)],
+    solids: [],
     floorGaps: [gap(6, 3.2)],
     hazards: [],
     gates: [
@@ -689,7 +685,7 @@ export const ROOMS: Record<string, Room> = {
       ...ledges(-14, 14, 4, 46.6, 50.2, 1.8),
       p(0, 55.0, 4.0),
     ],
-    solids: [s(-27, 12.0, 1.4, 12.0), s(27, 20.0, 1.4, 12.0)],
+    solids: [],
     floorGaps: [gap(0, 3.0)],
     hazards: [spike(-8, 0.3, 3.0), spike(10, 0.3, 3.0)],
     gates: [
@@ -744,7 +740,7 @@ export const ROOMS: Record<string, Room> = {
       p(30, 9.0, 2.6),
       p(42, 5.2, 3.0),
     ],
-    solids: [s(-33, 2.6, 1.1, 2.6), s(9, 3.0, 1.1, 3.0), s(36, 2.4, 1.0, 2.4)],
+    solids: [],
     floorGaps: [],
     hazards: [spike(-20, 0.3, 2.4), spike(22, 0.3, 2.6)],
     gates: [
@@ -773,7 +769,7 @@ export const ROOMS: Record<string, Room> = {
       p(30, 5.6, 3.0),
       p(44, 9.6, 2.6),
     ],
-    solids: [s(-26, 3.4, 1.3, 3.4), s(10, 2.6, 1.1, 2.6), s(38, 3.0, 1.2, 3.0)],
+    solids: [],
     floorGaps: [gap(22, 3.2)],
     hazards: [spike(-6, 0.3, 2.6)],
     gates: [
@@ -834,7 +830,7 @@ export const ROOMS: Record<string, Room> = {
       ...stairs(24, 12.0, 5, -5.0, -1.9, 2.0),
       p(0, 4.6, 3.6),
     ],
-    solids: [s(-31, 18.0, 1.3, 14.0), s(31, 18.0, 1.3, 14.0)],
+    solids: [],
     floorGaps: [gap(-14, 3.0)],
     hazards: [spike(12, 0.3, 3.2)],
     gates: [
@@ -890,7 +886,7 @@ export const ROOMS: Record<string, Room> = {
       p(-24, 4.6, 3.0),
       p(24, 4.6, 3.0),
     ],
-    solids: [s(-29, 20.0, 1.3, 16.0), s(29, 20.0, 1.3, 16.0)],
+    solids: [],
     floorGaps: [gap(0, 3.4)],
     hazards: [spike(-12, 0.3, 2.6), spike(12, 0.3, 2.6)],
     gates: [
@@ -926,7 +922,7 @@ export const ROOMS: Record<string, Room> = {
       p(32, 5.8, 3.0),
       p(44, 10.0, 2.6),
     ],
-    solids: [s(-24, 3.2, 1.2, 3.2), s(12, 2.8, 1.1, 2.8), s(38, 3.4, 1.2, 3.4)],
+    solids: [],
     floorGaps: [],
     hazards: [spike(-2, 0.3, 2.4), spike(26, 0.3, 2.6)],
     gates: [
@@ -985,7 +981,7 @@ export const ROOMS: Record<string, Room> = {
       p(6, 20.6, 3.0),
       ...stairs(16, 16.4, 4, 5.6, -2.6, 2.0),
     ],
-    solids: [s(-18, 2.6, 1.1, 2.6), s(20, 2.6, 1.1, 2.6)],
+    solids: [],
     floorGaps: [],
     hazards: [spike(-6, 0.3, 3.0), spike(30, 0.3, 2.6)],
     gates: [
