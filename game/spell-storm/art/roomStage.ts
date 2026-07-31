@@ -422,7 +422,11 @@ export function createRoomStage(room: Room): RoomStage {
     });
     lamp.position.set(room.bench.x + 1.3, 3.6, 0.3);
     group.add(lamp);
-    benchGlow = kit.glowDisc(2.6, PALETTE.gold, 18);
+    // Raio reduzido de 2.6 → 1.1 em 07/2026: o glow anterior sangrava
+    // pela metade direita da tela em landscape e ficava sobreposto ao
+    // botão CAST, prejudicando a leitura do input. 1.1 mantém o "há um
+    // save aqui" visível a distância sem invadir a HUD.
+    benchGlow = kit.glowDisc(1.1, PALETTE.gold, 18);
     benchGlow.position.set(room.bench.x + 1.3, 3.6, 0.1);
     benchGlow.renderOrder = -16;
     group.add(benchGlow);
@@ -538,7 +542,10 @@ export function createRoomStage(room: Room): RoomStage {
       }
 
       if (benchGlow) {
-        const pulse = 1 + Math.sin(elapsed * 1.6) * 0.12;
+        // Pulse suavizado (0.12 → 0.08) junto com a redução do raio: um
+        // glow menor com respiração mais discreta lê melhor como brasa
+        // que como flare.
+        const pulse = 1 + Math.sin(elapsed * 1.6) * 0.08;
         benchGlow.scale.setScalar(pulse);
       }
 

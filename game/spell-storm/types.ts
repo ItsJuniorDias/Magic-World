@@ -245,6 +245,19 @@ export interface Progress {
    * "mid" variant.
    */
   metNpcs?: string[];
+  /**
+   * Room ids of benches the player has already rested at. Used as the
+   * pool of valid teleport destinations — you can only travel to a
+   * bench you've visited before, matching the Elden Ring "grace" model.
+   * Empty on a fresh save; the very first rest at the start-room bench
+   * seeds it.
+   *
+   * NB: `bench` (single string) tracks the LAST bench (where death
+   * respawns you). `benchesRested` tracks EVERY bench visited (for the
+   * travel UI). They're separate because respawn semantics and travel
+   * semantics are different concerns and were already growing apart.
+   */
+  benchesRested?: string[];
 }
 
 export interface RoomHudInfo {
@@ -345,6 +358,20 @@ export interface HudSnapshot {
   /** Seconds left on the room-name card; 0 hides it. */
   roomTitle: number;
   atBench: boolean;
+  /**
+   * All bench-rooms the player has already rested at, ordered by first
+   * visit. Drives the travel modal — the UI reads this list and looks
+   * up display metadata (name, biome) via ROOMS.
+   */
+  benchesRested: string[];
+  /**
+   * True when the player is standing at a bench AND has at least one
+   * OTHER bench available as a travel destination. The UI uses this
+   * as a single condition to show/hide the Travel button, so it can
+   * stay a passive prompt when there's nowhere to go yet (e.g. the
+   * player's first-ever rest at Crossroads).
+   */
+  canTravel: boolean;
 
   /** Boss bar. */
   bossActive: boolean;

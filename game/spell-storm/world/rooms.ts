@@ -829,6 +829,30 @@ export const ROOMS: Record<string, Room> = {
       ...stairs(-26, 36.0, 6, 5.0, -4.4, 2.0),
       ...stairs(24, 12.0, 5, -5.0, -1.9, 2.0),
       p(0, 4.6, 3.6),
+      // Rota de retorno pelo topo direito.
+      //
+      // Bug fix de 07/2026: void_stair era estruturalmente unwinnable.
+      // O top gate está em (22, 44) — detector dispara em y >= 40.8. A
+      // plataforma mais alta do lado direito era (24, 12), e a mais alta
+      // da sala inteira era (-26, 36) do lado ESQUERDO. Com pulo máximo
+      // ~5.6wu, era geometricamente impossível chegar em (22, 40.8) a
+      // partir de qualquer plataforma existente: 48wu horizontais até a
+      // parede oposta, sem plataformas intermediárias no lado direito.
+      //
+      // Entrando por cima vindo de ember_forge, a única saída era morrer
+      // ou fazer o Voidmaw. Sair pra desistir da branch era impossível.
+      //
+      // Zig-zag entre x=25 e x=31 subindo, terminando bem abaixo do gate.
+      // dy=4.6 mantém folga confortável em relação ao pulo máximo.
+      p(30, 4.8, 2.0),
+      p(28, 9.4, 1.9),
+      p(31, 14.0, 1.9),
+      p(27, 18.6, 1.9),
+      p(30, 23.2, 1.9),
+      p(26, 27.8, 1.9),
+      p(29, 32.4, 1.9),
+      p(25, 37.0, 1.9),
+      p(22, 40.6, 2.2),
     ],
     solids: [],
     floorGaps: [gap(-14, 3.0)],

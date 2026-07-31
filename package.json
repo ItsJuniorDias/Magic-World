@@ -66,13 +66,13 @@
     "zustand": "^5.0.9"
   },
   "devDependencies": {
+    "@react-native-community/cli": "latest",
+    "@react-native/metro-config": "latest",
     "@types/react": "~19.1.0",
     "@types/three": "^0.182.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
-    "typescript": "~5.9.2",
-    "@react-native-community/cli": "latest",
-    "@react-native/metro-config": "latest"
+    "typescript": "~5.9.2"
   },
   "resolutions": {
     "react-native-worklets-core": "0.3.0"

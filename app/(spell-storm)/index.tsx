@@ -269,6 +269,10 @@ export default function SpellStormScreen() {
   const [contextReady, setContextReady] = useState(false);
   const [minTimeReached, setMinTimeReached] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
+  // Bench-travel modal. Opens from the Travel pill next to the bench
+  // save banner, closes on selection, backdrop tap, or when the player
+  // walks off the bench (see effect below).
+  const [travelOpen, setTravelOpen] = useState(false);
 
   // Observed container size, populated by onLayout. This gates GLView
   // mounting so that:
@@ -301,6 +305,8 @@ export default function SpellStormScreen() {
     roomName: "",
     roomTitle: 0,
     atBench: false,
+    benchesRested: [],
+    canTravel: false,
     bossActive: false,
     bossHp: 0,
     bossMaxHp: 1,
@@ -316,6 +322,11 @@ export default function SpellStormScreen() {
     airDashArmed: false,
     aimLatched: false,
     sealed: null,
+    shield: 0,
+    shop: null,
+    dialogue: null,
+    nearbyNpc: null,
+    nearbyNpcName: "",
   });
 
   // ---- Persistence -------------------------------------------------------
@@ -378,6 +389,20 @@ export default function SpellStormScreen() {
               metNpcs: Array.isArray(parsed.metNpcs)
                 ? parsed.metNpcs.filter((id: unknown) => typeof id === "string")
                 : [],
+              // Travel history — added with the bench-teleport feature.
+              // Migration path: if the save is pre-feature, seed the list
+              // with the last-rested bench. This way an existing player
+              // who has been playing for weeks doesn't have to re-rest
+              // at Crossroads to unlock travel; their current bench
+              // is already in the pool.
+              benchesRested: Array.isArray(parsed.benchesRested)
+                ? parsed.benchesRested.filter(
+                    (id: unknown): id is string =>
+                      typeof id === "string" && !!ROOMS[id] && !!ROOMS[id].bench,
+                  )
+                : bench
+                  ? [bench]
+                  : [],
             };
           } catch {
             progressRef.current = createDefaultProgress();
@@ -783,6 +808,41 @@ export default function SpellStormScreen() {
     setHud({ ...game.hud });
   }, []);
 
+  // ---- Travel ------------------------------------------------------------
+  //
+  // Bench-to-bench teleport. Rejection is silent from the game's side —
+  // travelToBench returns false when the phase isn't right — so the UI
+  // handles the "did it actually go" question by:
+  //   - only surfacing the button when hud.canTravel is true
+  //   - a warning haptic when the game rejects
+  //
+  // Modal closes optimistically on success: the game phase flips to
+  // "transition" immediately, so by the time the fade begins the player
+  // needs to see the destination room, not the modal that picked it.
+  const handleTravel = useCallback((roomId: string) => {
+    const game = gameRef.current;
+    if (!game) return;
+    const ok = game.travelToBench(roomId);
+    if (ok) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      setTravelOpen(false);
+      setHud({ ...game.hud });
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(
+        () => {},
+      );
+    }
+  }, []);
+
+  // Auto-close travel modal if the player walks off the bench or the
+  // phase changes out of "playing" (death, boss intro, transition).
+  // Without this the modal would stay open with a now-invalid list of
+  // destinations, and tapping any of them would silently no-op because
+  // the game's travelToBench guard would reject.
+  useEffect(() => {
+    if (travelOpen && !hud.canTravel) setTravelOpen(false);
+  }, [travelOpen, hud.canTravel]);
+
   // ---- Render ------------------------------------------------------------
   const playing =
     hud.phase === "playing" ||
@@ -1035,19 +1095,83 @@ export default function SpellStormScreen() {
       )}
 
       {/* ---------------- Bench prompt ---------------- */}
+      {/*
+        Two-piece row: the passive "Rested · progress saved" pill and
+        (only when the player has more than one bench in their travel
+        pool) a Travel button.
+        
+        The wrapper is box-none rather than none so the Travel Pressable
+        remains tappable; the "Rested" pill inside is left pointerEvents
+        untouched because it's inert text and doesn't need to intercept
+        anything.
+      */}
       {ready && playing && hud.atBench && (
         <View
-          pointerEvents="none"
+          pointerEvents="box-none"
           style={[styles.benchWrap, { bottom: insets.bottom + 118 }]}
         >
-          <Glass style={styles.benchPill} radius={16}>
-            <View style={styles.benchInner}>
-              <Text variant="label" size="sm" color={hex(PALETTE.gold)}>
-                Rested · progress saved
-              </Text>
-            </View>
-          </Glass>
+          <View style={styles.benchRow} pointerEvents="box-none">
+            <Glass style={styles.benchPill} radius={16}>
+              <View style={styles.benchInner}>
+                <Text variant="label" size="sm" color={hex(PALETTE.gold)}>
+                  Rested · progress saved
+                </Text>
+              </View>
+            </Glass>
+            {hud.canTravel && (
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setTravelOpen(true);
+                }}
+                hitSlop={10}
+              >
+                <Glass style={styles.travelPill} radius={16}>
+                  <View style={styles.travelInner}>
+                    {/*
+                      A tiny arrow-in-square glyph is enough here — the
+                      word "Travel" is what does the work, the icon
+                      just anchors it visually. Two small views form an
+                      L-shape; cheaper than shipping a vector.
+                    */}
+                    <View style={styles.travelIcon}>
+                      <View style={styles.travelIconArrow} />
+                    </View>
+                    <Text
+                      variant="heading"
+                      size="sm"
+                      color="#FFFFFF"
+                      style={{ marginLeft: 6 }}
+                    >
+                      Travel
+                    </Text>
+                  </View>
+                </Glass>
+              </Pressable>
+            )}
+          </View>
         </View>
+      )}
+
+      {/* ---------------- Travel modal ---------------- */}
+      {/*
+        Full-screen chooser. Shown only while the player is standing at
+        a bench with somewhere to go; auto-closes when either condition
+        stops being true (walked away, boss started, transition began).
+        
+        Renders BEHIND the Loader (which sits at the very end of the
+        tree) but ABOVE the game HUD, so the tap targets are the modal
+        buttons and nothing else.
+      */}
+      {ready && travelOpen && hud.canTravel && (
+        <TravelModal
+          benchesRested={hud.benchesRested}
+          currentRoomId={hud.roomId}
+          defeatedRooms={hud.defeatedRooms}
+          onSelect={handleTravel}
+          onClose={() => setTravelOpen(false)}
+          insets={{ top: insets.top, bottom: insets.bottom, left: insets.left, right: insets.right }}
+        />
       )}
 
       {/* ---------------- Sealed door ---------------- */}
@@ -1576,6 +1700,228 @@ function CompassArrow({ side }: { side: GateSide }) {
           borderBottomColor: hex(PALETTE.gold),
         }}
       />
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Travel modal
+//
+// A vertical list of rested benches. Tap a row → the game does the fade,
+// the modal closes optimistically, and the player wakes up at the chosen
+// bench. Each row shows: biome swatch, room name, biome label, and any
+// boss sigil for that branch (defeated OR ready-for-a-visit).
+//
+// WHY A LIST AND NOT THE MAP GRID
+//
+// The map grid is spatial — you read it to understand where things ARE.
+// The travel list is a menu — you read it to pick where to GO. Rebuilding
+// the grid here would force the player to hunt for the right cell every
+// time they wanted to travel; a top-down list is instant to scan and
+// keeps the "recent benches" naturally at the top of the reading order.
+//
+// The current room appears with a HERE badge and isn't tappable, so a
+// player who opens the modal by mistake can close it via the tap they
+// would have used to pick anyway.
+// ---------------------------------------------------------------------------
+
+function TravelModal({
+  benchesRested,
+  currentRoomId,
+  defeatedRooms,
+  onSelect,
+  onClose,
+  insets,
+}: {
+  benchesRested: string[];
+  currentRoomId: string;
+  defeatedRooms: string[];
+  onSelect: (roomId: string) => void;
+  onClose: () => void;
+  insets: { top: number; bottom: number; left: number; right: number };
+}) {
+  // Only benches that still exist AND still have a bench field. Both
+  // conditions guard against stale data from a broken save or a room
+  // renamed between builds — a dead reference would render an empty
+  // row that no-op'd on tap.
+  const rows = useMemo(() => {
+    return benchesRested
+      .filter((id) => ROOMS[id] && ROOMS[id].bench)
+      .map((id) => {
+        const room = ROOMS[id];
+        const biome = BIOMES[room.biome];
+        // Which boss (if any) sits at the end of this branch. Walking
+        // outward one gate to look for a `boss` field is the cheapest
+        // way to find it — the graph is shallow; boss rooms are always
+        // one hop from a bench in the same branch. Falls back to null
+        // for the hub (crossroads) and for benches whose branch has
+        // multiple bosses (spire → nightwing, but that's still one hop).
+        let bossRoomId: string | null = null;
+        for (const gate of room.gates) {
+          const dest = ROOMS[gate.to];
+          if (dest?.boss) {
+            bossRoomId = gate.to;
+            break;
+          }
+        }
+        return {
+          id,
+          name: room.name,
+          biomeLabel: biome.label,
+          biomeTint: biome.mapTint,
+          bossRoomId,
+          bossDefeated: bossRoomId
+            ? defeatedRooms.includes(bossRoomId)
+            : false,
+          isCurrent: id === currentRoomId,
+        };
+      });
+  }, [benchesRested, currentRoomId, defeatedRooms]);
+
+  return (
+    <View style={styles.travelOverlay}>
+      <BlurView
+        intensity={44}
+        tint="dark"
+        style={StyleSheet.absoluteFill}
+      />
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: "rgba(8,4,18,0.62)" },
+        ]}
+      />
+      {/*
+        Tap the backdrop to dismiss. Placed BEFORE the header/scroll so
+        it captures only taps that miss those interactive surfaces —
+        the scroll and header sit above it and stop propagation on
+        their own taps.
+      */}
+      <Pressable
+        style={StyleSheet.absoluteFill}
+        onPress={onClose}
+      />
+      <View
+        style={[
+          styles.travelHeader,
+          {
+            paddingTop: insets.top + 16,
+            paddingHorizontal: insets.left + 24,
+          },
+        ]}
+      >
+        <View style={{ flexShrink: 1 }}>
+          <Text
+            variant="heading"
+            size="lg"
+            color="#FFFFFF"
+            numberOfLines={1}
+          >
+            Travel
+          </Text>
+          <Text
+            variant="body"
+            size="sm"
+            color="rgba(255,255,255,0.5)"
+            numberOfLines={1}
+          >
+            {rows.length} {rows.length === 1 ? "bench" : "benches"} rested at
+          </Text>
+        </View>
+        <Pressable onPress={onClose} hitSlop={14}>
+          <Glass style={styles.iconButton} radius={17}>
+            <View style={styles.iconInner}>
+              <View style={styles.closeBarA} />
+              <View style={styles.closeBarB} />
+            </View>
+          </Glass>
+        </Pressable>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={[
+          styles.travelScroll,
+          { paddingBottom: insets.bottom + 24 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {rows.map((row) => {
+          const isCurrent = row.isCurrent;
+          const body = (
+            <Glass style={{}} radius={16}>
+              <View style={styles.travelRow}>
+                <View style={styles.travelRowLeft}>
+                  <View
+                    style={[
+                      styles.travelSwatch,
+                      { backgroundColor: row.biomeTint },
+                    ]}
+                  />
+                  <View style={{ flexShrink: 1 }}>
+                    <Text
+                      variant="heading"
+                      size="sm"
+                      color="#FFFFFF"
+                      numberOfLines={1}
+                    >
+                      {row.name}
+                    </Text>
+                    <Text
+                      variant="label"
+                      size="xs"
+                      color="rgba(255,255,255,0.55)"
+                      numberOfLines={1}
+                    >
+                      {row.biomeLabel}
+                    </Text>
+                  </View>
+                </View>
+                {isCurrent ? (
+                  <View style={styles.travelHere}>
+                    <Text
+                      variant="label"
+                      size="xs"
+                      color="rgba(255,255,255,0.85)"
+                    >
+                      HERE
+                    </Text>
+                  </View>
+                ) : row.bossRoomId ? (
+                  <View style={styles.travelSigilRow}>
+                    <View
+                      style={[
+                        styles.travelSigilDot,
+                        !row.bossDefeated && {
+                          backgroundColor: "rgba(255,255,255,0.22)",
+                        },
+                      ]}
+                    />
+                  </View>
+                ) : null}
+              </View>
+            </Glass>
+          );
+          if (isCurrent) {
+            // Current room: not tappable, dimmed by 40% via wrapper
+            // opacity so the eye skips it. Placing the opacity on the
+            // wrapper (not the Glass) keeps the blur crisp underneath.
+            return (
+              <View key={row.id} style={{ opacity: 0.55 }}>
+                {body}
+              </View>
+            );
+          }
+          return (
+            <Pressable
+              key={row.id}
+              onPress={() => onSelect(row.id)}
+              hitSlop={4}
+            >
+              {body}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
     </View>
   );
 }
@@ -3227,8 +3573,92 @@ const styles = StyleSheet.create({
   bossFill: { height: "100%", borderRadius: 3 },
 
   benchWrap: { position: "absolute", left: 0, right: 0, alignItems: "center" },
+  benchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   benchPill: {},
   benchInner: { paddingHorizontal: 16, paddingVertical: 8 },
+  travelPill: {},
+  travelInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  travelIcon: {
+    width: 14,
+    height: 14,
+    borderWidth: 1.4,
+    borderColor: "rgba(255,255,255,0.85)",
+    borderRadius: 3,
+    borderCurve: "continuous",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  travelIconArrow: {
+    width: 6,
+    height: 6,
+    borderTopWidth: 1.4,
+    borderRightWidth: 1.4,
+    borderColor: "#FFFFFF",
+    transform: [{ rotate: "45deg" }, { translateX: -1 }],
+  },
+
+  // ---- Travel modal ----
+  travelOverlay: { ...StyleSheet.absoluteFillObject },
+  travelHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    gap: 16,
+  },
+  travelScroll: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 24,
+    gap: 10,
+  },
+  travelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  travelRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  travelSwatch: {
+    width: 14,
+    height: 14,
+    borderRadius: 3,
+    borderCurve: "continuous",
+    transform: [{ rotate: "45deg" }],
+  },
+  travelHere: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+    borderCurve: "continuous",
+    backgroundColor: "rgba(255,255,255,0.14)",
+  },
+  travelSigilRow: { flexDirection: "row", gap: 4, alignItems: "center" },
+  travelSigilDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 2,
+    borderCurve: "continuous",
+    transform: [{ rotate: "45deg" }],
+    backgroundColor: hex(PALETTE.gold),
+  },
 
   sealedWrap: { position: "absolute", left: 0, right: 0, alignItems: "center" },
   sealedCard: {},

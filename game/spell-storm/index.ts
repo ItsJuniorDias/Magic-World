@@ -57,7 +57,7 @@ import {
   updatePlayer,
 } from "./systems/player";
 import { createWorld } from "./systems/world";
-import { BIOMES, BOSS_ROOMS, getRoom, START_ROOM, type BiomeId } from "./world/rooms";
+import { BIOMES, BOSS_ROOMS, getRoom, ROOMS, START_ROOM, type BiomeId } from "./world/rooms";
 import type {
   AABB,
   GameContext,
@@ -174,6 +174,15 @@ export interface SpellStorm extends GameHandle {
    * TALK" prompt in the HUD. No-op if the player isn't next to one.
    */
   talkToNpc(): void;
+  /**
+   * Teleports the player to the bench in `roomId`. Only valid when the
+   * player is currently AT a bench and `roomId` is one they've rested
+   * at before. Returns true on success (the fade begins next frame),
+   * false when the request is rejected — same-room, unknown room, or
+   * the current phase can't be interrupted (mid-boss, mid-cutscene,
+   * mid-shop). No side effects on failure.
+   */
+  travelToBench(roomId: string): boolean;
 }
 
 export function createDefaultProgress(): Progress {
@@ -186,6 +195,7 @@ export function createDefaultProgress(): Progress {
     bonusMaxHearts: 0,
     watchedCutscenes: [],
     metNpcs: [],
+    benchesRested: [],
   };
 }
 
@@ -315,6 +325,8 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     roomName: getRoom(START_ROOM).name,
     roomTitle: 0,
     atBench: false,
+    benchesRested: [],
+    canTravel: false,
     bossActive: false,
     bossHp: 0,
     bossMaxHp: 1,
@@ -679,6 +691,15 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     progress.bench = room.id;
     progress.benchX = room.bench.x;
     progress.essence = state.score;
+    // Track this bench as a travel destination. Init the array lazily
+    // so old saves (pre-benchesRested) get seeded on the first rest of
+    // the session — the migration path in the React layer also seeds
+    // it, but doing it here means the game is self-healing even if the
+    // consumer forgot.
+    if (!progress.benchesRested) progress.benchesRested = [];
+    if (!progress.benchesRested.includes(room.id)) {
+      progress.benchesRested.push(room.id);
+    }
     options.onProgress?.(progress);
     fx.burst(room.bench.x + 1.3, 3.6, 20, PALETTE.gold, 6, 10);
     fx.shockwave(room.bench.x + 1.3, 3.0, PALETTE.gold, 3.4, 0.55);
@@ -724,6 +745,26 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     state.pendingGate = { to, toGate };
     state.fadeDir = 1;
     sound("gate");
+  }
+
+  /**
+   * Begins a fade-out toward another BENCH — a teleport instead of a
+   * gate walk. Piggy-backs on the same fade/pendingGate machinery so
+   * the presentation path stays one thing; the only difference is
+   * `toGate` is null, which enterRoom() interprets as "land at the
+   * bench" rather than "land at gate.arrivalPoint".
+   *
+   * Guarded: caller (React layer or handle) MUST verify the player is
+   * at a bench and the destination is in benchesRested. This function
+   * trusts the caller, keeping the runtime check where the UI can give
+   * useful feedback rather than silently swallowing the request here.
+   */
+  function beginTravel(roomId: string): void {
+    state.phase = "transition";
+    state.pendingGate = { to: roomId, toGate: "" };
+    state.fadeDir = 1;
+    benchTimer = -3; // Prevent re-firing the auto-rest on arrival.
+    sound("bench");
   }
 
   // ---- Deferred effects the bosses queued ---------------------------------
@@ -1189,6 +1230,17 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     hud.roomName = room.name;
     hud.roomTitle = state.roomTitleTimer;
     hud.atBench = benchTimer > 0.5;
+    // Travel destinations: the full list of rested benches, minus the
+    // current room (you can't travel to where you already are). The
+    // React layer renders this directly as the modal contents; `null`
+    // handling in `benchesRested` covers old saves that were persisted
+    // before this field existed.
+    const rested = progress.benchesRested ?? [];
+    hud.benchesRested = rested;
+    hud.canTravel =
+      hud.atBench &&
+      state.phase === "playing" &&
+      rested.some((id) => id !== room.id && ROOMS[id]?.bench);
 
     hud.bossActive = boss !== null;
     hud.bossHp = boss ? boss.hp : 0;
@@ -1329,6 +1381,26 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
       if (!state.nearbyNpc) return;
       openNpcDialogue(state.nearbyNpc);
       publishHud();
+    },
+
+    travelToBench(roomId) {
+      // Sanity: same-room travel is a no-op, and travelling to a
+      // benchless (or unknown) room would land the player on empty
+      // floor with no save. Both rejected silently — the UI is what
+      // gives the player feedback; the game just refuses.
+      if (state.phase !== "playing") return false;
+      if (roomId === world.room.id) return false;
+      const dest = ROOMS[roomId];
+      if (!dest || !dest.bench) return false;
+      // Must be currently at a bench AND have previously rested at
+      // the destination. Standing at Crossroads doesn't let you jump
+      // to a bench you've only seen on the map through a discovered
+      // gate — you have to have sat down there once.
+      if (!world.room.bench) return false;
+      if (!progress.benchesRested?.includes(roomId)) return false;
+      beginTravel(roomId);
+      publishHud();
+      return true;
     },
 
     start() {
