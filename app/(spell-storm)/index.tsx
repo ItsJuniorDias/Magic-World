@@ -3257,8 +3257,20 @@ function ShopOverlay({
           </Glass>
         </View>
 
-        {/* GRID — six cards in a 2-column layout. */}
+        {/* GRID — six cards in a 3-column layout on landscape phones.
+            
+            The critical piece here is `style={{ flex: 1, minHeight: 0 }}`.
+            Without flex: 1 the ScrollView takes its INTRINSIC content
+            height, which for six 92-tall cards + gaps is ~200wu — and
+            in landscape (which this screen is always in) that pushes
+            past the space the flex column left for it. The footer then
+            landed on top of the cards instead of below them. flex: 1
+            makes the ScrollView bind to the space between header and
+            footer; minHeight: 0 is the RN-flex incantation that lets
+            the child actually shrink below its content size when the
+            parent tells it to.  */}
         <ScrollView
+          style={styles.shopGridScroll}
           contentContainerStyle={styles.shopGrid}
           showsVerticalScrollIndicator={false}
         >
@@ -4039,9 +4051,29 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 
-  // Two-column grid. Each card takes a fraction of the horizontal space
-  // minus a fixed gap; the `basis` calc keeps it responsive without a
-  // media query, so the same layout works from 6 Plus to Pro Max.
+  // Grid container. The ScrollView itself takes the leftover flex-1
+  // space between header and footer; the content inside is a wrapping
+  // row so cards spill to a second line when the catalog grows past
+  // three items.
+  //
+  // WHY 3 COLUMNS
+  //
+  // Six catalog items in two columns = three rows = ~300wu of vertical
+  // stack, which does NOT fit in landscape on shorter phones (iPhone SE
+  // has ~330wu of vertical space to play with after the header, footer
+  // and safe areas). Six items in three columns = two rows = ~200wu,
+  // which fits everywhere without scrolling — and if the catalog ever
+  // grows past six, the ScrollView is already wired up to handle it.
+  shopGridScroll: {
+    // flex: 1 is what makes the scroll region actually claim the space
+    // between header and footer; without it the intrinsic content
+    // height wins and the footer gets shoved off-screen or on top of
+    // the cards. minHeight: 0 is the RN-flex escape hatch that lets
+    // the scroll region shrink below its content on constrained
+    // devices — required for the internal scroll to engage.
+    flex: 1,
+    minHeight: 0,
+  },
   shopGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -4049,9 +4081,17 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   shopCard: {
-    flexBasis: "48%",
+    // 31% + a 12 gap on either side wraps to exactly three per row on
+    // landscape phones — flexGrow: 1 lets the last row expand to fill
+    // if the catalog isn't a multiple of three.
+    flexBasis: "31%",
     flexGrow: 1,
-    minHeight: 118,
+    // minHeight dropped 118 → 92 alongside the layout change: the
+    // content in a card (dot + label + 2 lines of description + cost
+    // row) is ~86wu tall including padding, so 92 gives one wu of
+    // slack for descender clipping without leaving a lot of dead
+    // space when text wraps to fewer lines than the max.
+    minHeight: 92,
     borderRadius: 18,
     borderCurve: "continuous",
     borderWidth: 1,
