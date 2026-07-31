@@ -9,10 +9,10 @@
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
-		637FDD78FDCEDC979B1ACD6F /* libPods-MagicWorld.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E5C1DB138831BDF6CD1B3A5A /* libPods-MagicWorld.a */; };
+		489AD84BE64E0F1869994DFC /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 4646DEAF5BB68B629F2A609C /* PrivacyInfo.xcprivacy */; };
+		5B4D1947EACF0DAC640589B7 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E4C3C54B691F018A4E281C /* ExpoModulesProvider.swift */; };
+		B8BF24C6730A8367A6952998 /* libPods-MagicWorld.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 539B7D1F862BF8EF44C4C44A /* libPods-MagicWorld.a */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
-		DB0FF224C0ECCBCFE73F0C60 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 57088E18A14049791463BBB8 /* PrivacyInfo.xcprivacy */; };
-		E78F15F940DFBD62B781E06E /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C1F3B296D7E4E1563F1F2F1 /* ExpoModulesProvider.swift */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
@@ -20,13 +20,13 @@
 		13B07F961A680F5B00A75B9A /* MagicWorld.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MagicWorld.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = MagicWorld/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = MagicWorld/Info.plist; sourceTree = "<group>"; };
-		3474919A9565B6558251E830 /* Pods-MagicWorld.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MagicWorld.debug.xcconfig"; path = "Target Support Files/Pods-MagicWorld/Pods-MagicWorld.debug.xcconfig"; sourceTree = "<group>"; };
-		4C1F3B296D7E4E1563F1F2F1 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-MagicWorld/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
-		57088E18A14049791463BBB8 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = MagicWorld/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		A53E9523CCAE4C5ED945A529 /* Pods-MagicWorld.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MagicWorld.release.xcconfig"; path = "Target Support Files/Pods-MagicWorld/Pods-MagicWorld.release.xcconfig"; sourceTree = "<group>"; };
+		4646DEAF5BB68B629F2A609C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = MagicWorld/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		539B7D1F862BF8EF44C4C44A /* libPods-MagicWorld.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-MagicWorld.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		85F8E06333D3AFA090C17F78 /* Pods-MagicWorld.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MagicWorld.release.xcconfig"; path = "Target Support Files/Pods-MagicWorld/Pods-MagicWorld.release.xcconfig"; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = MagicWorld/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
-		E5C1DB138831BDF6CD1B3A5A /* libPods-MagicWorld.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-MagicWorld.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C1E4C3C54B691F018A4E281C /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-MagicWorld/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		C9E2D23757A798EAA13D940F /* Pods-MagicWorld.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MagicWorld.debug.xcconfig"; path = "Target Support Files/Pods-MagicWorld/Pods-MagicWorld.debug.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = MagicWorld/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* MagicWorld-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "MagicWorld-Bridging-Header.h"; path = "MagicWorld/MagicWorld-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -37,7 +37,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				637FDD78FDCEDC979B1ACD6F /* libPods-MagicWorld.a in Frameworks */,
+				B8BF24C6730A8367A6952998 /* libPods-MagicWorld.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -53,7 +53,7 @@
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				57088E18A14049791463BBB8 /* PrivacyInfo.xcprivacy */,
+				4646DEAF5BB68B629F2A609C /* PrivacyInfo.xcprivacy */,
 			);
 			name = MagicWorld;
 			sourceTree = "<group>";
@@ -62,25 +62,9 @@
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				E5C1DB138831BDF6CD1B3A5A /* libPods-MagicWorld.a */,
+				539B7D1F862BF8EF44C4C44A /* libPods-MagicWorld.a */,
 			);
 			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		57F320F7B223182CC2277E0F /* ExpoModulesProviders */ = {
-			isa = PBXGroup;
-			children = (
-				785D14D20CEAB747BA43C0EE /* MagicWorld */,
-			);
-			name = ExpoModulesProviders;
-			sourceTree = "<group>";
-		};
-		785D14D20CEAB747BA43C0EE /* MagicWorld */ = {
-			isa = PBXGroup;
-			children = (
-				4C1F3B296D7E4E1563F1F2F1 /* ExpoModulesProvider.swift */,
-			);
-			name = MagicWorld;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -97,8 +81,8 @@
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
-				9807655B4678DFB458A28964 /* Pods */,
-				57F320F7B223182CC2277E0F /* ExpoModulesProviders */,
+				D78AEA97B43999130DF101F8 /* Pods */,
+				E67C81A65E438B1172D14B1F /* ExpoModulesProviders */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -113,16 +97,6 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		9807655B4678DFB458A28964 /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				3474919A9565B6558251E830 /* Pods-MagicWorld.debug.xcconfig */,
-				A53E9523CCAE4C5ED945A529 /* Pods-MagicWorld.release.xcconfig */,
-			);
-			name = Pods;
-			path = Pods;
-			sourceTree = "<group>";
-		};
 		BB2F792B24A3F905000567C9 /* Supporting */ = {
 			isa = PBXGroup;
 			children = (
@@ -130,6 +104,32 @@
 			);
 			name = Supporting;
 			path = MagicWorld/Supporting;
+			sourceTree = "<group>";
+		};
+		D78AEA97B43999130DF101F8 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				C9E2D23757A798EAA13D940F /* Pods-MagicWorld.debug.xcconfig */,
+				85F8E06333D3AFA090C17F78 /* Pods-MagicWorld.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
+		E67C81A65E438B1172D14B1F /* ExpoModulesProviders */ = {
+			isa = PBXGroup;
+			children = (
+				F3C4E58F8612B39E870055C1 /* MagicWorld */,
+			);
+			name = ExpoModulesProviders;
+			sourceTree = "<group>";
+		};
+		F3C4E58F8612B39E870055C1 /* MagicWorld */ = {
+			isa = PBXGroup;
+			children = (
+				C1E4C3C54B691F018A4E281C /* ExpoModulesProvider.swift */,
+			);
+			name = MagicWorld;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -140,13 +140,13 @@
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "MagicWorld" */;
 			buildPhases = (
 				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
-				F939CB46AEEE347F8B977189 /* [Expo] Configure project */,
+				5429EB8AC0385D28FCB77E87 /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				318BB29545CAD831C11F9B47 /* [CP] Embed Pods Frameworks */,
+				5DF466EB94E121F2C65E3CC6 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -196,7 +196,7 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				DB0FF224C0ECCBCFE73F0C60 /* PrivacyInfo.xcprivacy in Resources */,
+				489AD84BE64E0F1869994DFC /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -242,7 +242,31 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		318BB29545CAD831C11F9B47 /* [CP] Embed Pods Frameworks */ = {
+		5429EB8AC0385D28FCB77E87 /* [Expo] Configure project */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/.xcode.env",
+				"$(SRCROOT)/.xcode.env.local",
+				"$(SRCROOT)/MagicWorld/MagicWorld.entitlements",
+				"$(SRCROOT)/Pods/Target Support Files/Pods-MagicWorld/expo-configure-project.sh",
+			);
+			name = "[Expo] Configure project";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Pods/Target Support Files/Pods-MagicWorld/ExpoModulesProvider.swift",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-MagicWorld/expo-configure-project.sh\"\n";
+		};
+		5DF466EB94E121F2C65E3CC6 /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -310,30 +334,6 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-MagicWorld/Pods-MagicWorld-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		F939CB46AEEE347F8B977189 /* [Expo] Configure project */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"$(SRCROOT)/.xcode.env",
-				"$(SRCROOT)/.xcode.env.local",
-				"$(SRCROOT)/MagicWorld/MagicWorld.entitlements",
-				"$(SRCROOT)/Pods/Target Support Files/Pods-MagicWorld/expo-configure-project.sh",
-			);
-			name = "[Expo] Configure project";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(SRCROOT)/Pods/Target Support Files/Pods-MagicWorld/ExpoModulesProvider.swift",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-MagicWorld/expo-configure-project.sh\"\n";
-		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -342,7 +342,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
-				E78F15F940DFBD62B781E06E /* ExpoModulesProvider.swift in Sources */,
+				5B4D1947EACF0DAC640589B7 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -351,7 +351,7 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 3474919A9565B6558251E830 /* Pods-MagicWorld.debug.xcconfig */;
+			baseConfigurationReference = C9E2D23757A798EAA13D940F /* Pods-MagicWorld.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -387,7 +387,7 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = A53E9523CCAE4C5ED945A529 /* Pods-MagicWorld.release.xcconfig */;
+			baseConfigurationReference = 85F8E06333D3AFA090C17F78 /* Pods-MagicWorld.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
