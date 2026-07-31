@@ -16,7 +16,6 @@ import { createMage } from "./art/mage";
 import { PALETTE } from "./art/palette";
 import { PaperKit } from "./art/paper";
 import { createSky, type Sky } from "./art/sky";
-import { createPostFx } from "./art/postFx";
 import { Disposer } from "./engine/Disposer";
 import { createInputState } from "./engine/input";
 import { ARENA_STATE, overFloorGap, setSealed } from "./systems/arena";
@@ -225,28 +224,7 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     if (activeSky && activeSky !== sky) activeSky.root.visible = false;
     sky.root.visible = true;
     activeSky = sky;
-
-    // Per-biome mood tint — a very-low-alpha coloured screen overlay that
-    // fakes the grading pass a colour grader would do. Warm for ember,
-    // cool for cistern, magic-purple for void, etc.
-    const moodByBiome: Record<BiomeId, { hex: number; intensity: number }> = {
-      hollow: { hex: PALETTE.fogWarm, intensity: 0.04 },
-      fungal: { hex: 0x8ce87a, intensity: 0.05 },
-      thorn: { hex: PALETTE.fogWarm, intensity: 0.06 },
-      spire: { hex: PALETTE.fogCool, intensity: 0.05 },
-      ember: { hex: PALETTE.fogWarm, intensity: 0.08 },
-      cistern: { hex: PALETTE.fogCool, intensity: 0.06 },
-      void: { hex: PALETTE.fogMagic, intensity: 0.07 },
-      storm: { hex: PALETTE.fogWarm, intensity: 0.06 },
-    };
-    const mood = moodByBiome[biome] ?? { hex: PALETTE.fogWarm, intensity: 0.04 };
-    postFx.setMood(mood.hex, mood.intensity);
   }
-
-  // Screen-space overlay effects — vignette, grain, biome mood tint, flash.
-  // Parented to the camera inside createPostFx so it always fills the
-  // screen. Never touches the world.
-  const postFx = createPostFx(disposer, ctx.camera, ctx.viewWidth, ctx.viewHeight);
 
   const fx = createFx(kit, disposer);
   world.root.add(fx.root);
@@ -659,7 +637,6 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     setSealed(true);
     cameraRig.setBossFraming(true);
     cameraRig.addShake(0.7);
-    postFx.flash(PALETTE.arcaneCore, 0.35, 0.45);
     sound("bossRoar");
   }
 
@@ -678,7 +655,6 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
 
     fx.burst(x, y, 46, PALETTE.gold, 13, 15);
     fx.shockwave(x, y, PALETTE.arcaneCore, 9, 0.7);
-    postFx.flash(PALETTE.gold, 0.55, 0.6);
 
     world.markBossDefeated(roomId);
     // Reward: a heart and a scattering of pickups. Healing on a boss kill
@@ -840,7 +816,6 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     cameraRig.update(dt, player.x, player.y, player.vx, PLAYER.maxSpeed);
     world.update(cameraRig.focusX, cameraRig.focusY, state.elapsed, player.x, player.y);
     activeSky?.update(dt, state.elapsed, cameraRig.focusX);
-    postFx.update(dt, state.elapsed);
     world.setFade(state.fade);
 
     publishHud();

@@ -124,10 +124,7 @@ export function useGLGame({ factory, paused = false, onReady }: UseGLGameOptions
 
     const renderer = new THREE.WebGLRenderer({
       context: gl as unknown as WebGLRenderingContext,
-      // HD pass: MSAA on. Smoother silhouettes on every paper card
-      // outline. If a device chugs on this, config.RENDER.antialias
-      // can be checked here to disable it selectively.
-      antialias: RENDER.antialias,
+      antialias: false, // MSAA is expensive; the flat art doesn't need it
       alpha: false,
       powerPreference: "high-performance",
     });
