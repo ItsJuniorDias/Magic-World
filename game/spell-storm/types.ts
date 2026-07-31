@@ -1,5 +1,6 @@
 import type * as THREE from "three";
 import type { BossKind, EnemyKind, PickupKind, WeaponId } from "./config";
+import type { ShopItemId } from "./systems/shop";
 
 /** A 2D vector. The game is 2.5D — Z is fixed per layer, never simulated. */
 export interface Vec2 {
@@ -59,7 +60,21 @@ export interface Player {
   jumping: boolean;
 
   hearts: number;
+  /**
+   * Live max hearts for this run. Starts at PLAYER.maxHearts and grows by
+   * `progress.bonusMaxHearts` whenever a Vessel Fragment is purchased in
+   * the shop. Persisting the cap on the Player rather than reading the
+   * constant everywhere means resetPlayer() can rebuild it from the
+   * saved bonus at respawn without touching config.
+   */
+  maxHearts: number;
   invulnerable: number;
+  /**
+   * Charges bought from the Arcane Shield in the shop. Each takes a hit
+   * for free — i-frames and knockback still apply so the shield reads
+   * as a real save, not a whiff. Zero out at death alongside weapons.
+   */
+  shield: number;
 
   /** Normalised aim direction, snapped to 8 ways. */
   aimX: number;
@@ -175,6 +190,13 @@ export type GamePhase =
   | "playing"
   /** Fading between rooms. The simulation is paused. */
   | "transition"
+  /**
+   * You've arrived at a boss room you haven't cleared. The shop overlay
+   * is up; the boss hasn't spawned yet and the sim is paused. Leaving
+   * this phase either kills you (unlikely — nothing can hit you) or
+   * commits you to the fight.
+   */
+  | "shop"
   /** Boss roar; the player can move but nothing can hurt them. */
   | "bossIntro"
   /** Boss corpse dissolving. */
@@ -195,6 +217,12 @@ export interface Progress {
   /** x within that room. */
   benchX: number;
   essence: number;
+  /**
+   * Vessel Fragments bought from the shop. Persists between deaths and
+   * across sessions; capped at VESSEL_CAP (3). Each fragment adds one
+   * to the player's max hearts.
+   */
+  bonusMaxHearts?: number;
 }
 
 export interface RoomHudInfo {
@@ -236,6 +264,21 @@ export interface GameState {
   bossTimer: number;
   /** Set when the player reaches a gate they haven't unlocked. */
   blockedGate: { label: string; pro: boolean } | null;
+
+  // ---- Shop ----
+  /**
+   * The boss that will be spawned when the shop overlay closes. Set on
+   * entry to an uncleared boss room, cleared once the fight starts.
+   * A non-null value here is what tells the phase machine to keep the
+   * sim paused for the overlay.
+   */
+  pendingBoss: BossKind | null;
+  /**
+   * What was bought in the current shop visit, keyed by ShopItemId. Reset
+   * every time the shop opens. Used to enforce the per-visit stack limit
+   * without the UI having to remember.
+   */
+  shopPurchased: Partial<Record<ShopItemId, number>>;
 }
 
 /**
@@ -288,6 +331,25 @@ export interface HudSnapshot {
 
   /** Set when the player walks into a sealed door. */
   sealed: { label: string; pro: boolean } | null;
+
+  /**
+   * Live shield charges — rendered as a small aegis pip beside the hearts
+   * during play so the player knows their next hit is free.
+   */
+  shield: number;
+
+  /**
+   * Shop panel state, pushed to the React layer so it can render the
+   * overlay without querying the game handle imperatively. Null when no
+   * shop is open.
+   */
+  shop: {
+    bossName: string;
+    bossTitle: string;
+    essence: number;
+    purchased: Partial<Record<ShopItemId, number>>;
+    bonusMaxHearts: number;
+  } | null;
 }
 
 // ---------------------------------------------------------------------------

@@ -839,6 +839,142 @@ console.log("\nAim snap coverage");
   }
   check("all 8 headings are distinct", all && seen.size === 8, `${seen.size} unique`);
 }
+
+// ---------------------------------------------------------------------------
+// Shop
+//
+// The shop's purchase logic is where the pre-boss room turns from RNG-gated
+// into a legible tradeoff, and every failure mode of that tradeoff — "can I
+// afford it", "did I already buy it", "have I hit the cap" — is data driven
+// by the same catalog the UI reads from. Tests below are the same shape as
+// the input/dash/pogo suites above: build the smallest state that could
+// distinguish two behaviours, run the function, assert one property.
+// ---------------------------------------------------------------------------
+
+import {
+  SHOP_CATALOG,
+  SHOP_WEAPON_DURATION,
+  VESSEL_CAP,
+  findShopItem,
+  tryBuyShopItem,
+} from "../game/spell-storm/systems/shop";
+import { healPlayer } from "../game/spell-storm/systems/player";
+import type { Progress } from "../game/spell-storm/types";
+
+function freshProgress(): Progress {
+  return {
+    bosses: [],
+    discovered: [],
+    bench: "crossroads",
+    benchX: 0,
+    essence: 0,
+    bonusMaxHearts: 0,
+  };
+}
+
+console.log("\nShop: catalog integrity");
+{
+  check("catalog is non-empty", SHOP_CATALOG.length > 0);
+  check("every catalog entry resolves via findShopItem", SHOP_CATALOG.every((i) => findShopItem(i.id)?.id === i.id));
+  check("no duplicate ids", new Set(SHOP_CATALOG.map((i) => i.id)).size === SHOP_CATALOG.length);
+  check("all prices positive", SHOP_CATALOG.every((i) => i.cost > 0));
+}
+
+console.log("\nShop: full heal");
+{
+  const p = createPlayer();
+  const prog = freshProgress();
+  p.hearts = 1;
+  const result = tryBuyShopItem("healFull", {}, 500, p, prog);
+  check("healFull succeeds when player has budget", result.ok);
+  check("healFull refills to maxHearts", p.hearts === p.maxHearts);
+}
+
+console.log("\nShop: insufficient essence");
+{
+  const p = createPlayer();
+  const prog = freshProgress();
+  const item = findShopItem("starLance")!;
+  const result = tryBuyShopItem("starLance", {}, item.cost - 1, p, prog);
+  check("purchase fails below cost", !result.ok && result.reason === "insufficient");
+  check("player weapon unchanged after failed buy", p.weapon === "bolt");
+}
+
+console.log("\nShop: shield absorbs a hit");
+{
+  const p = createPlayer();
+  const prog = freshProgress();
+  tryBuyShopItem("arcaneShield", {}, 5000, p, prog);
+  check("shield charge granted", p.shield === 1);
+  const heartsBefore = p.hearts;
+  const hit = damagePlayer(p, p.x + 5);
+  check("shield hit registers as a real hit", hit);
+  check("shield consumes the charge", p.shield === 0);
+  check("shield spares the heart", p.hearts === heartsBefore);
+}
+
+console.log("\nShop: extended weapon");
+{
+  const p = createPlayer();
+  const prog = freshProgress();
+  tryBuyShopItem("tripleSpark", {}, 5000, p, prog);
+  check("triple spark granted", p.weapon === "triple");
+  check(
+    `weapon timer set to shop duration`,
+    p.weaponTimer === SHOP_WEAPON_DURATION,
+    `timer=${p.weaponTimer}`,
+  );
+}
+
+console.log("\nShop: vessel fragment");
+{
+  const p = createPlayer();
+  const prog = freshProgress();
+  const startingMax = p.maxHearts;
+  const result = tryBuyShopItem("vesselFragment", {}, 5000, p, prog);
+  check("vessel purchase succeeds", result.ok);
+  check("progress.bonusMaxHearts bumped", prog.bonusMaxHearts === 1);
+  check(
+    "player.maxHearts grows by 1",
+    p.maxHearts === startingMax + 1,
+    `${startingMax} → ${p.maxHearts}`,
+  );
+  check("player is refilled after Vessel", p.hearts === p.maxHearts);
+}
+
+console.log("\nShop: vessel cap");
+{
+  const p = createPlayer();
+  const prog = freshProgress();
+  prog.bonusMaxHearts = VESSEL_CAP;
+  p.maxHearts = PLAYER.maxHearts + VESSEL_CAP;
+  const result = tryBuyShopItem("vesselFragment", {}, 5000, p, prog);
+  check("vessel refused at cap", !result.ok && result.reason === "capReached");
+}
+
+console.log("\nShop: per-visit stack limit");
+{
+  const p = createPlayer();
+  const prog = freshProgress();
+  const purchased: Record<string, number> = { arcaneShield: 1 };
+  const result = tryBuyShopItem("arcaneShield", purchased, 5000, p, prog);
+  check("re-buy refused in same visit", !result.ok && result.reason === "alreadyOwned");
+}
+
+console.log("\nShop: healPlayer respects boosted maxHearts");
+{
+  // After a Vessel purchase, healPlayer should refill up to the NEW
+  // cap rather than the config constant. This was the specific
+  // regression risk from making maxHearts dynamic.
+  const p = createPlayer();
+  const prog = freshProgress();
+  tryBuyShopItem("vesselFragment", {}, 5000, p, prog);
+  p.hearts = p.maxHearts - 1;
+  const healed = healPlayer(p);
+  check("heal succeeds under boosted cap", healed);
+  check("hearts refill to the new cap", p.hearts === p.maxHearts);
+}
+
 // ---------------------------------------------------------------------------
 console.log(failures === 0 ? "\nAll checks passed.\n" : `\n${failures} check(s) failed.\n`);
 process.exit(failures === 0 ? 0 : 1);

@@ -8,6 +8,73 @@ branches, benches to save at, and a paper-theatre art style.
 
 ---
 
+### v4 — the pre-boss shop
+
+The problem: you'd reach a boss with whatever the drop table happened
+to give you, which for a typical run through the Fungal branch was
+"Spark and four hearts". Spark at ~5.9dps against a 42–96hp boss with
+contact damage that outpaces your run speed is not a fight, it's a
+coin flip weighted toward you losing. The shop is the negotiation
+between the corridor's RNG and the arena.
+
+**Where.** When you step into a boss room you haven't cleared, the room
+seals behind you (same as it always did) but the boss doesn't spawn.
+The shop overlay comes up instead. Six items, priced against a typical
+essence bag, and one button — Enter the Arena — that commits you to
+the fight. There is deliberately no back-out: a shop with an exit is a
+shop that lets you farm the corridor's respawns forever, and that
+turns every fight into a math problem.
+
+**What it sells.**
+
+    Full Heal        200   restore hearts
+    Arcane Shield    500   next hit is free
+    Triple Spark     400   3 bolts per cast, 5min
+    Seeker Swarm     600   homing 2dmg, 5min
+    Star Lance       900   piercing beam, 5min
+    Vessel Fragment 1200   +1 max heart (cap 3), permanent
+
+Prices are calibrated so a normal essence total buys two or three
+items. Every other item resets on death; the Vessel Fragment persists
+because it's the most expensive item in the catalog and losing it
+every death would make it a trap.
+
+**Why the effects live in `systems/shop.ts` and not in `player.ts`.**
+The catalog is data. The mutations it triggers are data too — one entry
+says "cure to max", another says "grant weapon X for 300s", a third
+says "bump progress and refill". Keeping them in one switch means a
+change to the catalog is a change to one file, not a scavenger hunt
+across `player.ts` and the orchestrator. `player.ts` stays about how
+the mage moves; `shop.ts` stays about what essence buys.
+
+**The shield.** New `Player.shield` field, absorbs one hit outright but
+still triggers i-frames and knockback so the save reads as a real hit
+that landed on the shield rather than as the game eating the input. A
+tiny cyan pip appears beside the hearts on the HUD while it's up. Reset
+on death alongside weapons.
+
+**The Vessel Fragment.** Bumps `Progress.bonusMaxHearts`, which
+`Player.maxHearts` reads at every reset. Cap of three (so max hearts
+tops out at seven). Saves from before the shop shipped migrate to
+`bonusMaxHearts = 0` on load, so no existing player loses anything.
+
+**Phase machine.** New `"shop"` phase sits between `"transition"` and
+`"bossIntro"`. The sim is paused, the presentation still runs (so the
+boss room is visible behind the overlay), the room is sealed. The
+overlay is React state driven off `hud.shop`, not imperative — same
+push-to-HUD pattern as everything else in this project, so the shop
+doesn't need its own polling loop. Two imperative surfaces —
+`buyShopItem(id)` and `closeShop()` — are the only things the React
+layer calls into.
+
+**Regression risk.** The bench-heal path already used `healPlayer(p)`,
+which was reading `PLAYER.maxHearts`. Changed it to read `p.maxHearts`
+so post-Vessel players actually refill to their new cap when resting.
+`resetPlayer(p)` now takes `{maxHearts?}` and is called with the saved
+bonus at both `start()` and `respawn()`.
+
+---
+
 ### v3.1 — the aim you actually asked for
 
 The v3 latch worked in isolation but had a subtle ordering bug that made

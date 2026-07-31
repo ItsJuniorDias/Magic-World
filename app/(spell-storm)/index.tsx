@@ -45,6 +45,12 @@ import {
   type GateSide,
 } from "@/game/spell-storm";
 import {
+  SHOP_CATALOG,
+  VESSEL_CAP,
+  type ShopItem,
+  type ShopItemId,
+} from "@/game/spell-storm/systems/shop";
+import {
   createMusicController,
   type MusicController,
 } from "@/game/spell-storm/audio/procedural";
@@ -353,6 +359,14 @@ export default function SpellStormScreen() {
               bench,
               benchX: typeof parsed.benchX === "number" ? parsed.benchX : 0,
               essence: typeof parsed.essence === "number" ? parsed.essence : 0,
+              // Migrate saves from before the shop shipped: field will be
+              // undefined and the game reads it as zero everywhere. Also
+              // clamp to VESSEL_CAP so a corrupted or tampered save can't
+              // hand the player 40 hearts.
+              bonusMaxHearts:
+                typeof parsed.bonusMaxHearts === "number"
+                  ? Math.max(0, Math.min(VESSEL_CAP, parsed.bonusMaxHearts))
+                  : 0,
             };
           } catch {
             progressRef.current = createDefaultProgress();
@@ -687,6 +701,45 @@ export default function SpellStormScreen() {
     setHud((h) => ({ ...h, phase: "playing" }));
   }, []);
 
+  // ---- Shop --------------------------------------------------------------
+  //
+  // Two imperative surfaces, both thin wrappers. The overlay renders off
+  // hud.shop (which the game populates only while the shop phase is up),
+  // so all the React side needs to do is forward taps to the game.
+  //
+  // Haptics fire on both hits and misses because a silent failure would
+  // look like the button didn't register — the reason string is what
+  // tells the overlay whether to flash "not enough essence" or "already
+  // owned", but the haptic tick is the "your press was registered" ack.
+  const handleShopBuy = useCallback((id: ShopItemId) => {
+    const game = gameRef.current;
+    if (!game) return;
+    const result = game.buyShopItem(id);
+    if (result.ok) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+        () => {},
+      );
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(
+        () => {},
+      );
+    }
+    // Force an immediate HUD refresh so the overlay's essence counter and
+    // "owned" state react on the frame the tap lands, rather than waiting
+    // for the 10Hz polling tick.
+    setHud({ ...game.hud });
+  }, []);
+
+  const handleShopEnter = useCallback(() => {
+    const game = gameRef.current;
+    if (!game) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(
+      () => {},
+    );
+    game.closeShop();
+    setHud({ ...game.hud });
+  }, []);
+
   // ---- Render ------------------------------------------------------------
   const playing =
     hud.phase === "playing" ||
@@ -764,6 +817,19 @@ export default function SpellStormScreen() {
                     />
                   ))}
                 </View>
+                {/* Arcane Shield pip. Shown only while the player has one
+                    active — a persistent slot even at zero would fight for
+                    attention with the hearts. Sits between hearts and the
+                    essence divider so it reads as "an extra layer of
+                    protection", left-to-right. */}
+                {hud.shield > 0 && (
+                  <View
+                    style={[
+                      styles.shieldPip,
+                      { backgroundColor: hex(0x8ff0e8) },
+                    ]}
+                  />
+                )}
                 <View style={styles.divider} />
                 <Text
                   variant="heading"
@@ -967,8 +1033,13 @@ export default function SpellStormScreen() {
         </View>
       )}
 
-      {/* ---------------- Controls ---------------- */}
-      {ready && playing && !mapOpen && (
+      {/* ---------------- Controls ----------------
+        Hidden during the shop phase — the overlay owns the whole screen
+        while the player is deciding what to buy, and a live stick under
+        a modal is a great way to fall out of the room the moment they
+        press "Enter the arena".
+      */}
+      {ready && playing && !mapOpen && hud.phase !== "shop" && (
         <>
           <View style={styles.stickZone} {...stickResponder.panHandlers}>
             {stickOrigin && (
@@ -1069,6 +1140,26 @@ export default function SpellStormScreen() {
               ? `${progressRef.current?.bosses.length}/7 sigils · ${progressRef.current?.discovered.length} rooms found`
               : undefined
           }
+        />
+      )}
+
+      {/* ---------------- Shop ----------------
+        Fires on the first frame the player enters an uncleared boss
+        room. The game state's shop panel is either set (open) or null
+        (not open); we render iff both the phase and the panel say so,
+        so any transient state where one is set and the other isn't
+        keeps the overlay hidden until they agree.
+      */}
+      {ready && hud.phase === "shop" && hud.shop && (
+        <ShopOverlay
+          panel={hud.shop}
+          hearts={hud.hearts}
+          maxHearts={hud.maxHearts}
+          shield={hud.shield}
+          weapon={hud.weapon}
+          onBuy={handleShopBuy}
+          onEnter={handleShopEnter}
+          insets={insets}
         />
       )}
 
@@ -2284,6 +2375,320 @@ function Loader({
 }
 
 // ---------------------------------------------------------------------------
+// Shop overlay
+//
+// The pre-boss shop is a full-screen overlay that fires whenever the player
+// steps into a boss room they haven't cleared. Under the overlay the room
+// is already sealed and the camera is already framed for the fight — the
+// boss just hasn't spawned. Everything the player buys in here applies to
+// their current entity: healing tops them up, the shield charges up their
+// live shield count, weapon items grant an extended (300s) buff, and the
+// Vessel Fragment mutates their max heart count directly.
+//
+// LAYOUT
+//
+// Header — boss name and title, essence counter to the right. The essence
+// figure is what the whole overlay is negotiating over; putting it in the
+// header rather than under every button means the player never loses track
+// of it while deciding.
+//
+// Grid  — six item cards, two columns on landscape phones. Each card
+// shows label + description + cost, dims when unaffordable / owned /
+// capped, and offers a "Buy" tap target you don't have to be precise
+// with.
+//
+// Footer — one big commit button. There is no "back to the corridor"
+// option because a shop that lets you leave is a shop that lets you farm
+// the corridor's respawns forever, and the whole point of stationing the
+// shop at the boss room is that the fight is imminent.
+//
+// STYLING
+//
+// Same glass-and-hairline vocabulary as the rest of the HUD, so the shop
+// reads as part of the game's interface rather than as a modal from a
+// different app. Item cards are opaque cards (not blurred glass) because
+// blur is what says "chrome"; the items are content and want to sit
+// visually one level deeper than the surrounding frame.
+// ---------------------------------------------------------------------------
+
+interface ShopOverlayProps {
+  panel: NonNullable<HudSnapshot["shop"]>;
+  hearts: number;
+  maxHearts: number;
+  shield: number;
+  weapon: HudSnapshot["weapon"];
+  onBuy: (id: ShopItemId) => void;
+  onEnter: () => void;
+  insets: { top: number; bottom: number; left: number; right: number };
+}
+
+/**
+ * Returns the reason this specific item can't be bought right now, or
+ * null if the buy button should be active. The overlay uses this to grey
+ * cards and swap their footer text — "OWNED", "MAX", "NEED 250" — so the
+ * player understands the shape of the room before they tap anything.
+ */
+function shopItemBlockedReason(
+  item: ShopItem,
+  props: {
+    essence: number;
+    purchased: Partial<Record<ShopItemId, number>>;
+    hearts: number;
+    maxHearts: number;
+    shield: number;
+    weapon: HudSnapshot["weapon"];
+    bonusMaxHearts: number;
+  },
+): { label: string; kind: "owned" | "cap" | "poor" | "full" } | null {
+  const owned = props.purchased[item.id] ?? 0;
+  if (owned >= item.maxStack) return { label: "OWNED", kind: "owned" };
+  // Full Heal on full hearts is technically legal (the backend accepts
+  // it), but selling a heal to a full-health player is user-hostile. Grey
+  // it out and label it clearly.
+  if (item.id === "healFull" && props.hearts >= props.maxHearts) {
+    return { label: "AT FULL", kind: "full" };
+  }
+  // Weapons that are already the active weapon are functionally already
+  // bought — the player would just be re-paying to reset the timer to
+  // 300s, which is more expensive than the same result from letting the
+  // ambient drop table hand them another scroll later. Discourage it
+  // rather than forbid it; the backend allows a re-buy if they insist.
+  if (
+    (item.id === "tripleSpark" && props.weapon === "triple") ||
+    (item.id === "seekerSwarm" && props.weapon === "homing") ||
+    (item.id === "starLance" && props.weapon === "beam")
+  ) {
+    return { label: "ACTIVE", kind: "owned" };
+  }
+  if (item.id === "arcaneShield" && props.shield > 0) {
+    return { label: "ACTIVE", kind: "owned" };
+  }
+  if (item.id === "vesselFragment" && props.bonusMaxHearts >= VESSEL_CAP) {
+    return { label: "AT CAP", kind: "cap" };
+  }
+  if (props.essence < item.cost) {
+    return { label: `NEED ${item.cost - props.essence}`, kind: "poor" };
+  }
+  return null;
+}
+
+const CATEGORY_TINT: Record<ShopItem["category"], string> = {
+  restore: "rgba(232,90,120,0.32)",
+  defense: "rgba(120,180,255,0.32)",
+  offense: "rgba(196,162,255,0.32)",
+  vessel: "rgba(255,201,74,0.32)",
+};
+
+const CATEGORY_ACCENT: Record<ShopItem["category"], number> = {
+  restore: PALETTE.heart,
+  defense: 0x8ff0e8,
+  offense: PALETTE.arcane,
+  vessel: PALETTE.gold,
+};
+
+function ShopOverlay({
+  panel,
+  hearts,
+  maxHearts,
+  shield,
+  weapon,
+  onBuy,
+  onEnter,
+  insets,
+}: ShopOverlayProps) {
+  return (
+    <View style={styles.overlay}>
+      <BlurView intensity={38} tint="dark" style={StyleSheet.absoluteFill} />
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: "rgba(6,3,14,0.72)" },
+        ]}
+      />
+
+      <View
+        style={[
+          styles.shopFrame,
+          {
+            paddingTop: insets.top + 22,
+            paddingBottom: insets.bottom + 20,
+            paddingHorizontal: Math.max(insets.left, insets.right, 24) + 8,
+          },
+        ]}
+      >
+        {/* HEADER — boss identity on the left, essence on the right. */}
+        <View style={styles.shopHeader}>
+          <View style={{ flexShrink: 1 }}>
+            <Text
+              variant="label"
+              size="xs"
+              color="rgba(255,255,255,0.5)"
+              style={styles.shopEyebrow}
+            >
+              Rest & Prepare
+            </Text>
+            <Text
+              variant="display"
+              size="lg"
+              color="#FFFFFF"
+              style={styles.shopBossName}
+              numberOfLines={1}
+            >
+              {panel.bossName}
+            </Text>
+            {!!panel.bossTitle && (
+              <Text
+                variant="body"
+                size="sm"
+                color="rgba(255,255,255,0.58)"
+                numberOfLines={1}
+              >
+                {panel.bossTitle}
+              </Text>
+            )}
+          </View>
+
+          <Glass style={styles.shopEssence} radius={18}>
+            <View style={styles.shopEssenceInner}>
+              <Text
+                variant="label"
+                size="xs"
+                color="rgba(255,255,255,0.55)"
+                style={styles.shopEssenceLabel}
+              >
+                ESSENCE
+              </Text>
+              <Text
+                variant="heading"
+                size="lg"
+                color={hex(PALETTE.gold)}
+                style={styles.shopEssenceValue}
+              >
+                {panel.essence.toLocaleString()}
+              </Text>
+            </View>
+          </Glass>
+        </View>
+
+        {/* GRID — six cards in a 2-column layout. */}
+        <ScrollView
+          contentContainerStyle={styles.shopGrid}
+          showsVerticalScrollIndicator={false}
+        >
+          {SHOP_CATALOG.map((item) => {
+            const blocked = shopItemBlockedReason(item, {
+              essence: panel.essence,
+              purchased: panel.purchased,
+              hearts,
+              maxHearts,
+              shield,
+              weapon,
+              bonusMaxHearts: panel.bonusMaxHearts,
+            });
+            const disabled = blocked !== null;
+            return (
+              <Pressable
+                key={item.id}
+                onPress={disabled ? undefined : () => onBuy(item.id)}
+                style={[
+                  styles.shopCard,
+                  {
+                    backgroundColor: CATEGORY_TINT[item.category],
+                    opacity: disabled ? 0.44 : 1,
+                  },
+                ]}
+              >
+                <View style={styles.shopCardHeader}>
+                  <View
+                    style={[
+                      styles.shopCardDot,
+                      { backgroundColor: hex(CATEGORY_ACCENT[item.category]) },
+                    ]}
+                  />
+                  <Text
+                    variant="heading"
+                    size="md"
+                    color="#FFFFFF"
+                    style={styles.shopCardLabel}
+                    numberOfLines={1}
+                  >
+                    {item.label}
+                  </Text>
+                </View>
+                <Text
+                  variant="body"
+                  size="sm"
+                  color="rgba(255,255,255,0.72)"
+                  style={styles.shopCardDesc}
+                >
+                  {item.description}
+                </Text>
+                <View style={styles.shopCardFooter}>
+                  {blocked ? (
+                    <Text
+                      variant="label"
+                      size="sm"
+                      color={
+                        blocked.kind === "poor"
+                          ? "rgba(255,255,255,0.5)"
+                          : hex(PALETTE.gold)
+                      }
+                      style={styles.shopCardStatus}
+                    >
+                      {blocked.label}
+                    </Text>
+                  ) : (
+                    <Text
+                      variant="label"
+                      size="sm"
+                      color={hex(PALETTE.gold)}
+                      style={styles.shopCardCost}
+                    >
+                      {item.cost.toLocaleString()}
+                    </Text>
+                  )}
+                  {!blocked && (
+                    <Text
+                      variant="heading"
+                      size="sm"
+                      color="#FFFFFF"
+                      style={styles.shopCardBuy}
+                    >
+                      BUY
+                    </Text>
+                  )}
+                </View>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {/* FOOTER — one commit button, no back-out. Small status line
+            above showing what the player is walking in with, so they
+            confirm their loadout before spending the fight learning it. */}
+        <View style={styles.shopFooter}>
+          <Text
+            variant="body"
+            size="sm"
+            color="rgba(255,255,255,0.55)"
+            style={styles.shopLoadout}
+          >
+            {hearts}/{maxHearts} hearts
+            {shield > 0 ? ` · shield ${shield}` : ""}
+            {weapon !== "bolt" ? ` · ${WEAPONS[weapon].label}` : ""}
+          </Text>
+          <Pressable onPress={onEnter} style={styles.shopEnter}>
+            <Text variant="heading" size="md" color="#04121A">
+              Enter the Arena
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 interface OverlayProps {
   title: string;
@@ -2378,6 +2783,14 @@ const styles = StyleSheet.create({
   },
   hearts: { flexDirection: "row", gap: 6 },
   heart: { width: 16, height: 16, borderRadius: 5, borderCurve: "continuous" },
+  shieldPip: {
+    width: 12,
+    height: 12,
+    borderRadius: 3,
+    borderCurve: "continuous",
+    transform: [{ rotate: "45deg" }],
+    marginLeft: 4,
+  },
   divider: { width: 1, height: 16, backgroundColor: "rgba(255,255,255,0.16)" },
   essence: { letterSpacing: -0.4, fontVariant: ["tabular-nums"] },
   combo: { letterSpacing: -0.2 },
@@ -2822,5 +3235,111 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textAlign: "center",
     textTransform: "uppercase",
+  },
+
+  // -------- Shop overlay --------
+  //
+  // The frame is a full-viewport column split into three: a header row
+  // (boss + essence), a scrollable 2-column grid of item cards, and a
+  // pinned footer with the loadout summary + commit button.
+  shopFrame: { flex: 1, flexDirection: "column", gap: 18 },
+  shopHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 16,
+  },
+  shopEyebrow: {
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  shopBossName: { letterSpacing: -0.6, marginBottom: 2 },
+  shopEssence: { alignSelf: "flex-start", minWidth: 130 },
+  shopEssenceInner: { paddingHorizontal: 16, paddingVertical: 10, gap: 2 },
+  shopEssenceLabel: {
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+    textAlign: "right",
+  },
+  shopEssenceValue: {
+    letterSpacing: -0.4,
+    fontVariant: ["tabular-nums"],
+    textAlign: "right",
+  },
+
+  // Two-column grid. Each card takes a fraction of the horizontal space
+  // minus a fixed gap; the `basis` calc keeps it responsive without a
+  // media query, so the same layout works from 6 Plus to Pro Max.
+  shopGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    paddingBottom: 8,
+  },
+  shopCard: {
+    flexBasis: "48%",
+    flexGrow: 1,
+    minHeight: 118,
+    borderRadius: 18,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    padding: 14,
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  shopCardHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  shopCardDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 2,
+    borderCurve: "continuous",
+    transform: [{ rotate: "45deg" }],
+  },
+  shopCardLabel: { letterSpacing: -0.2, flex: 1 },
+  shopCardDesc: { lineHeight: 18 },
+  shopCardFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 4,
+  },
+  shopCardCost: {
+    letterSpacing: 0.4,
+    fontVariant: ["tabular-nums"],
+  },
+  shopCardStatus: {
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+  },
+  shopCardBuy: {
+    letterSpacing: 1.6,
+    textTransform: "uppercase",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderCurve: "continuous",
+    backgroundColor: "rgba(255,255,255,0.16)",
+    overflow: "hidden",
+  },
+
+  shopFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 14,
+    paddingTop: 6,
+  },
+  shopLoadout: {
+    flexShrink: 1,
+    letterSpacing: 0.3,
+  },
+  shopEnter: {
+    backgroundColor: hex(PALETTE.gold),
+    paddingHorizontal: 26,
+    paddingVertical: 14,
+    borderRadius: 18,
+    borderCurve: "continuous",
   },
 });

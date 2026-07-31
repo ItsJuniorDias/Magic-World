@@ -32,6 +32,12 @@ import { boxesOverlap, circleHitsBox, hitsHazard } from "./systems/physics";
 import { createPickups } from "./systems/pickups";
 import { alreadyHit, createProjectiles, markHit } from "./systems/projectiles";
 import {
+  SHOP_CATALOG,
+  tryBuyShopItem,
+  type ShopItemId,
+  type ShopPurchaseResult,
+} from "./systems/shop";
+import {
   createPlayer,
   damagePlayer,
   grantWeapon,
@@ -100,6 +106,12 @@ export interface SpellStormOptions {
   onLocked?: (roomId: string) => void;
   /** Fired for one-shot sound effects. Kept out of the engine deliberately. */
   onSound?: (id: SoundId) => void;
+  /**
+   * Called on a successful shop purchase. Handy for haptics / analytics
+   * without leaking the shop's internal shape into the React layer's
+   * imperative surface.
+   */
+  onShopBuy?: (id: ShopItemId, cost: number) => void;
 }
 
 export type SoundId =
@@ -119,10 +131,30 @@ export type SoundId =
 
 export interface SpellStorm extends GameHandle {
   readonly input: InputState;
+  /**
+   * Attempts to buy a shop item. Only meaningful while phase === "shop".
+   * Returns the same result the shop system produces so the UI can
+   * surface exactly why a purchase failed (out of essence, already
+   * bought, at the cap). No-op outside the shop phase.
+   */
+  buyShopItem(id: ShopItemId): ShopPurchaseResult;
+  /**
+   * Commits the current shop visit and spawns the pending boss. No-op
+   * outside the shop phase. The overlay is what invokes this on the
+   * "Enter the arena" button.
+   */
+  closeShop(): void;
 }
 
 export function createDefaultProgress(): Progress {
-  return { bosses: [], discovered: [], bench: START_ROOM, benchX: 0, essence: 0 };
+  return {
+    bosses: [],
+    discovered: [],
+    bench: START_ROOM,
+    benchX: 0,
+    essence: 0,
+    bonusMaxHearts: 0,
+  };
 }
 
 export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): SpellStorm {
@@ -226,6 +258,8 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     bossKind: null,
     bossTimer: 0,
     blockedGate: null,
+    pendingBoss: null,
+    shopPurchased: {},
   };
 
   const hud: HudSnapshot = {
@@ -255,6 +289,8 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     airDashArmed: false,
     aimLatched: false,
     sealed: null,
+    shield: 0,
+    shop: null,
   };
 
   let castFlash = 0;
@@ -379,18 +415,47 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     for (const s of room.spawns) enemies.spawn(s.kind, s.x, s.y);
 
     // Boss.
+    //
+    // Two paths. If this room has a boss and it's still standing, we
+    // open the shop before starting the fight — the arena stays sealed
+    // and the boss doesn't spawn until the player commits via
+    // closeShop(). If the boss is already down, we just resume play as
+    // normal; the room is a peaceful walk-through at that point.
     const bossCleared = progress.bosses.includes(roomId);
     if (room.boss && !bossCleared) {
-      startBossFight(room.boss);
+      openShop(room.boss);
     } else {
       state.bossActive = false;
       state.bossKind = null;
+      state.pendingBoss = null;
       setSealed(false);
       cameraRig.setBossFraming(false);
       state.phase = "playing";
     }
 
     cameraRig.reset(player.x, player.y);
+  }
+
+  /**
+   * Opens the pre-boss shop. The room is sealed so the player can't
+   * wander back out mid-decision, but nothing hostile spawns yet — the
+   * arena is genuinely paused. The React layer reads state.phase and
+   * hud.shop to draw the overlay; there is no imperative call from here
+   * back into React.
+   */
+  function openShop(kind: BossKind): void {
+    state.phase = "shop";
+    state.pendingBoss = kind;
+    state.shopPurchased = {};
+    state.bossActive = false;
+    state.bossKind = null;
+    // Camera frames the empty arena the same way it will frame the
+    // fight, so the transition into bossIntro is a rhythm change, not a
+    // camera move. Sealing the room is what tells the player "this is
+    // where you're going to fight" and it does that job during the shop
+    // too — the doorway they came through is now closed behind them.
+    setSealed(true);
+    cameraRig.setBossFraming(true);
   }
 
   function startBossFight(kind: BossKind): void {
@@ -468,10 +533,18 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
   }
 
   function respawn(): void {
-    player.hearts = PLAYER.maxHearts;
+    // Death resets everything transient — weapon, shield, current
+    // hearts — but keeps the Vessel Fragment bonus on max hearts,
+    // because that's the one shop item the player is meant to keep
+    // between deaths (it's the priciest, and losing it every death
+    // would turn it into a trap purchase).
+    const maxHearts = PLAYER.maxHearts + (progress.bonusMaxHearts ?? 0);
+    player.maxHearts = maxHearts;
+    player.hearts = maxHearts;
     player.alive = true;
     player.weapon = "bolt";
     player.weaponTimer = 0;
+    player.shield = 0;
     player.invulnerable = PLAYER.iFrames;
     state.combo = 1;
     state.comboTimer = 0;
@@ -622,7 +695,15 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
         state.fadeDir = 0;
         const room = world.room;
         const cleared = progress.bosses.includes(room.id);
-        state.phase = room.boss && !cleared ? "bossIntro" : "playing";
+        // If we've just arrived at an uncleared boss room, enterRoom
+        // already flipped the phase to "shop" via openShop. Keep it
+        // there rather than clobbering it with "bossIntro" — the boss
+        // hasn't spawned yet and the overlay needs the sim paused.
+        if (room.boss && !cleared) {
+          state.phase = "shop";
+        } else {
+          state.phase = "playing";
+        }
       }
 
       presentation(dt);
@@ -919,7 +1000,11 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
 
     hud.phase = state.phase;
     hud.hearts = player.hearts;
-    hud.maxHearts = PLAYER.maxHearts;
+    // Player.maxHearts is dynamic — it starts at PLAYER.maxHearts and
+    // grows by progress.bonusMaxHearts when the shop's Vessel Fragment
+    // is bought. Reading it off the player rather than the const is what
+    // makes the hearts row render correctly after a purchase.
+    hud.maxHearts = player.maxHearts;
     hud.score = state.score;
     hud.combo = state.combo;
     hud.weapon = player.weapon;
@@ -953,6 +1038,22 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
       player.dashTimer <= 0;
     hud.aimLatched = player.aimLatched;
     hud.sealed = state.blockedGate;
+    hud.shield = player.shield;
+
+    // Shop panel state. Only populated while the shop phase is active.
+    // Everything the overlay needs to render sits in this object — the
+    // React layer never reaches into the game state directly.
+    if (state.phase === "shop" && state.pendingBoss) {
+      hud.shop = {
+        bossName: room.bossName ?? "",
+        bossTitle: room.bossTitle ?? "",
+        essence: state.score,
+        purchased: state.shopPurchased,
+        bonusMaxHearts: progress.bonusMaxHearts ?? 0,
+      };
+    } else {
+      hud.shop = null;
+    }
   }
 
   // ---- Public API --------------------------------------------------------
@@ -966,8 +1067,45 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
       cameraRig.fit(width, height);
     },
 
+    buyShopItem(id) {
+      if (state.phase !== "shop" || !state.pendingBoss) {
+        return { ok: false, reason: "unknownItem" };
+      }
+      const result = tryBuyShopItem(
+        id,
+        state.shopPurchased,
+        state.score,
+        player,
+        progress,
+      );
+      if (result.ok) {
+        state.score = Math.max(0, state.score - result.cost);
+        state.shopPurchased[id] = (state.shopPurchased[id] ?? 0) + 1;
+        // Persist the buy immediately — bonus hearts and the deducted
+        // essence should survive a hard app kill mid-shop.
+        progress.essence = state.score;
+        options.onProgress?.(progress);
+        options.onShopBuy?.(id, result.cost);
+      }
+      publishHud();
+      return result;
+    },
+
+    closeShop() {
+      if (state.phase !== "shop" || !state.pendingBoss) return;
+      const kind = state.pendingBoss;
+      state.pendingBoss = null;
+      // Kick off the actual fight. startBossFight re-seals the room and
+      // spawns the boss with introTime seconds of invulnerability, same
+      // as it always has.
+      startBossFight(kind);
+      publishHud();
+    },
+
     start() {
-      resetPlayer(player);
+      resetPlayer(player, {
+        maxHearts: PLAYER.maxHearts + (progress.bonusMaxHearts ?? 0),
+      });
       state.score = progress.essence;
       state.combo = 1;
       state.comboTimer = 0;

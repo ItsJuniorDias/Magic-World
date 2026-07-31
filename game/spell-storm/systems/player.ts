@@ -45,7 +45,9 @@ export function createPlayer(): Player {
     timeSinceJumpPress: Infinity,
     jumping: false,
     hearts: PLAYER.startHearts,
+    maxHearts: PLAYER.maxHearts,
     invulnerable: 0,
+    shield: 0,
     aimX: 1,
     aimY: 0,
     latchedAimX: 1,
@@ -65,7 +67,13 @@ export function createPlayer(): Player {
   };
 }
 
-export function resetPlayer(p: Player): void {
+/**
+ * Rewinds the player entity for a new run or a respawn. Accepts an
+ * override for max hearts so the orchestrator can plumb through any
+ * Vessel Fragments the player has bought from the shop — those live on
+ * Progress and survive death, but every other bit of state doesn't.
+ */
+export function resetPlayer(p: Player, opts?: { maxHearts?: number }): void {
   p.x = 0;
   p.y = 0;
   p.vx = 0;
@@ -75,8 +83,11 @@ export function resetPlayer(p: Player): void {
   p.timeOffGround = 0;
   p.timeSinceJumpPress = Infinity;
   p.jumping = false;
-  p.hearts = PLAYER.startHearts;
+  const maxHearts = opts?.maxHearts ?? PLAYER.maxHearts;
+  p.maxHearts = maxHearts;
+  p.hearts = maxHearts;
   p.invulnerable = 0;
+  p.shield = 0;
   p.aimX = 1;
   p.aimY = 0;
   p.latchedAimX = 1;
@@ -398,13 +409,28 @@ export function tryFire(p: Player, input: InputState, events: PlayerEvents): boo
  */
 export function damagePlayer(p: Player, fromX: number): boolean {
   if (!p.alive || p.invulnerable > 0) return false;
-  p.hearts -= 1;
-  p.invulnerable = PLAYER.iFrames;
+
   const away = p.x >= fromX ? 1 : -1;
-  p.vx = away * PLAYER.knockbackX;
-  p.vy = PLAYER.knockbackY;
-  p.onGround = false;
-  p.jumping = false;
+  const knock = () => {
+    p.vx = away * PLAYER.knockbackX;
+    p.vy = PLAYER.knockbackY;
+    p.onGround = false;
+    p.jumping = false;
+    p.invulnerable = PLAYER.iFrames;
+  };
+
+  // Shield absorbs the hit before it touches hearts. The player still
+  // gets the i-frames and the knockback so the save reads as a real hit
+  // that landed on the shield — a silent absorb would look like the game
+  // ate the input.
+  if (p.shield > 0) {
+    p.shield -= 1;
+    knock();
+    return true;
+  }
+
+  p.hearts -= 1;
+  knock();
   if (p.hearts <= 0) {
     p.hearts = 0;
     p.alive = false;
@@ -418,7 +444,7 @@ export function grantWeapon(p: Player, weapon: WeaponId): void {
 }
 
 export function healPlayer(p: Player): boolean {
-  if (p.hearts >= PLAYER.maxHearts) return false;
+  if (p.hearts >= p.maxHearts) return false;
   p.hearts += 1;
   return true;
 }
