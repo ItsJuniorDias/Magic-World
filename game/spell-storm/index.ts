@@ -33,7 +33,6 @@ import { createPickups } from "./systems/pickups";
 import { alreadyHit, createProjectiles, markHit } from "./systems/projectiles";
 import {
   SHOP_CATALOG,
-  clearBossBuffs,
   tryBuyShopItem,
   type ShopItemId,
   type ShopPurchaseResult,
@@ -436,12 +435,6 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     clearBossQueues();
     scheduled.length = 0;
     hazards.length = 0;
-    // Counter items are per-fight. Leaving the room (any means: won,
-    // walked out, teleported to another bench, died) clears them so
-    // the shop's per-boss pricing stays honest — you can't stack the
-    // Anchor Charm from Voidmaw's shop into the Dragon fight for
-    // free.
-    clearBossBuffs(player);
   }
 
   function enterRoom(roomId: string, fromGate: string | null): void {
@@ -793,16 +786,9 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     // Voidmaw's drag. Applied as acceleration on the player's velocity rather
     // than as a position offset, so the player can still fight it with the
     // stick — a positional pull would feel like input lag.
-    //
-    // Anchor Charm (Voidmaw counter item from the shop) skips this
-    // application entirely. The pull request from the boss still fires,
-    // but the acceleration lands as zero — the queue is drained either
-    // way so the boss AI stays clean.
     if (pendingPull.strength > 0 && player.alive) {
-      if (!player.pullImmune) {
-        player.vx += pendingPull.x * pendingPull.strength * dt;
-        player.vy += pendingPull.y * pendingPull.strength * dt * 0.55;
-      }
+      player.vx += pendingPull.x * pendingPull.strength * dt;
+      player.vy += pendingPull.y * pendingPull.strength * dt * 0.55;
       pendingPull.strength = 0;
     }
 
@@ -965,12 +951,7 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
         onLand: () => {},
         onFire: (x: number, y: number, aimX: number, aimY: number, weapon: never) => {
           sound("fire");
-          // Piercing Bolt (bought for the Cinder Warden) upgrades the
-          // default bolt to piercing for the duration of the fight.
-          // Cleared when the boss dies via clearBossBuffs — beyond that
-          // room, the bolt reverts to its normal single-hit behaviour.
-          const piercingOverride = weapon === "bolt" && player.piercingBolt ? true : undefined;
-          projectiles.spawn(x, y, aimX, aimY, weapon, false, piercingOverride);
+          projectiles.spawn(x, y, aimX, aimY, weapon, false);
           castFlash = 1;
           recoil = 1;
           fx.spray(x, y, 4, PALETTE.arcane, aimX, aimY, 0.7, 5);
@@ -1101,33 +1082,19 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
 
     // Bodies, boss hazards and the room's own spikes.
     if (player.alive && player.invulnerable <= 0 && state.phase === "playing") {
-      // Featherweight also skips the boss's own hazard queue. In
-      // practice this only matters during the Thorn Warden fight —
-      // the item is only sold at that boss's shop and gets cleared
-      // on exit — but zero'ing the whole loop keeps the intent
-      // literal: "the ground doesn't hurt you".
-      if (!player.spikeImmune) {
-        for (const h of hazards) {
-          if (h.groundOnly && !player.onGround) continue;
-          const dx = player.x - h.x;
-          const dy = player.y + PLAYER.halfH - h.y;
-          if (h.groundOnly ? Math.abs(dx) < h.radius : dx * dx + dy * dy < h.radius * h.radius) {
-            hurtPlayer(h.x);
-            break;
-          }
+      for (const h of hazards) {
+        if (h.groundOnly && !player.onGround) continue;
+        const dx = player.x - h.x;
+        const dy = player.y + PLAYER.halfH - h.y;
+        if (h.groundOnly ? Math.abs(dx) < h.radius : dx * dx + dy * dy < h.radius * h.radius) {
+          hurtPlayer(h.x);
+          break;
         }
       }
     }
 
     if (player.alive && player.invulnerable <= 0 && state.phase === "playing") {
-      // Featherweight (Thorn Warden counter item) makes the mage
-      // immune to the room's static spikes. The dynamic spike waves
-      // that the Thorn Warden itself pumps out of the floor are
-      // scheduled as `hazards` above, which this flag also skips —
-      // the check up there implicitly reads player.invulnerable, so
-      // we could piggy-back on that, but reading a dedicated flag
-      // keeps the semantics honest and the item description literal.
-      if (!player.spikeImmune && hitsHazard(playerBox)) {
+      if (hitsHazard(playerBox)) {
         // Static spikes throw you back the way you came, so a spike bed is a
         // cost rather than a death sentence.
         hurtPlayer(player.x - player.facing * 2, 0.6);
@@ -1305,7 +1272,6 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     // React layer never reaches into the game state directly.
     if (state.phase === "shop" && state.pendingBoss) {
       hud.shop = {
-        bossKind: state.pendingBoss,
         bossName: room.bossName ?? "",
         bossTitle: room.bossTitle ?? "",
         essence: state.score,

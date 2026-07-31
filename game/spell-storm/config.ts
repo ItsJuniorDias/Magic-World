@@ -76,23 +76,14 @@ export const PLAYER = {
   /** Pressing JUMP this long before landing still triggers a jump. */
   jumpBuffer: 0.13,
 
-  /** Invulnerability after taking a hit. Blinks during this window.
-   *  Bumped 1.25 → 1.5 in the accessibility pass — 250ms of extra
-   *  recovery is roughly one extra dodge input, which is a lot when
-   *  the player is still reading the boss telegraph. */
-  iFrames: 1.5,
+  /** Invulnerability after taking a hit. Blinks during this window. */
+  iFrames: 1.25,
   /** Knockback applied on hit, away from the damage source. */
   knockbackX: 11,
   knockbackY: 9,
 
-  /** maxHearts / startHearts bumped 4 → 6 in the accessibility pass.
-   *  Two extra hearts means one extra mistake per phase on the average
-   *  boss, and — combined with the doubled bolt damage — the arithmetic
-   *  of clearing Gorge Mother goes from "seven seconds without a miss"
-   *  to "ten seconds with two misses allowed", which is the difference
-   *  between fair and cruel on a first read of a fight. */
-  maxHearts: 6,
-  startHearts: 6,
+  maxHearts: 4,
+  startHearts: 4,
 
   /** Muzzle offset from the body centre, along the aim vector. */
   muzzleDistance: 0.95,
@@ -179,13 +170,8 @@ export const WEAPONS: Record<WeaponId, WeaponSpec> = {
   bolt: {
     id: "bolt",
     label: "Spark",
-    // cooldown 0.17 → 0.13 and damage 1 → 2 in the accessibility pass.
-    // Old DPS was 5.9; new is 15.4, roughly a 2.6× uplift. Anchoring the
-    // default weapon at this DPS is what actually lets the game be
-    // playable without buying a shop upgrade first — buying one is now
-    // a choice, not a prerequisite for surviving Gorge Mother.
-    cooldown: 0.13,
-    damage: 2,
+    cooldown: 0.17,
+    damage: 1,
     speed: 27,
     count: 1,
     spread: 0,
@@ -309,11 +295,7 @@ export const ENEMIES: Record<EnemyKind, EnemySpec> = {
     halfH: 0.42,
     score: 100,
     knockbackScale: 1,
-    // Drop chances bumped ~50% across all minions in the accessibility
-    // pass. The corridor economy was starving the player of essence for
-    // the shop; more drops means more choice at the boss room, not
-    // "please have enough for the heal".
-    dropChance: 0.1,
+    dropChance: 0.06,
     contactDamage: 1,
   },
   bat: {
@@ -324,7 +306,7 @@ export const ENEMIES: Record<EnemyKind, EnemySpec> = {
     halfH: 0.34,
     score: 150,
     knockbackScale: 1,
-    dropChance: 0.12,
+    dropChance: 0.08,
     contactDamage: 1,
   },
   golem: {
@@ -335,7 +317,7 @@ export const ENEMIES: Record<EnemyKind, EnemySpec> = {
     halfH: 1.05,
     score: 400,
     knockbackScale: 0.18,
-    dropChance: 0.45,
+    dropChance: 0.3,
     contactDamage: 1,
   },
   wisp: {
@@ -346,22 +328,16 @@ export const ENEMIES: Record<EnemyKind, EnemySpec> = {
     halfH: 0.42,
     score: 250,
     knockbackScale: 0.7,
-    dropChance: 0.28,
+    dropChance: 0.18,
     contactDamage: 1,
   },
   // --- The seven ----------------------------------------------------------
   // Bosses never take knockback (knockbackScale 0). A boss that flinches
   // reads as a big minion; a boss that absorbs everything reads as a wall
   // you have to solve. The hit flash carries the feedback instead.
-  //
-  // HP dropped ~30% across the roster in the accessibility pass. The
-  // combined effect of that with the doubled bolt DPS is that the
-  // first-boss TTK drops from ~7s of perfect play to ~2s of perfect
-  // play, and the realistic clear on a first attempt is now ~10-15s
-  // with a couple of mistakes forgiven by the heart bump.
   gorgeMother: {
     kind: "gorgeMother",
-    hp: 30,
+    hp: 42,
     speed: 4.2,
     halfW: 1.75,
     halfH: 1.4,
@@ -372,7 +348,7 @@ export const ENEMIES: Record<EnemyKind, EnemySpec> = {
   },
   nightwing: {
     kind: "nightwing",
-    hp: 34,
+    hp: 48,
     speed: 13.5,
     halfW: 1.6,
     halfH: 0.95,
@@ -383,7 +359,7 @@ export const ENEMIES: Record<EnemyKind, EnemySpec> = {
   },
   cinderWarden: {
     kind: "cinderWarden",
-    hp: 45,
+    hp: 64,
     speed: 3.4,
     halfW: 1.45,
     halfH: 2.0,
@@ -394,7 +370,10 @@ export const ENEMIES: Record<EnemyKind, EnemySpec> = {
   },
   lumenChoir: {
     kind: "lumenChoir",
-    hp: 48,
+    // Deliberately higher than the Cinder Warden despite arriving later on a
+    // softer branch: the Choir has NO contact damage, so the player can stand
+    // inside it and unload. At 52 it melted before its second pattern.
+    hp: 68,
     speed: 6.0,
     halfW: 1.1,
     halfH: 1.1,
@@ -405,7 +384,7 @@ export const ENEMIES: Record<EnemyKind, EnemySpec> = {
   },
   thornWarden: {
     kind: "thornWarden",
-    hp: 49,
+    hp: 70,
     speed: 2.4,
     halfW: 1.5,
     halfH: 2.2,
@@ -416,7 +395,7 @@ export const ENEMIES: Record<EnemyKind, EnemySpec> = {
   },
   voidmaw: {
     kind: "voidmaw",
-    hp: 53,
+    hp: 76,
     speed: 5.2,
     halfW: 1.35,
     halfH: 1.35,
@@ -427,7 +406,7 @@ export const ENEMIES: Record<EnemyKind, EnemySpec> = {
   },
   dragon: {
     kind: "dragon",
-    hp: 67,
+    hp: 96,
     speed: 5.4,
     halfW: 2.1,
     halfH: 1.3,
@@ -481,10 +460,8 @@ export const BOSS = {
   introTime: 1.6,
   /** Seconds of slow-motion death throes before the room clears. */
   deathTime: 2.2,
-  /** Reward for a kill, on top of the spec score.
-   *  Bumped 1 → 2 in the accessibility pass so the walk-back after a
-   *  boss kill starts on a fresher stack of hearts. */
-  heartsOnKill: 2,
+  /** Reward for a kill, on top of the spec score. */
+  heartsOnKill: 1,
   /** Minions a boss may keep alive at once. Protects the frame budget and
    *  keeps boss fights readable — 6 minions plus a boss was fireworks. */
   maxMinions: 4,
@@ -642,18 +619,15 @@ export const PICKUP = {
   blinkAt: 3,
   bobAmplitude: 0.22,
   bobSpeed: 2.6,
-  /** Weighted table for random drops.
-   *  Heart weight bumped 14 → 22 in the accessibility pass, and star
-   *  score 500 → 800. Both feed the same problem: not enough resources
-   *  reaching the shop. */
+  /** Weighted table for random drops. */
   table: [
-    { kind: "star" as PickupKind, weight: 32 },
-    { kind: "heart" as PickupKind, weight: 22 },
-    { kind: "triple" as PickupKind, weight: 18 },
-    { kind: "homing" as PickupKind, weight: 16 },
-    { kind: "beam" as PickupKind, weight: 12 },
+    { kind: "star" as PickupKind, weight: 34 },
+    { kind: "heart" as PickupKind, weight: 14 },
+    { kind: "triple" as PickupKind, weight: 20 },
+    { kind: "homing" as PickupKind, weight: 18 },
+    { kind: "beam" as PickupKind, weight: 14 },
   ],
-  starScore: 800,
+  starScore: 500,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -797,12 +771,8 @@ export const PROGRESSION = {
   roomTitleTime: 2.6,
   /** Fade in/out on a room transition. Keep it short — this is a corridor. */
   transitionFade: 0.26,
-  /** Essence lost on death, as a fraction. Soft, not Souls-hard.
-   *  Dropped 0.25 → 0.10 in the accessibility pass — 25% was a real
-   *  death spiral for a player who was already losing a boss fight
-   *  because they were under-equipped, because losing essence meant
-   *  the shop got MORE out of reach on every retry. */
-  deathPenalty: 0.10,
+  /** Essence lost on death, as a fraction. Soft, not Souls-hard. */
+  deathPenalty: 0.25,
 } as const;
 
 export const STORAGE_KEYS = {

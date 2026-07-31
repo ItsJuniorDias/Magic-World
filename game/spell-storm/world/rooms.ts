@@ -395,7 +395,27 @@ function stairs(
   return out;
 }
 
-/** Evenly spaced platforms across a span, alternating height. */
+/**
+ * Evenly spaced platforms across a span, alternating height. Great
+ * for the shafts and towers in Spire, Cistern and the taller rooms.
+ *
+ * CLIMBING INVARIANTS (v3.6)
+ *
+ * Every vertical room in the game must obey two rules so the player
+ * can climb it on plain jumps, without needing frame-perfect air
+ * dashes:
+ *
+ *   dy between adjacent platforms  ≤ 4.5wu   (jump peak is 5.6)
+ *   dx between adjacent platforms  ≤ 6.5wu   (horizontal max is 8.5)
+ *
+ * `ledges(from, to, count, ...)` produces `(to - from) / (count - 1)`
+ * step. To stay within 6.5wu, pick count so `(to-from)/(count-1) ≤
+ * 6.5`. Example: a 44wu span (-22 to 22) needs count ≥ 8 to stay
+ * legal (44/7 = 6.29 ≤ 6.5).
+ *
+ * Wider `halfW` values (2.0+) forgive pouso alignment and are the
+ * cheapest way to reduce mistake cost on a first climb.
+ */
 function ledges(
   from: number,
   to: number,
@@ -647,14 +667,34 @@ export const ROOMS: Record<string, Room> = {
     minX: -40,
     maxX: 40,
     ceilingY: 30,
+    // v3.6 climbing rewrite: same principle as spire_climb — every jump
+    // fits inside the base movement budget without requiring air-dash.
+    //
+    // Before this pass, the ground-floor platforms sat at dx=14 apart
+    // (well past the 8.5wu horizontal jump ceiling), so getting from
+    // the ground to the ceiling shaft required chaining air-dashes on
+    // each hop. Now every step is dx≤7, dy≤2.8 — a slow, deliberate
+    // climb that a first-time player can complete on plain jumps.
     platforms: [
+      // Left-side spiral upward: five plats leading to the shaft.
       p(-30, 4.6, 3.0),
+      p(-23, 7.4, 2.4),
       p(-16, 8.4, 2.6),
+      p(-9, 10.6, 2.4),
       p(-2, 12.2, 2.4),
+      // Right-side descent: mirror path back down to the ground.
+      p(5, 10.6, 2.4),
       p(12, 8.4, 2.6),
+      p(19, 6.4, 2.4),
       p(26, 4.6, 3.0),
-      // The shaft up. Alternating sides so the climb is a rhythm.
-      ...ledges(-10, 10, 6, 15.6, 19.4, 1.8),
+      // Transition plat from the central peak into the shaft head.
+      // Without this, (-2, 12.2) → shaft base (-10, 15.6) is dx=8,
+      // right at the horizontal jump ceiling and NOT forgiving.
+      p(-6, 14.0, 2.0),
+      // The shaft up — 7 plats instead of 6 (step 3.33 → 4 across —
+      // both under 6.5) so alternating sides reads as a rhythm, not
+      // a puzzle.
+      ...ledges(-10, 10, 7, 15.6, 19.4, 2.0),
     ],
     solids: [],
     floorGaps: [gap(6, 3.2)],
@@ -676,14 +716,56 @@ export const ROOMS: Record<string, Room> = {
     ceilingY: 62,
     // A genuinely tall room. The camera has to follow vertically here, which
     // is the reason CAMERA.followY was replaced with a proper deadzone rig.
+    //
+    // v3.6 CLIMBING REWRITE
+    //
+    // The previous layout used 5 platforms per floor across 44wu of
+    // horizontal space, so each floor's step was 44/4 = 11wu — LARGER
+    // than the max horizontal jump distance (8.5wu). And the same-column
+    // gap between alternating floors was 8.4wu vertical — larger than
+    // the max jump peak (5.6wu). Every single transition required a
+    // frame-perfect air-dash, and air-dash regenerates ONLY on ground
+    // contact. In practice: the climb was unwinnable without expert
+    // execution.
+    //
+    // The new layout follows two invariants shared across every room
+    // in the game with vertical traversal:
+    //
+    //   dy between platforms ≤ 4.5wu  (peak jump is 5.6, leaves ~1wu
+    //                                   of slack for imprecise timing)
+    //   dx between platforms ≤ 6.5wu  (max horizontal is 8.5, leaves
+    //                                   ~2wu of slack for pouso alignment)
+    //
+    // Dash is now a SHORTCUT, not a requirement — every platform is
+    // reachable from at least one other platform on a plain jump.
+    //
+    // Density decreases with height (8 plats per floor at the base,
+    // dropping to 4 near the top) so the climb READS as ascending
+    // into thinner air rather than a uniform ladder.
     platforms: [
-      ...ledges(-22, 22, 5, 4.6, 8.2, 2.2),
-      ...ledges(-20, 20, 5, 13.0, 16.6, 2.0),
-      ...ledges(-20, 20, 5, 21.4, 25.0, 2.0),
-      ...ledges(-18, 18, 5, 29.8, 33.4, 1.9),
-      ...ledges(-18, 18, 5, 38.2, 41.8, 1.9),
-      ...ledges(-14, 14, 4, 46.6, 50.2, 1.8),
-      p(0, 55.0, 4.0),
+      // Floor 1 — 8 plats, step 6.29, dy interno 3.6
+      ...ledges(-22, 22, 8, 4.6, 8.2, 2.2),
+      // Floor 2 — dy 3.6 entre andares, step 6.29
+      ...ledges(-22, 22, 8, 11.8, 15.4, 2.0),
+      // Floor 3
+      ...ledges(-22, 22, 8, 19.0, 22.6, 2.0),
+      // Floor 4 — reduzindo densidade (7 plats)
+      ...ledges(-20, 20, 7, 26.2, 29.8, 2.0),
+      // Floor 5 (6 plats)
+      ...ledges(-18, 18, 6, 33.4, 37.0, 2.0),
+      // Floor 6 (5 plats)
+      ...ledges(-14, 14, 5, 40.6, 44.2, 1.9),
+      // Floor 7 (4 plats)
+      ...ledges(-10, 10, 4, 47.8, 51.4, 1.9),
+      // Pico central — landmark visual antes do gate lateral
+      p(0, 55.0, 3.0),
+      // Trilha final subindo pro right gate em (30, 56).
+      // Right gate detector: x >= 28.6, y ~= 53.3-58.7.
+      // (14, 50.6) → (20, 53) → (26, 55): dx=6/6/6, dy=2.4/2/2 —
+      // três pulos curtos que levam ao pouso final colado no gate.
+      p(14, 50.6, 2.0),
+      p(20, 53.0, 2.0),
+      p(26, 55.0, 2.5),
     ],
     solids: [],
     floorGaps: [gap(0, 3.0)],
@@ -902,11 +984,29 @@ export const ROOMS: Record<string, Room> = {
     minX: -32,
     maxX: 32,
     ceilingY: 46,
+    // v3.6 climbing rewrite: same invariants as spire_climb.
+    //
+    // The old layout had 5 platforms per floor at dx≥10 and dy≥6
+    // between floors — both larger than the movement budget. The
+    // room reads as a fall (which is fine going DOWN — you enter
+    // from the top and fall through) but was unwinnable coming back
+    // up. New layout increases plat count per floor to 6-8 and cuts
+    // the vertical gap to 4.
     platforms: [
-      ...ledges(-24, 24, 5, 38.0, 41.0, 2.0),
-      ...ledges(-22, 22, 5, 29.0, 32.0, 2.0),
-      ...ledges(-22, 22, 5, 20.0, 23.0, 2.0),
-      ...ledges(-20, 20, 5, 11.0, 14.0, 2.0),
+      // Andar 1 — 8 plats, step 6, dy interno 3
+      ...ledges(-21, 21, 8, 8.0, 11.0, 2.0),
+      // Andar 2 — dy 4 do topo do andar 1
+      ...ledges(-21, 21, 8, 15.0, 18.0, 2.0),
+      // Andar 3
+      ...ledges(-21, 21, 8, 22.0, 25.0, 2.0),
+      // Andar 4 — reduz para 7 plats (step 6.33)
+      ...ledges(-19, 19, 7, 29.0, 32.0, 2.0),
+      // Andar 5 — 6 plats, step 6
+      ...ledges(-15, 15, 6, 36.0, 39.0, 2.0),
+      // Plataforma final abaixo do top gate (0, 46). Detector em
+      // y>=42.8, então (0, 42.5) sobe um pulo curto e dispara.
+      p(0, 42.5, 3.0),
+      // Plats de chão junto ao spike bed — pouso seguro pra retomar.
       p(-24, 4.6, 3.0),
       p(24, 4.6, 3.0),
     ],
