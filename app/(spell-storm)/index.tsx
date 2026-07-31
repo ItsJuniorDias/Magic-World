@@ -42,6 +42,7 @@ import {
   type Progress,
   type SoundId,
   type SpellStorm,
+  type GateSide,
 } from "@/game/spell-storm";
 import {
   createMusicController,
@@ -559,6 +560,24 @@ export default function SpellStormScreen() {
     musicRef.current?.setPaused(musicPaused);
   }, [musicPaused]);
 
+  // ---- Compass objective -------------------------------------------------
+  //
+  // Recomputed whenever the room changes, a boss is defeated, or the pro
+  // status flips (a pro purchase mid-run should immediately re-route the
+  // compass through the now-open gates). BFS is cheap — twenty rooms and
+  // change — so we don't memo aggressively; the useMemo is a formality
+  // to skip work on unrelated hud updates like score ticking.
+  const objective = useMemo(
+    () =>
+      findObjective(
+        hud.roomId,
+        hud.defeatedRooms,
+        hud.bossesDefeated,
+        isPro,
+      ),
+    [hud.roomId, hud.defeatedRooms, hud.bossesDefeated, isPro],
+  );
+
   // ---- Touch controls ----------------------------------------------------
   const [stickOrigin, setStickOrigin] = useState<{
     x: number;
@@ -766,7 +785,7 @@ export default function SpellStormScreen() {
               </View>
             </Glass>
 
-            {/* Sigils + map */}
+            {/* Sigils + compass + map */}
             <View style={styles.hudRight} pointerEvents="box-none">
               <Glass style={styles.sigilPill} radius={18}>
                 <View style={styles.sigilInner}>
@@ -787,21 +806,45 @@ export default function SpellStormScreen() {
                 </View>
               </Glass>
 
+              {/*
+                One button, two faces. When there IS an objective (which is
+                most of the game), the button becomes a compass — a gold
+                arrow pointing toward the next reachable boss. When the
+                player is inside a boss room, or when nothing reachable is
+                unbeaten, it falls back to the classic map grid glyph.
+                Either way, tapping opens the full map. One affordance
+                beats two side-by-side buttons that do the same thing.
+              */}
               <Pressable onPress={() => setMapOpen(true)} hitSlop={10}>
-                <Glass style={styles.iconButton} radius={17}>
+                <Glass
+                  style={objective ? styles.compassButton : styles.iconButton}
+                  radius={objective ? 20 : 17}
+                >
                   <View style={styles.iconInner}>
-                    <View style={styles.mapGlyphRow}>
-                      <View style={styles.mapGlyphCell} />
-                      <View
-                        style={[styles.mapGlyphCell, styles.mapGlyphCellDim]}
-                      />
-                    </View>
-                    <View style={styles.mapGlyphRow}>
-                      <View
-                        style={[styles.mapGlyphCell, styles.mapGlyphCellDim]}
-                      />
-                      <View style={styles.mapGlyphCell} />
-                    </View>
+                    {objective ? (
+                      <CompassArrow side={objective.side} />
+                    ) : (
+                      <>
+                        <View style={styles.mapGlyphRow}>
+                          <View style={styles.mapGlyphCell} />
+                          <View
+                            style={[
+                              styles.mapGlyphCell,
+                              styles.mapGlyphCellDim,
+                            ]}
+                          />
+                        </View>
+                        <View style={styles.mapGlyphRow}>
+                          <View
+                            style={[
+                              styles.mapGlyphCell,
+                              styles.mapGlyphCellDim,
+                            ]}
+                          />
+                          <View style={styles.mapGlyphCell} />
+                        </View>
+                      </>
+                    )}
                   </View>
                 </Glass>
               </Pressable>
@@ -1035,6 +1078,14 @@ export default function SpellStormScreen() {
               { backgroundColor: "rgba(8,4,18,0.62)" },
             ]}
           />
+          {/*
+            HEADER
+            Left: current room name + biome + progress counters.
+            Right: compass badge showing where the next objective lies
+                   (mirrors the HUD compass exactly) + close button.
+            The header is the single source of "where am I / where am I
+            going", which is the whole reason a map exists.
+          */}
           <View
             style={[
               styles.mapHeader,
@@ -1044,32 +1095,116 @@ export default function SpellStormScreen() {
               },
             ]}
           >
-            <View>
-              <Text variant="heading" size="lg" color="#FFFFFF">
-                Hollowroot
+            <View style={{ flexShrink: 1 }}>
+              <Text
+                variant="heading"
+                size="lg"
+                color="#FFFFFF"
+                numberOfLines={1}
+              >
+                {ROOMS[hud.roomId]?.name ?? "The World"}
               </Text>
-              <Text variant="body" size="sm" color="rgba(255,255,255,0.5)">
+              <Text
+                variant="body"
+                size="sm"
+                color="rgba(255,255,255,0.5)"
+                numberOfLines={1}
+              >
+                {BIOMES[ROOMS[hud.roomId]?.biome ?? "hollow"].label} ·{" "}
                 {hud.discovered.length} of {ROOM_IDS.length} rooms ·{" "}
                 {hud.bossesDefeated} of {hud.totalBosses} sigils
               </Text>
             </View>
-            <Pressable onPress={() => setMapOpen(false)} hitSlop={14}>
-              <Glass style={styles.iconButton} radius={17}>
-                <View style={styles.iconInner}>
-                  <View style={styles.closeBarA} />
-                  <View style={styles.closeBarB} />
+            <View style={styles.mapHeaderRight}>
+              {objective && (
+                <View style={styles.mapCompassCallout}>
+                  <Glass style={styles.compassButton} radius={20}>
+                    <View style={styles.iconInner}>
+                      <CompassArrow side={objective.side} />
+                    </View>
+                  </Glass>
+                  <View style={{ marginLeft: 10, maxWidth: 140 }}>
+                    <Text
+                      variant="label"
+                      size="xs"
+                      color="rgba(255,255,255,0.55)"
+                    >
+                      NEXT
+                    </Text>
+                    <Text
+                      variant="heading"
+                      size="sm"
+                      color="#FFFFFF"
+                      numberOfLines={1}
+                    >
+                      {objective.targetBossName}
+                    </Text>
+                  </View>
                 </View>
-              </Glass>
-            </Pressable>
+              )}
+              <Pressable onPress={() => setMapOpen(false)} hitSlop={14}>
+                <Glass style={styles.iconButton} radius={17}>
+                  <View style={styles.iconInner}>
+                    <View style={styles.closeBarA} />
+                    <View style={styles.closeBarB} />
+                  </View>
+                </Glass>
+              </Pressable>
+            </View>
           </View>
 
           <ScrollView
-            horizontal
             contentContainerStyle={styles.mapScroll}
-            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
           >
-            <WorldMap hud={hud} />
+            <WorldMap hud={hud} target={objective?.targetRoomId ?? null} />
           </ScrollView>
+
+          {/*
+            LEGEND
+            Four glyphs matching what appears in the grid, so the player
+            can decode a cell without hovering (there is no hover on a
+            touchscreen). Sits at the bottom of the overlay so it doesn't
+            fight the header for attention.
+          */}
+          <View
+            style={[
+              styles.mapLegend,
+              { paddingBottom: insets.bottom + 12 },
+            ]}
+            pointerEvents="none"
+          >
+            <View style={styles.mapLegendItem}>
+              <View style={[styles.legendDiamond, { backgroundColor: hex(PALETTE.heart) }]} />
+              <Text variant="label" size="xs" color="rgba(255,255,255,0.62)">
+                Boss
+              </Text>
+            </View>
+            <View style={styles.mapLegendItem}>
+              <View style={[styles.legendDiamond, { backgroundColor: hex(PALETTE.gold) }]} />
+              <Text variant="label" size="xs" color="rgba(255,255,255,0.62)">
+                Defeated
+              </Text>
+            </View>
+            <View style={styles.mapLegendItem}>
+              <View style={styles.legendBench} />
+              <Text variant="label" size="xs" color="rgba(255,255,255,0.62)">
+                Bench
+              </Text>
+            </View>
+            <View style={styles.mapLegendItem}>
+              <View style={styles.legendYouCircle} />
+              <Text variant="label" size="xs" color="rgba(255,255,255,0.62)">
+                You
+              </Text>
+            </View>
+            <View style={styles.mapLegendItem}>
+              <View style={styles.legendTargetCircle} />
+              <Text variant="label" size="xs" color="rgba(255,255,255,0.62)">
+                Next
+              </Text>
+            </View>
+          </View>
         </View>
       )}
 
@@ -1102,6 +1237,152 @@ export default function SpellStormScreen() {
 }
 
 // ---------------------------------------------------------------------------
+// Compass — where should the player go next?
+//
+// A metroidvania without a hint is a metroidvania that only works if you
+// like being lost, which turns out to be a taste most players don't
+// share. The compass answers the one question that keeps the player
+// engaged instead of confused: which door is the next boss behind?
+//
+// The algorithm is BFS from the current room, expanding only through
+// gates the player can actually walk through right now. The first non-
+// current boss room the search reaches wins. We return the side of the
+// FIRST gate on that shortest path — that's the direction the compass
+// arrow points, and it's stable: as long as the player keeps moving
+// toward the objective, the arrow stays consistent rather than flipping
+// on every step.
+//
+// Sealed gates that COULD open later (pro branches for non-members, the
+// storm gate before six sigils) are treated as walls. When the player
+// unlocks pro or clears the sixth sigil, the BFS naturally starts
+// finding paths through them without any special code.
+//
+// Returns null when the player is already inside a boss room (the
+// objective IS this room) or when nothing reachable is unbeaten (which
+// means either they've cleared everything they can access, or every
+// path forward is sealed behind pro).
+// ---------------------------------------------------------------------------
+
+interface Objective {
+  side: GateSide;
+  targetRoomId: string;
+  targetBossName: string;
+}
+
+function findObjective(
+  currentRoomId: string,
+  defeatedRooms: string[],
+  bossesDefeated: number,
+  isPro: boolean,
+): Objective | null {
+  const currentRoom = ROOMS[currentRoomId];
+  // Standing INSIDE a boss room — there is no "which way" to point.
+  // Either they're fighting it or they've beaten it and are just visiting.
+  if (currentRoom?.boss) return null;
+
+  const queue: { room: string; firstSide: GateSide | null }[] = [
+    { room: currentRoomId, firstSide: null },
+  ];
+  const visited = new Set<string>([currentRoomId]);
+
+  while (queue.length) {
+    const node = queue.shift()!;
+    const room = ROOMS[node.room];
+    if (!room) continue;
+
+    // Objective: a boss room we haven't cleared. Skip the origin — we
+    // already excluded standing-in-a-boss-room above, so this only
+    // filters the seed of the BFS which by definition can't be an
+    // objective anyway.
+    if (
+      node.room !== currentRoomId &&
+      room.boss &&
+      !defeatedRooms.includes(node.room) &&
+      node.firstSide
+    ) {
+      return {
+        side: node.firstSide,
+        targetRoomId: node.room,
+        targetBossName: room.bossName ?? room.name,
+      };
+    }
+
+    for (const gate of room.gates) {
+      if (visited.has(gate.to)) continue;
+      const sealed =
+        (gate.requires !== undefined && bossesDefeated < gate.requires) ||
+        (gate.pro === true && !isPro);
+      if (sealed) continue;
+      visited.add(gate.to);
+      queue.push({
+        room: gate.to,
+        // The first gate we cross fixes the direction for the whole
+        // path. Downstream expansions inherit it.
+        firstSide: node.firstSide ?? gate.side,
+      });
+    }
+  }
+  return null;
+}
+
+/**
+ * Which way the arrow visually points. Base arrow points UP (0deg), and
+ * each gate side rotates from there. `top` means "the gate is on the
+ * ceiling of this room", which reads as pointing UP on screen.
+ */
+const COMPASS_ROTATION: Record<GateSide, string> = {
+  top: "0deg",
+  right: "90deg",
+  bottom: "180deg",
+  left: "-90deg",
+};
+
+/**
+ * A tiny arrow. Two Views: a thin shaft and a triangular head. Sized to
+ * fit a 40x40 icon button with 8px of breathing room on every side.
+ */
+function CompassArrow({ side }: { side: GateSide }) {
+  return (
+    <View
+      style={{
+        width: 24,
+        height: 24,
+        transform: [{ rotate: COMPASS_ROTATION[side] }],
+      }}
+    >
+      {/* Shaft. Sits vertically, gets rotated by the parent. */}
+      <View
+        style={{
+          position: "absolute",
+          left: 10.5,
+          top: 8,
+          width: 3,
+          height: 14,
+          borderRadius: 1.5,
+          backgroundColor: hex(PALETTE.gold),
+        }}
+      />
+      {/* Arrowhead. Upward triangle using the border trick. */}
+      <View
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 6,
+          width: 0,
+          height: 0,
+          borderLeftWidth: 6,
+          borderRightWidth: 6,
+          borderBottomWidth: 9,
+          borderLeftColor: "transparent",
+          borderRightColor: "transparent",
+          borderBottomColor: hex(PALETTE.gold),
+        }}
+      />
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Map overlay
 //
 // A grid, not a scale drawing. Hollow Knight's map isn't to scale either —
@@ -1110,12 +1391,56 @@ export default function SpellStormScreen() {
 // true-to-scale minimap would take.
 // ---------------------------------------------------------------------------
 
-const CELL = 78;
-const GAP = 26;
+// Cells shrunk from 78→60 and the gap from 26→18 in the v3.3 pass. The
+// old dimensions overflowed vertically on landscape iPhone SE and had
+// too much text-per-cell to read at a glance. The new size fits the
+// whole 7×5 grid inside a landscape iPhone frame without scrolling and
+// leaves enough room for icons but not for room names — which was the
+// point. Names live in the header now; cells just show WHAT.
+const CELL = 60;
+const GAP = 18;
 
-function WorldMap({ hud }: { hud: HudSnapshot }) {
+function WorldMap({
+  hud,
+  target,
+}: {
+  hud: HudSnapshot;
+  /** Room id that the compass points to. Rendered with a gold outline. */
+  target: string | null;
+}) {
   const width = MAP_EXTENT.cols * CELL + (MAP_EXTENT.cols - 1) * GAP;
   const height = MAP_EXTENT.rows * CELL + (MAP_EXTENT.rows - 1) * GAP;
+
+  // Pulse animation for the "you are here" marker and the target boss.
+  // A single Animated.Value drives both interpolations — cheaper than two
+  // parallel timelines, and they read as belonging to the same beat.
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.quad),
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 900,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.quad),
+        }),
+      ]),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+    };
+  }, [pulse]);
+  const pulseScale = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.08],
+  });
 
   const connectors = useMemo(() => {
     // A connector is a straight rectangle. For horizontal or vertical gate
@@ -1179,23 +1504,13 @@ function WorldMap({ hud }: { hud: HudSnapshot }) {
           });
         } else {
           // L-shape for diagonal room pairs. Two segments meeting at the
-          // origin column / destination row corner:
-          //
-          //   1. VERTICAL stub from the origin cell (top or bottom edge,
-          //      depending on which way B lies) up/down to the row of B,
-          //      staying in A's column.
-          //   2. HORIZONTAL run at B's row, from A's column across to B's
-          //      cell edge.
-          //
-          // The corner sits at (ax + CELL/2, by + CELL/2) — B's row line,
-          // A's column line. This puts the elbow on the map grid rather
-          // than free-floating, which reads as an intentional path.
+          // origin column / destination row corner. See v3.2 notes above
+          // for the full derivation — this is unchanged since then.
           const acx = ax + CELL / 2;
           const bcy = by + CELL / 2;
           const bDown = by > ay;
           const bRight = bx > ax;
 
-          // Vertical stub.
           const vStart = bDown ? ay + CELL : ay;
           const vEnd = bcy;
           out.push({
@@ -1206,7 +1521,6 @@ function WorldMap({ hud }: { hud: HudSnapshot }) {
             h: Math.abs(vEnd - vStart),
             sealed,
           });
-          // Horizontal run.
           const hStart = acx;
           const hEnd = bRight ? bx : bx + CELL;
           out.push({
@@ -1238,11 +1552,6 @@ function WorldMap({ hud }: { hud: HudSnapshot }) {
               ? "transparent"
               : "rgba(255,255,255,0.18)",
             borderRadius: 2,
-            // A sealed connector wants a dashed outline rather than a solid
-            // fill. In RN, `borderStyle: 'dashed'` only draws when there's
-            // a border on the axis of drawing, so we set a border on the
-            // longer axis (a wall on a horizontal segment reads as dashes;
-            // same for vertical).
             borderStyle: c.sealed ? "dashed" : "solid",
             borderColor: c.sealed ? "rgba(255,255,255,0.28)" : "transparent",
             borderTopWidth: c.sealed && c.w >= c.h ? 2 : 0,
@@ -1256,41 +1565,63 @@ function WorldMap({ hud }: { hud: HudSnapshot }) {
         const found = hud.discovered.includes(id);
         const here = hud.roomId === id;
         const cleared = hud.defeatedRooms.includes(id);
+        const isTarget = target === id;
         const tint = BIOMES[room.biome].mapTint;
 
+        // Border priority: current room wins over target wins over
+        // discovered wins over undiscovered. A cell that is both current
+        // AND target (edge case: you just teleported to the target)
+        // shows as current — you don't need the "next" hint when you're
+        // already there.
+        const borderColor = here
+          ? "#FFFFFF"
+          : isTarget
+            ? hex(PALETTE.gold)
+            : found
+              ? `${tint}66`
+              : "rgba(255,255,255,0.08)";
+        const borderWidth = here || isTarget ? 2 : 1;
+
+        const cellStyle = {
+          position: "absolute" as const,
+          left: room.map.col * (CELL + GAP),
+          top: room.map.row * (CELL + GAP),
+          width: CELL,
+          height: CELL,
+          borderRadius: 14,
+          borderCurve: "continuous" as const,
+          alignItems: "center" as const,
+          justifyContent: "center" as const,
+          padding: 4,
+          backgroundColor: found ? `${tint}22` : "rgba(255,255,255,0.04)",
+          borderWidth,
+          borderColor,
+        };
+
+        // Only the current cell and the target cell pulse. Everything
+        // else gets identity transform. We still use Animated.View for
+        // every cell so the rendered subtree is stable — swapping the
+        // wrapper mid-run based on state would remount the cell and
+        // lose the pulse mid-cycle.
+        const animatedStyle =
+          here || isTarget ? { transform: [{ scale: pulseScale }] } : null;
+
         return (
-          <View
-            key={id}
-            style={{
-              position: "absolute",
-              left: room.map.col * (CELL + GAP),
-              top: room.map.row * (CELL + GAP),
-              width: CELL,
-              height: CELL,
-              borderRadius: 18,
-              borderCurve: "continuous",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 6,
-              backgroundColor: found ? `${tint}22` : "rgba(255,255,255,0.04)",
-              borderWidth: here ? 2 : 1,
-              borderColor: here
-                ? "#FFFFFF"
-                : found
-                  ? `${tint}66`
-                  : "rgba(255,255,255,0.08)",
-            }}
-          >
+          <Animated.View key={id} style={[cellStyle, animatedStyle]}>
             {found ? (
               <>
+                {/*
+                  Boss diamond. Red until beaten, gold after. Sits at
+                  the top of the cell so a bench (bottom) doesn't
+                  collide with it visually.
+                */}
                 {!!room.boss && (
                   <View
                     style={{
-                      width: 10,
-                      height: 10,
+                      width: 12,
+                      height: 12,
                       borderRadius: 3,
                       borderCurve: "continuous",
-                      marginBottom: 5,
                       transform: [{ rotate: "45deg" }],
                       backgroundColor: cleared
                         ? hex(PALETTE.gold)
@@ -1298,20 +1629,36 @@ function WorldMap({ hud }: { hud: HudSnapshot }) {
                     }}
                   />
                 )}
-                <Text
-                  variant="label"
-                  size="xs"
-                  color={here ? "#FFFFFF" : "rgba(255,255,255,0.66)"}
-                  numberOfLines={2}
-                  style={styles.mapLabel}
-                >
-                  {room.name}
-                </Text>
+                {/*
+                  Regular-room dot. Only shown when there's no boss —
+                  it's a "there is something here" signal, and the boss
+                  diamond already provides that. A small biome-tinted
+                  disc; matches the cell's tint so it reads as coherent.
+                */}
+                {!room.boss && (
+                  <View
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: 3,
+                      backgroundColor: here
+                        ? "#FFFFFF"
+                        : `${tint}CC`,
+                    }}
+                  />
+                )}
+                {/*
+                  Bench mark. A gold underline at the bottom edge of the
+                  cell. Two rooms in the world have one, and knowing
+                  where they are is the difference between "one more
+                  try" and "restart the branch".
+                */}
                 {!!room.bench && (
                   <View
                     style={{
-                      marginTop: 4,
-                      width: 14,
+                      position: "absolute",
+                      bottom: 6,
+                      width: 18,
                       height: 3,
                       borderRadius: 2,
                       backgroundColor: hex(PALETTE.gold),
@@ -1320,11 +1667,15 @@ function WorldMap({ hud }: { hud: HudSnapshot }) {
                 )}
               </>
             ) : (
-              <Text variant="body" size="md" color="rgba(255,255,255,0.18)">
+              <Text
+                variant="body"
+                size="md"
+                color="rgba(255,255,255,0.28)"
+              >
                 ?
               </Text>
             )}
-          </View>
+          </Animated.View>
         );
       })}
     </View>
@@ -2039,6 +2390,14 @@ const styles = StyleSheet.create({
   },
 
   iconButton: { width: 40, height: 40 },
+  compassButton: {
+    width: 40,
+    height: 40,
+    // A subtle gold ring to make the compass read as ONE thing that
+    // matters, not a peer of the equally-sized map button next door.
+    borderWidth: 1.4,
+    borderColor: "rgba(232,197,110,0.55)",
+  },
   iconInner: {
     flex: 1,
     alignItems: "center",
@@ -2195,13 +2554,80 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
     paddingBottom: 12,
+    gap: 16,
+  },
+  // Right side of the header: compass callout + close button, aligned so
+  // they don't fight the room-name column for space if the name is long.
+  mapHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  // The "NEXT: BossName" pill next to the header compass. Only ever
+  // rendered when there IS a next objective — no dead pill.
+  mapCompassCallout: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingRight: 8,
   },
   mapScroll: {
     paddingHorizontal: 32,
-    paddingVertical: 16,
+    // paddingBottom leaves room for the legend, which is absolutely
+    // positioned at the bottom of the overlay — without this the last
+    // row of cells would hide behind it on shorter phones.
+    paddingBottom: 60,
+    paddingTop: 4,
     alignItems: "center",
+    flexGrow: 1,
   },
+  // Legacy — kept because other bits of the file still reference this
+  // name for cells that were removed. Cheap to leave in.
   mapLabel: { textAlign: "center", lineHeight: 12 },
+
+  // -------- Map legend --------
+  mapLegend: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 20,
+    paddingHorizontal: 24,
+    paddingTop: 8,
+  },
+  mapLegendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  legendDiamond: {
+    width: 10,
+    height: 10,
+    borderRadius: 3,
+    borderCurve: "continuous",
+    transform: [{ rotate: "45deg" }],
+  },
+  legendBench: {
+    width: 14,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: hex(PALETTE.gold),
+  },
+  legendYouCircle: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+  },
+  legendTargetCircle: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: hex(PALETTE.gold),
+  },
 
   // -------- Loader --------
   loader: {

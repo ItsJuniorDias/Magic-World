@@ -994,4 +994,5 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
 export { PALETTE } from "./art/palette";
 export * from "./config";
 export { BIOMES, BOSS_ROOMS, MAP_EXTENT, ROOMS, ROOM_IDS, getRoom } from "./world/rooms";
+export type { GateSide } from "./world/rooms";
 export type { HudSnapshot, InputState, Progress } from "./types";
