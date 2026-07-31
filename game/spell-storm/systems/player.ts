@@ -57,6 +57,7 @@ export function createPlayer(): Player {
     dashTimer: 0,
     dashCooldown: 0,
     dashDir: 1,
+    airDashAvailable: true,
     pogoRefund: false,
     squashX: 1,
     squashY: 1,
@@ -87,6 +88,7 @@ export function resetPlayer(p: Player): void {
   p.dashTimer = 0;
   p.dashCooldown = 0;
   p.dashDir = 1;
+  p.airDashAvailable = true;
   p.pogoRefund = false;
   p.squashX = 1;
   p.squashY = 1;
@@ -250,7 +252,19 @@ export function updatePlayer(
     }
   }
 
-  // ---- Jump ------------------------------------------------------------
+  // ---- Jump / Air dash -------------------------------------------------
+  //
+  // The JUMP button has two lives. First press from the ground fires a
+  // jump. Second press once the player is genuinely airborne (past coyote
+  // time) fires an AIR DASH — a horizontal burst identical to the ground
+  // dash physics, aimed by the stick with a fallback to `facing`. One
+  // charge per airborne session; touching ground refills it.
+  //
+  // Ordering matters. We check the ground jump first, and only fall
+  // through to the air dash if the ground jump condition failed. That
+  // way the coyote-jump grace window still wins over the air dash for
+  // the player who steps off a ledge and taps JUMP a hair late — they
+  // get the jump they meant to get, not a horizontal boost.
   const canCoyote = p.timeOffGround <= PLAYER.coyoteTime;
   const buffered = p.timeSinceJumpPress <= PLAYER.jumpBuffer;
 
@@ -263,6 +277,33 @@ export function updatePlayer(
     p.squashX = FEEL.jumpStretch.x;
     p.squashY = FEEL.jumpStretch.y;
     events.onJump(p.x, p.y);
+  } else if (
+    buffered &&
+    !canCoyote &&
+    p.airDashAvailable &&
+    p.dashTimer <= 0 &&
+    p.dashCooldown <= 0
+  ) {
+    // Direction: stick if the player is holding one, else face-forward.
+    // 0.3 is above the input deadzone (0.18) but low enough that any
+    // deliberate tilt counts — you shouldn't have to shove the stick.
+    const stickDir = input.moveX > 0.3 ? 1 : input.moveX < -0.3 ? -1 : 0;
+    const dir = stickDir !== 0 ? (stickDir as 1 | -1) : p.facing;
+
+    p.dashTimer = PLAYER.dashDuration;
+    p.dashCooldown = PLAYER.dashCooldown;
+    p.dashDir = dir;
+    p.facing = dir;
+    p.invulnerable = Math.max(p.invulnerable, PLAYER.dashIFrames);
+    // Zero vertical so the burst is a clean horizontal streak, not a
+    // parabola. This is what makes the air dash usable as a gap-crossing
+    // tool: you know where you'll land.
+    p.vy = 0;
+    p.airDashAvailable = false;
+    p.timeSinceJumpPress = Infinity;
+    // Same event as the ground dash — one FX path, one sound, one HUD
+    // reaction. From the outside, both dashes are the same move.
+    events.onDash?.(p.x, p.y, p.dashDir);
   }
 
   // Cut the rise when the button is released — variable jump height.
@@ -304,6 +345,13 @@ export function updatePlayer(
     p.vy = 0;
     p.onGround = true;
     p.timeOffGround = 0;
+    // Landing refills the air-dash charge. Whether or not the player used
+    // it during the air session, touching down is when the mechanic
+    // resets — same rule as Hollow Knight's shade cloak, and the same
+    // rule that makes pogo → dash → pogo → dash a viable chain against
+    // a boss (each pogo bounce is airborne without a fresh charge, but
+    // the landing between attempts resets you).
+    p.airDashAvailable = true;
     if (!wasOnGround && impact > 4) {
       p.squashX = FEEL.landSquash.x;
       p.squashY = FEEL.landSquash.y;

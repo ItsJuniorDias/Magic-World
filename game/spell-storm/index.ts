@@ -252,6 +252,7 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     defeatedRooms: [],
     dashActive: false,
     dashReady: true,
+    airDashArmed: false,
     aimLatched: false,
     sealed: null,
   };
@@ -942,6 +943,14 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     hud.defeatedRooms = progress.bosses;
     hud.dashActive = player.dashTimer > 0;
     hud.dashReady = player.dashCooldown <= 0 && player.dashTimer <= 0;
+    // Air dash is armed when the player is in the air and both gates are
+    // clear: the cooldown has recovered AND the per-air-session charge
+    // is still on. Lit here means "pressing JUMP now will burst you."
+    hud.airDashArmed =
+      !player.onGround &&
+      player.airDashAvailable &&
+      player.dashCooldown <= 0 &&
+      player.dashTimer <= 0;
     hud.aimLatched = player.aimLatched;
     hud.sealed = state.blockedGate;
   }

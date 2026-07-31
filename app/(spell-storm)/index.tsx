@@ -307,6 +307,7 @@ export default function SpellStormScreen() {
     defeatedRooms: [],
     dashActive: false,
     dashReady: true,
+    airDashArmed: false,
     aimLatched: false,
     sealed: null,
   });
@@ -1004,11 +1005,16 @@ export default function SpellStormScreen() {
             pointerEvents="box-none"
           >
             {/*
-              The dash indicator sits beside CAST rather than being a button.
-              Making it a button would eat thumb real estate; making it a
-              status pip teaches the player that dash is available WITHOUT
-              adding another target to hit. When ready, it glows cyan. During
-              the dash, it flashes white. On cooldown, it dims.
+              The dash indicator sits beside CAST rather than being a
+              button. Making it a button would eat thumb real estate;
+              making it a status pip teaches the player that dash is
+              available WITHOUT adding another target to hit.
+              
+              Four states:
+                white + big  →  dash is firing right now
+                gold         →  airborne, JUMP will fire an air dash
+                cyan         →  cooldown ready (double-tap dash works)
+                dim          →  cooldown active, no dash of any kind
             */}
             <View
               pointerEvents="none"
@@ -1017,9 +1023,11 @@ export default function SpellStormScreen() {
                 {
                   backgroundColor: hud.dashActive
                     ? "#FFFFFF"
-                    : hud.dashReady
-                      ? hex(PALETTE.arcane)
-                      : "rgba(255,255,255,0.22)",
+                    : hud.airDashArmed
+                      ? hex(PALETTE.gold)
+                      : hud.dashReady
+                        ? hex(PALETTE.arcane)
+                        : "rgba(255,255,255,0.22)",
                   transform: [{ scale: hud.dashActive ? 1.3 : 1 }],
                 },
               ]}

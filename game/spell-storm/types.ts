@@ -85,6 +85,13 @@ export interface Player {
   dashCooldown: number;
   /** +1 or -1 during the dash, so the player can't reverse mid-dash. */
   dashDir: 1 | -1;
+  /**
+   * The air-dash charge. Starts true, spent on the JUMP-in-air trigger,
+   * refreshed on ground contact. Independent of dashCooldown: even with
+   * cooldown ready, an airborne player who's already burnt this charge
+   * can't dash again until they land.
+   */
+  airDashAvailable: boolean;
   /** True when this frame's landing should refund a pogo jump. */
   pogoRefund: boolean;
 
@@ -269,6 +276,13 @@ export interface HudSnapshot {
   /** Dash telemetry, drives the cooldown pip near the CAST button. */
   dashActive: boolean;
   dashReady: boolean;
+  /**
+   * True when a JUMP press in the air will fire an air dash right now.
+   * Distinct from `dashReady` (which just tracks the cooldown) because
+   * the air-dash mechanic also requires the per-airborne-session charge
+   * to be unspent. Lights the pip gold instead of cyan when armed.
+   */
+  airDashArmed: boolean;
   /** Whether the current shot direction is latched (visible reticle glow). */
   aimLatched: boolean;
 
