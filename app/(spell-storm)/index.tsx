@@ -625,8 +625,12 @@ export default function SpellStormScreen() {
         hud.defeatedRooms,
         hud.bossesDefeated,
         isPro,
+        // Suppress the compass only during an ACTIVE boss encounter —
+        // walking through a cleared boss room should still show the
+        // next-target arrow, per the v3.7 fix.
+        hud.bossActive,
       ),
-    [hud.roomId, hud.defeatedRooms, hud.bossesDefeated, isPro],
+    [hud.roomId, hud.defeatedRooms, hud.bossesDefeated, hud.bossActive, isPro],
   );
 
   // ---- Touch controls ----------------------------------------------------
@@ -979,20 +983,33 @@ export default function SpellStormScreen() {
               {/*
                 One button, two faces. When there IS an objective (which is
                 most of the game), the button becomes a compass — a gold
-                arrow pointing toward the next reachable boss. When the
-                player is inside a boss room, or when nothing reachable is
-                unbeaten, it falls back to the classic map grid glyph.
-                Either way, tapping opens the full map. One affordance
-                beats two side-by-side buttons that do the same thing.
+                arrow pointing toward the next reachable boss (or a
+                near-white arrow when it's the fallback bench target).
+                When the player is inside an ACTIVE boss fight, or when
+                nothing at all is reachable, it falls back to the classic
+                map grid glyph. Either way, tapping opens the full map.
               */}
               <Pressable onPress={() => setMapOpen(true)} hitSlop={10}>
                 <Glass
-                  style={objective ? styles.compassButton : styles.iconButton}
+                  style={
+                    objective
+                      ? objective.kind === "boss"
+                        ? styles.compassButton
+                        : styles.compassButtonBench
+                      : styles.iconButton
+                  }
                   radius={objective ? 20 : 17}
                 >
                   <View style={styles.iconInner}>
                     {objective ? (
-                      <CompassArrow side={objective.side} />
+                      <CompassArrow
+                        side={objective.side}
+                        color={
+                          objective.kind === "boss"
+                            ? hex(PALETTE.gold)
+                            : "rgba(255,255,255,0.85)"
+                        }
+                      />
                     ) : (
                       <>
                         <View style={styles.mapGlyphRow}>
@@ -1440,9 +1457,23 @@ export default function SpellStormScreen() {
             <View style={styles.mapHeaderRight}>
               {objective && (
                 <View style={styles.mapCompassCallout}>
-                  <Glass style={styles.compassButton} radius={20}>
+                  <Glass
+                    style={
+                      objective.kind === "boss"
+                        ? styles.compassButton
+                        : styles.compassButtonBench
+                    }
+                    radius={20}
+                  >
                     <View style={styles.iconInner}>
-                      <CompassArrow side={objective.side} />
+                      <CompassArrow
+                        side={objective.side}
+                        color={
+                          objective.kind === "boss"
+                            ? hex(PALETTE.gold)
+                            : "rgba(255,255,255,0.85)"
+                        }
+                      />
                     </View>
                   </Glass>
                   <View style={{ marginLeft: 10, maxWidth: 140 }}>
@@ -1451,7 +1482,7 @@ export default function SpellStormScreen() {
                       size="xs"
                       color="rgba(255,255,255,0.55)"
                     >
-                      NEXT
+                      {objective.kind === "boss" ? "NEXT" : "NEAREST BENCH"}
                     </Text>
                     <Text
                       variant="heading"
@@ -1588,19 +1619,55 @@ export default function SpellStormScreen() {
 interface Objective {
   side: GateSide;
   targetRoomId: string;
+  /** Display label — boss name for a boss target, room name for a bench target. */
   targetBossName: string;
+  /** What kind of target this is, so the arrow can be styled differently. */
+  kind: "boss" | "bench" | "start";
 }
 
+/**
+ * BFS from the current room through open gates, looking for an
+ * uncleared boss. Returns the direction of the FIRST gate on the
+ * shortest path, or null if there is none.
+ *
+ * The old version returned null in two situations that turned out to
+ * be user-hostile: (1) standing INSIDE a boss room (even one already
+ * cleared, when you're just passing through), and (2) when every
+ * accessible boss was already dead. Both left the player with no
+ * arrow to follow — which is exactly when they're most confused
+ * about where to go.
+ *
+ * v3.7 fixes: we now run the BFS even from inside a cleared boss
+ * room, and if no uncleared boss is reachable we fall back to
+ * pointing at the nearest bench (comfort target — you can travel
+ * from there). Only truly return null when the player is in an
+ * ACTIVE boss fight, where the whole screen is the objective anyway.
+ */
 function findObjective(
   currentRoomId: string,
   defeatedRooms: string[],
   bossesDefeated: number,
   isPro: boolean,
+  bossFightActive: boolean,
 ): Objective | null {
   const currentRoom = ROOMS[currentRoomId];
-  // Standing INSIDE a boss room — there is no "which way" to point.
-  // Either they're fighting it or they've beaten it and are just visiting.
-  if (currentRoom?.boss) return null;
+  if (!currentRoom) return null;
+  // Only suppress the compass while a boss is being fought — then the
+  // arrow would tell the player to leave, which is a) impossible
+  // (sealed) and b) a bad UI cue for "focus".
+  if (currentRoom.boss && !defeatedRooms.includes(currentRoomId) && bossFightActive) {
+    return null;
+  }
+
+  // Two parallel BFS results:
+  //  bossHit — the closest uncleared boss room (primary target).
+  //  benchHit — the closest OTHER bench room (fallback target,
+  //             used only when there's no uncleared boss).
+  //
+  // Running both in one traversal is cheaper than two separate
+  // walks over the same graph.
+  let bossHit: Objective | null = null;
+  let benchHit: Objective | null = null;
 
   const queue: { room: string; firstSide: GateSide | null }[] = [
     { room: currentRoomId, firstSide: null },
@@ -1612,20 +1679,39 @@ function findObjective(
     const room = ROOMS[node.room];
     if (!room) continue;
 
-    // Objective: a boss room we haven't cleared. Skip the origin — we
-    // already excluded standing-in-a-boss-room above, so this only
-    // filters the seed of the BFS which by definition can't be an
-    // objective anyway.
+    // Boss target — first hit wins because BFS is shortest-path first.
     if (
+      !bossHit &&
       node.room !== currentRoomId &&
       room.boss &&
       !defeatedRooms.includes(node.room) &&
       node.firstSide
     ) {
-      return {
+      bossHit = {
         side: node.firstSide,
         targetRoomId: node.room,
         targetBossName: room.bossName ?? room.name,
+        kind: "boss",
+      };
+      // Early exit — boss is always the primary target, no need to
+      // keep searching once we've found one.
+      break;
+    }
+
+    // Bench fallback — closest bench that isn't the room the player
+    // is standing in. Keeps looking after the first hit only until
+    // we've either exhausted the queue or found a boss.
+    if (
+      !benchHit &&
+      node.room !== currentRoomId &&
+      room.bench &&
+      node.firstSide
+    ) {
+      benchHit = {
+        side: node.firstSide,
+        targetRoomId: node.room,
+        targetBossName: room.name,
+        kind: "bench",
       };
     }
 
@@ -1644,7 +1730,14 @@ function findObjective(
       });
     }
   }
-  return null;
+
+  // Primary: a real boss to fight. Fallback: a bench to rest at
+  // (which is always a useful place to head toward). Only both
+  // null means the room graph is a single isolated cell, which
+  // should never happen with the current world layout — but the
+  // extra safety of returning null there means we degrade to the
+  // map glyph instead of throwing.
+  return bossHit ?? benchHit;
 }
 
 /**
@@ -1663,7 +1756,15 @@ const COMPASS_ROTATION: Record<GateSide, string> = {
  * A tiny arrow. Two Views: a thin shaft and a triangular head. Sized to
  * fit a 40x40 icon button with 8px of breathing room on every side.
  */
-function CompassArrow({ side }: { side: GateSide }) {
+/**
+ * A tiny arrow. Two Views: a thin shaft and a triangular head. Sized to
+ * fit a 40x40 icon button with 8px of breathing room on every side.
+ *
+ * `color` defaults to gold — the primary boss-target hue. Bench
+ * fallback callers pass near-white so the eye reads it as "hint,
+ * not urgent".
+ */
+function CompassArrow({ side, color = hex(PALETTE.gold) }: { side: GateSide; color?: string }) {
   return (
     <View
       style={{
@@ -1681,7 +1782,7 @@ function CompassArrow({ side }: { side: GateSide }) {
           width: 3,
           height: 14,
           borderRadius: 1.5,
-          backgroundColor: hex(PALETTE.gold),
+          backgroundColor: color,
         }}
       />
       {/* Arrowhead. Upward triangle using the border trick. */}
@@ -1697,7 +1798,7 @@ function CompassArrow({ side }: { side: GateSide }) {
           borderBottomWidth: 9,
           borderLeftColor: "transparent",
           borderRightColor: "transparent",
-          borderBottomColor: hex(PALETTE.gold),
+          borderBottomColor: color,
         }}
       />
     </View>
@@ -3511,12 +3612,24 @@ const styles = StyleSheet.create({
 
   iconButton: { width: 40, height: 40 },
   compassButton: {
-    width: 40,
-    height: 40,
-    // A subtle gold ring to make the compass read as ONE thing that
-    // matters, not a peer of the equally-sized map button next door.
+    width: 44,
+    height: 44,
+    // Ring width and opacity both bumped in v3.7 — the old value read
+    // as decoration next to the sigil pill instead of "look here". A
+    // thicker, brighter ring plus a slight size increase (40→44) is
+    // what makes the compass READ as a compass at a glance.
+    borderWidth: 2,
+    borderColor: "rgba(255,201,74,0.85)",
+  },
+  compassButtonBench: {
+    // Bench-fallback variant. Same footprint as the boss compass so
+    // the button doesn't jump around when the objective flips, but
+    // the ring is neutral so the eye still separates "urgent target"
+    // from "somewhere useful to head".
+    width: 44,
+    height: 44,
     borderWidth: 1.4,
-    borderColor: "rgba(232,197,110,0.55)",
+    borderColor: "rgba(255,255,255,0.4)",
   },
   iconInner: {
     flex: 1,
