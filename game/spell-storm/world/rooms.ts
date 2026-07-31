@@ -1090,7 +1090,13 @@ export function arrivalPoint(room: Room, gate: Gate): { x: number; y: number } {
     case "right":
       return { x: room.maxX - inset, y: Math.max(0, gate.at - 2.0) };
     case "top":
-      return { x: gate.at, y: room.ceilingY - 3.0 };
+      // Was `ceilingY - 3.0`, which spawned the player at y=43 in Long Fall
+      // — but the top gate's detector fires from y >= 42.8. Arriving from
+      // Crossroads bounced back on the next frame, and every other vertical
+      // transition (Spire Hall, Void Stair, Cistern Choir…) had the same
+      // bug. 1wu of clearance under the detector, not 0.2, so a landing
+      // that overshoots by a fraction of a frame still doesn't retrigger.
+      return { x: gate.at, y: room.ceilingY - 4.0 };
     case "bottom": {
       // You reach a bottom gate by falling through a hole, so arriving
       // through one means coming UP through that same hole. Landing on it

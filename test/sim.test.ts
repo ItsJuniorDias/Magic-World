@@ -417,6 +417,48 @@ console.log("\nWorld graph");
   }
   check("no gate spawns the player outside the room", badSpawn === 0);
 
+  // Regression: v3 shipped a top-gate arrival at y = ceilingY - 3.0, and the
+  // gate detector fired at y >= ceilingY - 3.2. Every vertical transition
+  // spawned the player 0.2wu INSIDE the destination gate's detection range,
+  // and on the very next frame the same gate fired again — bouncing them
+  // straight back to the room they'd just left. Long Fall couldn't be
+  // entered at all. This assertion locks the invariant.
+  const gateAtRepro = (room: (typeof ROOMS)[string], x: number, y: number) => {
+    for (const g of room.gates) {
+      let inside = false;
+      switch (g.side) {
+        case "left":
+          inside = x <= room.minX + 1.4 && Math.abs(y + 0.8 - g.at) < g.size * 0.5;
+          break;
+        case "right":
+          inside = x >= room.maxX - 1.4 && Math.abs(y + 0.8 - g.at) < g.size * 0.5;
+          break;
+        case "top":
+          inside = y >= room.ceilingY - 3.2 && Math.abs(x - g.at) < g.size * 0.5;
+          break;
+        case "bottom":
+          inside = y <= -3.5 && Math.abs(x - g.at) < g.size * 0.5 + 2.5;
+          break;
+      }
+      if (inside) return g;
+    }
+    return null;
+  };
+  let bouncy = 0;
+  for (const id of ROOM_IDS) {
+    for (const gate of ROOMS[id].gates) {
+      const target = ROOMS[gate.to];
+      const back = target ? findGate(target, gate.toGate) : null;
+      if (!target || !back) continue;
+      const at = arrivalPoint(target, back);
+      if (gateAtRepro(target, at.x, at.y)) {
+        bouncy += 1;
+        console.log(`        ${id}.${gate.id} -> ${gate.to}: spawn at (${at.x}, ${at.y}) is INSIDE a gate detector`);
+      }
+    }
+  }
+  check("no arrival point is inside its own gate's detection range", bouncy === 0);
+
   const bossRooms = ROOM_IDS.filter((id) => ROOMS[id].boss);
   check("there are seven bosses", bossRooms.length === 7, `${bossRooms.length}`);
   check(

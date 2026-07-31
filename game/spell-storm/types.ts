@@ -215,6 +215,13 @@ export interface GameState {
   fadeDir: 1 | -1 | 0;
   /** Gate we are travelling through, if any. */
   pendingGate: { to: string; toGate: string } | null;
+  /**
+   * Grace period after entering a room, in seconds, during which gate
+   * detection is disabled. Belt to the arrivalPoint braces: if any spawn
+   * ever lands inside a gate's detection range again, this stops the
+   * player from being bounced straight back out.
+   */
+  gateGrace: number;
 
   // ---- Boss ----
   bossActive: boolean;

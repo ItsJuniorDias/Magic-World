@@ -221,6 +221,7 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     fade: 0,
     fadeDir: 0,
     pendingGate: null,
+    gateGrace: 0,
     bossActive: false,
     bossKind: null,
     bossTimer: 0,
@@ -344,6 +345,11 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     state.roomId = roomId;
     state.roomTitleTimer = PROGRESSION.roomTitleTime;
     state.blockedGate = null;
+    // Silence gate detection just long enough that the player can move a
+    // little before the check starts firing. 0.4s is more than enough to
+    // walk off the arrival tile, and short enough that intentionally
+    // reversing course through the same door still feels responsive.
+    state.gateGrace = 0.4;
     useSky(room.biome);
 
     // Belt and braces: if an arrival point ever ends up over a hole, slide it
@@ -595,6 +601,7 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
       if (state.comboTimer <= 0) state.combo = 1;
     }
     if (state.blockedGate && !world.gateAt(player.x, player.y)) state.blockedGate = null;
+    if (state.gateGrace > 0) state.gateGrace = Math.max(0, state.gateGrace - dt);
 
     // ---- Transition ------------------------------------------------------
     if (state.phase === "transition") {
@@ -870,7 +877,7 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     }
 
     // ---- Gates -----------------------------------------------------------
-    if (player.alive && state.phase === "playing" && !ARENA_STATE.sealed) {
+    if (player.alive && state.phase === "playing" && !ARENA_STATE.sealed && state.gateGrace <= 0) {
       const hit = world.gateAt(player.x, player.y);
       if (hit) {
         if (hit.open) {
