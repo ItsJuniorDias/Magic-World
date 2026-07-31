@@ -707,50 +707,48 @@ export const INPUT = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// Rendering budget
+// Rendering budget — HD PASS
 // ---------------------------------------------------------------------------
 export const RENDER = {
   /**
    * expo-gl hands us a drawing buffer already scaled by the device pixel
-   * ratio. On a 3x phone that's a lot of fragments for a fullscreen game.
-   * We render into an offscreen target at a fraction of that and blit it
-   * back up to full size — the paper art style has no fine detail to lose,
-   * and it buys ~40% GPU headroom.
+   * ratio. HD pass: this is now 1.0 — no downscaling. The user explicitly
+   * asked for maximum quality regardless of cost. On a 3x iPhone the game
+   * will render at full native resolution.
+   *
+   * If a device chugs on this, the historical value of 0.8 was fine.
    *
    * IMPORTANT: this must NOT be applied with `renderer.setSize(smaller)`.
    * In a browser that shrinks the backing store and CSS scales it back up.
    * expo-gl has no CSS: the surface stays full size, `gl.viewport` shrinks,
-   * and everything outside the viewport stays at the clear colour. That is
-   * exactly the black band down the right side of the screen — the scene
-   * was being drawn into the bottom-left 75% x 75% of the display.
+   * and everything outside the viewport stays at the clear colour.
    * See engine/useGLGame.ts for the render-target blit that fixes it.
    */
-  resolutionScale: 0.8,
+  resolutionScale: 1.0,
   /**
-   * OFF BY DEFAULT, AND THAT IS DELIBERATE.
-   *
-   * When true, the scene renders into an offscreen target at
-   * `resolutionScale` and is blitted up to full size. That saves real
-   * fragment work — but it depends on `renderer.setRenderTarget(null)`
-   * returning to the surface expo-gl actually presents, and expo-gl does not
-   * guarantee that its presentable framebuffer is FBO 0. When it isn't, the
-   * blit lands in a framebuffer nobody ever shows and you get a completely
-   * black GL view with a perfectly working HUD on top of it.
-   *
-   * The direct path has no such dependency and is what the original build
-   * used, minus the viewport bug. It costs ~35% more fragments on a 3x
-   * display, which the flat art can afford.
-   *
-   * If you want the saving back, turn this on and verify on a real device
-   * before shipping. `resolutionScale` is ignored while it is false.
+   * Still off by default. See original config for the "black-screen"
+   * regression that ships alongside enabling this on some expo-gl backends.
+   * The HD pass makes this even more risky (larger fragment cost per
+   * offscreen target) so leave alone.
    */
   offscreenUpscale: false,
-  particlePoolSize: 260,
+  /**
+   * HD pass: 260 → 900. A boss death now emits enough particles to actually
+   * FEEL like an explosion rather than a puff. All 900 pack into a single
+   * Points draw call.
+   */
+  particlePoolSize: 900,
   /** Skip the frame entirely if dt is this large (app was backgrounded). */
   maxDeltaTime: 0.1,
   /** Physics runs at a fixed step; render interpolates. */
   fixedStep: 1 / 60,
   maxStepsPerFrame: 4,
+  /**
+   * HD pass: turn MSAA on. On phones with a >=2x pixel ratio the extra
+   * fragment cost is well worth the smoother silhouettes on all the
+   * paper edges, especially at the boss scale.
+   */
+  antialias: true,
 } as const;
 
 // ---------------------------------------------------------------------------

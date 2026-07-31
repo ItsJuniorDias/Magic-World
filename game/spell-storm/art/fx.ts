@@ -5,16 +5,29 @@ import { PALETTE } from "./palette";
 import type { PaperKit } from "./paper";
 
 /**
- * Impact feedback: particles and shockwave rings.
+ * Impact feedback: particles and shockwave rings — HD pass.
  *
  * Both are strictly pooled. Allocating a mesh or a geometry when an enemy
  * dies would mean a GC pause in the middle of the exact moment the player is
  * paying most attention to — the one frame where a stutter is unforgivable.
  * Everything here is created once at load and recycled forever.
  *
- * Particles are a single Points draw call with a custom shader, so 260 of
+ * Particles are a single Points draw call with a custom shader, so 900 of
  * them cost the same as one. PointsMaterial can't vary size per particle,
  * which is why the shader is hand-written rather than using the built-in.
+ *
+ * WHAT HD ADDS
+ *
+ *   1. RENDER.particlePoolSize bumped in config (260 → 900). More
+ *      particles per burst = a burst that reads.
+ *   2. A softer, more forgiving falloff in the shader — particles no
+ *      longer cut off at a hard edge.
+ *   3. TWO rings per shockwave — a bright thin inner and a dimmer wide
+ *      outer, so impacts read at two scales.
+ *   4. New `spark()` type: heavier, gravity-affected particles used for
+ *      dust kicks and boss slams.
+ *   5. New `beamTrail()`: a directional trail with velocity carry-over,
+ *      so a projectile's tail actually looks like it's chasing the head.
  */
 
 const PARTICLE_VERT = `
@@ -33,7 +46,8 @@ const PARTICLE_VERT = `
 `;
 
 // Soft round falloff computed from gl_PointCoord — no texture needed, which
-// matters because React Native has no canvas to generate one from.
+// matters because React Native has no canvas to generate one from. HD pass:
+// softer edge for a nicer bloom feel.
 const PARTICLE_FRAG = `
   precision mediump float;
   varying float vAlpha;
@@ -42,7 +56,11 @@ const PARTICLE_FRAG = `
     vec2 d = gl_PointCoord - vec2(0.5);
     float dist = dot(d, d);
     if (dist > 0.25) discard;
-    float falloff = 1.0 - smoothstep(0.0, 0.25, dist);
+    // Smoother than the previous version — two-stage smoothstep for a
+    // brighter core and a longer soft falloff.
+    float core = 1.0 - smoothstep(0.0, 0.08, dist);
+    float halo = 1.0 - smoothstep(0.05, 0.25, dist);
+    float falloff = core * 0.7 + halo * 0.6;
     gl_FragColor = vec4(vTint, vAlpha * falloff);
   }
 `;
@@ -77,6 +95,10 @@ export interface Fx {
   ): void;
   /** A single trail dot, emitted along a projectile's path. */
   trail(x: number, y: number, hex: number, size: number): void;
+  /** A heavier trail dot with velocity carry-over. Used for beam weapons. */
+  beamTrail(x: number, y: number, vx: number, vy: number, hex: number, size: number): void;
+  /** Heavy, gravity-affected sparks. Used for slams and dust kicks. */
+  spark(x: number, y: number, count: number, hex: number, spread?: number): void;
   /** Expanding ring — golem slams, boss landings, pickup collection. */
   shockwave(x: number, y: number, hex: number, maxRadius: number, duration: number): void;
 }
@@ -152,6 +174,8 @@ export function createFx(kit: PaperKit, disposer: Disposer): Fx {
   }
 
   // ---- Shockwaves -------------------------------------------------------
+  // HD pass: each shockwave is TWO rings — a bright thin inner and a dim
+  // wider outer. Both are pooled independently.
   interface Ring {
     mesh: THREE.Mesh;
     material: THREE.MeshBasicMaterial;
@@ -159,19 +183,24 @@ export function createFx(kit: PaperKit, disposer: Disposer): Fx {
     maxLife: number;
     maxRadius: number;
     active: boolean;
+    wide: boolean;
   }
-  const RING_COUNT = 8;
+  const RING_COUNT = 12;
   const rings: Ring[] = [];
   {
-    const ringGeo = new THREE.RingGeometry(0.82, 1.0, 28);
-    disposer.track(ringGeo);
+    // Two ring geometries: a thin inner and a wide outer.
+    const innerGeo = new THREE.RingGeometry(0.82, 1.0, 40);
+    disposer.track(innerGeo);
+    const outerGeo = new THREE.RingGeometry(0.6, 1.0, 40);
+    disposer.track(outerGeo);
     for (let i = 0; i < RING_COUNT; i++) {
+      const wide = i % 2 === 1;
       const material = kit.glowMaterial(PALETTE.arcane, 0);
-      const mesh = new THREE.Mesh(ringGeo, material);
+      const mesh = new THREE.Mesh(wide ? outerGeo : innerGeo, material);
       mesh.visible = false;
       mesh.renderOrder = 29;
       root.add(mesh);
-      rings.push({ mesh, material, life: 0, maxLife: 1, maxRadius: 1, active: false });
+      rings.push({ mesh, material, life: 0, maxLife: 1, maxRadius: 1, active: false, wide });
     }
   }
   let ringCursor = 0;
@@ -214,7 +243,7 @@ export function createFx(kit: PaperKit, disposer: Disposer): Fx {
       geo.attributes.alpha.needsUpdate = true;
       geo.attributes.tint.needsUpdate = true;
 
-      // Rings
+      // Rings — pair loop for inner/outer.
       for (const ring of rings) {
         if (!ring.active) continue;
         ring.life -= dt;
@@ -226,12 +255,12 @@ export function createFx(kit: PaperKit, disposer: Disposer): Fx {
         const t = 1 - ring.life / ring.maxLife;
         // Ease-out: fast expansion that decelerates reads as an impact.
         const eased = 1 - (1 - t) * (1 - t);
-        ring.mesh.scale.setScalar(0.15 + eased * ring.maxRadius);
-        ring.material.opacity = (1 - t) * 0.85;
+        ring.mesh.scale.setScalar(0.15 + eased * ring.maxRadius * (ring.wide ? 1.3 : 1));
+        ring.material.opacity = (1 - t) * (ring.wide ? 0.5 : 0.9);
       }
     },
 
-    burst(x, y, count, hex, speed, size = 9) {
+    burst(x, y, count, hex, speed, size = 12) {
       for (let i = 0; i < count; i++) {
         const angle = (i / count) * Math.PI * 2 + Math.random() * 0.5;
         const v = speed * (0.45 + Math.random() * 0.75);
@@ -240,11 +269,28 @@ export function createFx(kit: PaperKit, disposer: Disposer): Fx {
           y,
           Math.cos(angle) * v,
           Math.sin(angle) * v,
-          0.34 + Math.random() * 0.34,
-          size * (0.6 + Math.random() * 0.7),
+          0.42 + Math.random() * 0.4,
+          size * (0.6 + Math.random() * 0.9),
           hex,
           -14,
           2.2,
+        );
+      }
+
+      // Add a smattering of bigger, slower "flash" particles for punch.
+      for (let i = 0; i < Math.max(2, Math.floor(count / 5)); i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const v = speed * 0.2;
+        spawn(
+          x,
+          y,
+          Math.cos(angle) * v,
+          Math.sin(angle) * v,
+          0.22 + Math.random() * 0.14,
+          size * (2.0 + Math.random() * 1.0),
+          hex,
+          -6,
+          5.0,
         );
       }
     },
@@ -259,8 +305,8 @@ export function createFx(kit: PaperKit, disposer: Disposer): Fx {
           y,
           Math.cos(angle) * v,
           Math.sin(angle) * v,
-          0.28 + Math.random() * 0.3,
-          6 + Math.random() * 5,
+          0.32 + Math.random() * 0.34,
+          8 + Math.random() * 6,
           hex,
           -10,
           3.4,
@@ -269,21 +315,63 @@ export function createFx(kit: PaperKit, disposer: Disposer): Fx {
     },
 
     trail(x, y, hex, size) {
-      spawn(x, y, 0, 0, 0.2, size, hex, 0, 0);
+      spawn(x, y, 0, 0, 0.22, size, hex, 0, 0);
+    },
+
+    beamTrail(x, y, vx, vy, hex, size) {
+      // Backward velocity so the trail lags behind the projectile.
+      spawn(x, y, -vx * 0.28, -vy * 0.28, 0.28, size * 1.2, hex, 0, 4.5);
+    },
+
+    spark(x, y, count, hex, spread = Math.PI * 0.55) {
+      for (let i = 0; i < count; i++) {
+        const angle = -Math.PI / 2 + (Math.random() - 0.5) * spread * 2;
+        const v = 8 + Math.random() * 14;
+        spawn(
+          x,
+          y,
+          Math.cos(angle) * v,
+          Math.abs(Math.sin(angle)) * v,
+          0.55 + Math.random() * 0.35,
+          6 + Math.random() * 4,
+          hex,
+          -32,
+          1.3,
+        );
+      }
     },
 
     shockwave(x, y, hex, maxRadius, duration) {
-      const ring = rings[ringCursor];
-      ringCursor = (ringCursor + 1) % RING_COUNT;
-      ring.active = true;
-      ring.life = duration;
-      ring.maxLife = duration;
-      ring.maxRadius = maxRadius;
-      ring.material.color.setHex(hex);
-      ring.material.opacity = 0.85;
-      ring.mesh.position.set(x, y, 1.1);
-      ring.mesh.scale.setScalar(0.15);
-      ring.mesh.visible = true;
+      // Fire two rings: an inner bright one and a wider dim one.
+      // Iterate through the pool grabbing two consecutive slots.
+      for (let side = 0; side < 2; side++) {
+        // Try to find a slot with matching `wide` polarity; fall back to
+        // any inactive slot if the pool is under pressure.
+        let found: Ring | null = null;
+        for (let n = 0; n < RING_COUNT; n++) {
+          const idx = (ringCursor + n) % RING_COUNT;
+          const r = rings[idx];
+          if (!r.active && r.wide === (side === 1)) {
+            found = r;
+            ringCursor = (idx + 1) % RING_COUNT;
+            break;
+          }
+        }
+        if (!found) {
+          const idx = ringCursor;
+          ringCursor = (ringCursor + 1) % RING_COUNT;
+          found = rings[idx];
+        }
+        found.active = true;
+        found.life = duration * (side === 1 ? 1.1 : 1);
+        found.maxLife = duration * (side === 1 ? 1.1 : 1);
+        found.maxRadius = maxRadius;
+        found.material.color.setHex(hex);
+        found.material.opacity = side === 1 ? 0.5 : 0.9;
+        found.mesh.position.set(x, y, side === 1 ? 1.0 : 1.1);
+        found.mesh.scale.setScalar(0.15);
+        found.mesh.visible = true;
+      }
     },
   };
 }

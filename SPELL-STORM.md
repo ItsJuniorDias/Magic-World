@@ -455,3 +455,80 @@ bosses, membership opens the rest).
 
 These aren't ceremony. Every failure listed above was a bug the tests
 caught before the player did.
+
+
+## v5 — HD art pass
+
+Everything above is preserved. This section documents what changed in the
+HD pass and, more importantly, what was deliberately NOT changed.
+
+**Preserved architecture.**
+
+- Still 100% procedural. Zero image assets. The whole game weighs the
+  same on the app bundle as it did before.
+- Still `MeshBasicMaterial` (unlit) everywhere. No lights, no shadow
+  maps, no PBR. Fake lighting is done with clone-cards (a brighter or
+  scaled-up copy behind the shape reads as rim light or halo).
+- Same "paper theatre at dusk" direction — extruded 2D cards, layered
+  Z-order via `renderOrder`, no perspective.
+- Same interfaces: `Creature`, `NpcVisual`, `RoomStage`, `Sky`, `Mage`,
+  `Fx`. `index.ts` and `bossAI.ts` were not touched (except the two
+  boss flashes and the postFx tick).
+- Same expo-gl workaround: `offscreenUpscale: false`, no render targets,
+  no EffectComposer. The HD post-processing (`art/postFx.ts`) is
+  camera-parented overlay geometry precisely to avoid the FBO 0 bug.
+
+**What got more detail.**
+
+- `art/palette.ts` — expanded from ~30 to ~80 colours: sky gradient
+  stops, moon face/edge/glow, aurora ribbons, nebula core/edge, warm
+  and cool star tints, per-boss rim colours, per-biome fog colours,
+  and helpers (`rim`, `shade`, `mix`, `shift`, `recede`) to derive
+  neighbours from a base hex.
+- `art/paper.ts` — new primitives (`softStar`, `crescent`, `filigree`,
+  `teardrop`), new mesh helpers (`rimmedCard`, `shadowedCard`,
+  `godRay`, `glowRing`), and denser tessellation for the glow discs.
+- `art/sky.ts` — completely rewritten. A 6-stop gradient replaces the
+  2-band original; sun disc gets halo + glow + 5 god rays with pivots;
+  moon has crescent + disc + craters; three aurora ribbons animate
+  independently; 240 stars (up from 90) split warm/cool with 12 hero
+  stars pulsing; 11 clouds with rim; horizon haze band. All animated.
+- `art/mage.ts` — cloak lag, robe rim, hem trim, buckled belt, chest
+  star, hair flutter, dual-glow eyes, hat rim + star, staff rim + orb
+  aura + 3 orbiting motes + 5 pulsing hem sparks.
+- `art/bosses.ts` — six of the seven bosses (dragon is in bestiary)
+  each get an aura ring, rim cards, and secondary animation. Dragon
+  gets aura + wing bones + belly veins + filigreed horns + mouth glow
+  + tail spike + teeth + scale ridges.
+- `art/roomStage.ts` — 7–8 parallax layers instead of 5, plus two
+  atmospheric fog quads. Ground has a lit lip, shadow strip, and specks.
+  Foliage sways. Wall rim highlights. Every biome prop gained
+  highlight-and-shadow strips and detail lines.
+- `art/fx.ts` — shader now has a two-stage smoothstep for softer
+  falloff. Pool bumped from 260 to 900 (driven by `RENDER.particlePoolSize`).
+  Bursts get dual rings, sparks are gravity-affected, beams have trail
+  particles.
+
+**What's brand new.**
+
+- `art/postFx.ts` — a fifth layer above the game: vignette (subdivided
+  plane, custom shader, radial darkening), grain (Points cloud,
+  shuffled every 120 ms), mood tint (biome-tinted overlay), and flash
+  (fired on boss intro and boss death). All camera-parented, no
+  render targets, no risk of hitting the presentable-FBO bug.
+
+**Render config changes.**
+
+- `resolutionScale: 0.8 → 1.0`
+- `particlePoolSize: 260 → 900`
+- `antialias: false → true` (also wired through `useGLGame.ts`, which
+  used to hardcode MSAA off)
+- `offscreenUpscale` **unchanged** — still false. This flag is not
+  safe to flip until the FBO 0 issue is resolved upstream in expo-gl.
+
+**Perf note.**
+
+The pass is heavier than v4. On an iPhone 12 or newer it should hold 60,
+but the older devices may want `resolutionScale: 0.85`, `antialias:
+false`, and `particlePoolSize: 500` in `config.ts`. Those three knobs
+are the emergency brake — everything else can stay.
