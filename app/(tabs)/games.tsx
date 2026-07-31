@@ -37,6 +37,8 @@ const GAMES: Game[] = [
     accent: tokens.palette.amber500,
     route: "/(endless-runner)",
     description: "Navigate through asteroids.",
+    featured: true,
+    badge: "Hot",
   },
   {
     id: "quiz",
