@@ -69,6 +69,10 @@ import type { BossKind, MinionKind } from "../config";
  *   - Spawn counts were cut ~45% in the v3.2 pass. Empty rooms feel dead
  *     and packed rooms punish exploration; three-to-four enemies per
  *     transit room is the sweet spot for the current player kit.
+ *   - Escaladas entre salas usam exatamente 3 plataformas empilhadas com
+ *     ~5wu de altura entre elas. O pulo do jogador alcança 5.6wu, então
+ *     cada degrau é sempre um pulo simples, sem manobra horizontal. Isso
+ *     aplica-se às salas verticais spire_climb, void_stair e cistern_fall.
  */
 
 // ---------------------------------------------------------------------------
@@ -673,30 +677,30 @@ export const ROOMS: Record<string, Room> = {
     biome: "spire",
     minX: -30,
     maxX: 30,
-    ceilingY: 62,
-    // A genuinely tall room. The camera has to follow vertically here, which
-    // is the reason CAMERA.followY was replaced with a proper deadzone rig.
+    // Sala encurtada radicalmente (era 62wu) para caber uma escalada de
+    // apenas 3 plataformas empilhadas. O jogador pediu a escalada mais
+    // fácil possível — 3 degraus, um em cima do outro, sem alternância.
+    ceilingY: 22,
+    // TRÊS PLATAFORMAS. Empilhadas encostando na parede direita porque é
+    // lá que está o gate `e` (y=15). Se ficassem no centro, o jogador
+    // sairia da plataforma superior e cairia antes de chegar no gate —
+    // a distância seria maior que o alcance de pulo. Alinhadas em x=26
+    // (halfW=4 → vai de x=22 até x=30, encostando na parede).
     platforms: [
-      ...ledges(-22, 22, 5, 4.6, 8.2, 2.2),
-      ...ledges(-20, 20, 5, 13.0, 16.6, 2.0),
-      ...ledges(-20, 20, 5, 21.4, 25.0, 2.0),
-      ...ledges(-18, 18, 5, 29.8, 33.4, 1.9),
-      ...ledges(-18, 18, 5, 38.2, 41.8, 1.9),
-      ...ledges(-14, 14, 4, 46.6, 50.2, 1.8),
-      p(0, 55.0, 4.0),
+      p(26, 5.0, 4.0),
+      p(26, 10.0, 4.0),
+      p(26, 15.0, 4.0),
     ],
     solids: [],
     floorGaps: [gap(0, 3.0)],
-    hazards: [spike(-8, 0.3, 3.0), spike(10, 0.3, 3.0)],
+    hazards: [],
     gates: [
       { id: "s", side: "bottom", at: 0, size: 6.4, to: "spire_hall", toGate: "n" },
-      { id: "e", side: "right", at: 56.0, size: 5.4, to: "nightwing_perch", toGate: "w" },
+      { id: "e", side: "right", at: 15.0, size: 5.4, to: "nightwing_perch", toGate: "w" },
     ],
     spawns: [
-      at("bat", -14, 8),
-      at("wisp", -8, 24),
-      at("bat", 6, 32),
-      at("bat", -10, 48),
+      at("bat", -18, 8),
+      at("wisp", -10, 12),
     ],
     bench: { x: -24 },
     map: { col: 3, row: 0 },
@@ -824,49 +828,33 @@ export const ROOMS: Record<string, Room> = {
     biome: "void",
     minX: -34,
     maxX: 34,
-    ceilingY: 44,
+    // Sala encurtada (era 44wu) e escadaria refeita como 3 plataformas
+    // empilhadas. Antes eram 20+ plataformas em zig-zag que ninguém
+    // conseguia decorar.
+    ceilingY: 22,
+    // TRÊS PLATAFORMAS. O gate top fica em x=22 — se as plataformas
+    // sentassem em x=22 elas bloqueariam a queda de quem entra vindo
+    // de ember_forge (aparece em 22,18 e caía em cima delas). Deslocadas
+    // pra x=27, halfW=3, ocupam de x=24 a x=30 (encostando na parede
+    // direita). O eixo x=22 fica livre pra descida, e a subida sai a
+    // 0.9wu horizontal + 3.8wu vertical do gate topo — pulo simples.
     platforms: [
-      ...stairs(-26, 36.0, 6, 5.0, -4.4, 2.0),
-      ...stairs(24, 12.0, 5, -5.0, -1.9, 2.0),
-      p(0, 4.6, 3.6),
-      // Rota de retorno pelo topo direito.
-      //
-      // Bug fix de 07/2026: void_stair era estruturalmente unwinnable.
-      // O top gate está em (22, 44) — detector dispara em y >= 40.8. A
-      // plataforma mais alta do lado direito era (24, 12), e a mais alta
-      // da sala inteira era (-26, 36) do lado ESQUERDO. Com pulo máximo
-      // ~5.6wu, era geometricamente impossível chegar em (22, 40.8) a
-      // partir de qualquer plataforma existente: 48wu horizontais até a
-      // parede oposta, sem plataformas intermediárias no lado direito.
-      //
-      // Entrando por cima vindo de ember_forge, a única saída era morrer
-      // ou fazer o Voidmaw. Sair pra desistir da branch era impossível.
-      //
-      // Zig-zag entre x=25 e x=31 subindo, terminando bem abaixo do gate.
-      // dy=4.6 mantém folga confortável em relação ao pulo máximo.
-      p(30, 4.8, 2.0),
-      p(28, 9.4, 1.9),
-      p(31, 14.0, 1.9),
-      p(27, 18.6, 1.9),
-      p(30, 23.2, 1.9),
-      p(26, 27.8, 1.9),
-      p(29, 32.4, 1.9),
-      p(25, 37.0, 1.9),
-      p(22, 40.6, 2.2),
+      p(27, 5.0, 3.0),
+      p(27, 10.0, 3.0),
+      p(27, 15.0, 3.0),
     ],
     solids: [],
     floorGaps: [gap(-14, 3.0)],
-    hazards: [spike(12, 0.3, 3.2)],
+    hazards: [],
     gates: [
       { id: "n", side: "top", at: 22, size: 5.8, to: "ember_forge", toGate: "s" },
       { id: "s", side: "bottom", at: -14, size: 5.6, to: "void_vault", toGate: "n" },
     ],
     spawns: [
-      at("wisp", -20, 30),
-      at("bat", -6, 24),
-      at("golem", 18),
+      at("wisp", -20, 8),
+      at("golem", 0),
     ],
-    bench: { x: 26 },
+    bench: { x: -26 },
     map: { col: 5, row: 3 },
   },
 
@@ -901,18 +889,26 @@ export const ROOMS: Record<string, Room> = {
     biome: "cistern",
     minX: -32,
     maxX: 32,
-    ceilingY: 46,
+    // Sala encurtada (era 46wu) e a escalada refeita como 3 plataformas
+    // empilhadas. O nome "Long Fall" descrevia a queda de cima pra baixo;
+    // agora a queda ainda é uma queda, só que curta e não punitiva.
+    ceilingY: 22,
+    // TRÊS PLATAFORMAS. O gate de cima (`n`) e o buraco do chão (`s`)
+    // dividem o mesmo eixo x=0 — quem entra vindo de crossroads cai
+    // direto pelo buraco e chega em cistern_choir sem tocar solo. Se
+    // eu empilhasse as plataformas em x=0 elas bloqueariam essa queda
+    // (plataformas são one-way, mas você AINDA pousa em cima delas).
+    // Então empilho em x=8, halfW=3.6 — a coluna vai de x=4.4 até 11.6,
+    // sem sobrepor o buraco (x=-3.4..3.4), e o topo fica a 1.2wu do
+    // gate `n` na horizontal + 3.8wu na vertical, um pulo trivial.
     platforms: [
-      ...ledges(-24, 24, 5, 38.0, 41.0, 2.0),
-      ...ledges(-22, 22, 5, 29.0, 32.0, 2.0),
-      ...ledges(-22, 22, 5, 20.0, 23.0, 2.0),
-      ...ledges(-20, 20, 5, 11.0, 14.0, 2.0),
-      p(-24, 4.6, 3.0),
-      p(24, 4.6, 3.0),
+      p(8, 5.0, 3.6),
+      p(8, 10.0, 3.6),
+      p(8, 15.0, 3.6),
     ],
     solids: [],
     floorGaps: [gap(0, 3.4)],
-    hazards: [spike(-12, 0.3, 2.6), spike(12, 0.3, 2.6)],
+    hazards: [],
     gates: [
       {
         id: "n",
@@ -925,9 +921,8 @@ export const ROOMS: Record<string, Room> = {
       { id: "s", side: "bottom", at: 0, size: 6.2, to: "cistern_choir", toGate: "n" },
     ],
     spawns: [
-      at("bat", -14, 40),
-      at("wisp", 6, 15),
-      at("slime", -20),
+      at("bat", -18, 8),
+      at("wisp", -12, 12),
     ],
     map: { col: 3, row: 3 },
   },

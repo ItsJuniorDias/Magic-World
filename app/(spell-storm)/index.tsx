@@ -1510,7 +1510,11 @@ export default function SpellStormScreen() {
             contentContainerStyle={styles.mapScroll}
             showsVerticalScrollIndicator={false}
           >
-            <WorldMap hud={hud} target={objective?.targetRoomId ?? null} />
+            <WorldMap
+              hud={hud}
+              target={objective?.targetRoomId ?? null}
+              path={objective?.path ?? null}
+            />
           </ScrollView>
 
           {/*
@@ -1555,6 +1559,12 @@ export default function SpellStormScreen() {
               <View style={styles.legendTargetCircle} />
               <Text variant="label" size="xs" color="rgba(255,255,255,0.62)">
                 Next
+              </Text>
+            </View>
+            <View style={styles.mapLegendItem}>
+              <View style={styles.legendPathLine} />
+              <Text variant="label" size="xs" color="rgba(255,255,255,0.62)">
+                Path
               </Text>
             </View>
           </View>
@@ -1623,6 +1633,14 @@ interface Objective {
   targetBossName: string;
   /** What kind of target this is, so the arrow can be styled differently. */
   kind: "boss" | "bench" | "start";
+  /**
+   * Caminho completo (inclusive a sala atual e a sala alvo) reconstruído a
+   * partir do BFS. O mapa usa isso pra destacar toda a trilha que leva até
+   * a quest — não só o alvo. Vira a diferença entre "aqui é o objetivo"
+   * (que já mostrávamos) e "por aqui você chega até o objetivo" (que é
+   * o que o jogador realmente precisa saber no meio de um mapa grande).
+   */
+  path: string[];
 }
 
 /**
@@ -1659,60 +1677,49 @@ function findObjective(
     return null;
   }
 
-  // Two parallel BFS results:
-  //  bossHit — the closest uncleared boss room (primary target).
-  //  benchHit — the closest OTHER bench room (fallback target,
-  //             used only when there's no uncleared boss).
+  // BFS clássico com predecessores.
   //
-  // Running both in one traversal is cheaper than two separate
-  // walks over the same graph.
-  let bossHit: Objective | null = null;
-  let benchHit: Objective | null = null;
-
-  const queue: { room: string; firstSide: GateSide | null }[] = [
-    { room: currentRoomId, firstSide: null },
-  ];
+  // Antes rastreávamos só `firstSide` (a direção do primeiro portão) e
+  // parávamos no primeiro boss encontrado. Agora precisamos do CAMINHO
+  // inteiro pra desenhar a trilha no mapa — então guardamos, pra cada
+  // sala visitada, quem foi o "pai" (a sala anterior) e o portão pelo
+  // qual chegamos. No fim, reconstruímos o caminho subindo dos "pais"
+  // até a sala atual.
+  //
+  // Custo é o mesmo do BFS antigo (linear no número de salas), só que
+  // agora com um Map<string,string> em vez de guardar `firstSide`.
+  const parent = new Map<string, string>();
+  const firstGateSide = new Map<string, GateSide>();
+  const queue: string[] = [currentRoomId];
   const visited = new Set<string>([currentRoomId]);
 
+  let bossTargetId: string | null = null;
+  let benchTargetId: string | null = null;
+
   while (queue.length) {
-    const node = queue.shift()!;
-    const room = ROOMS[node.room];
+    const roomId = queue.shift()!;
+    const room = ROOMS[roomId];
     if (!room) continue;
 
-    // Boss target — first hit wins because BFS is shortest-path first.
+    // Boss target — primeira sala com boss ativo é o alvo primário. Como
+    // BFS visita em ordem de distância, esse é o boss mais próximo.
     if (
-      !bossHit &&
-      node.room !== currentRoomId &&
+      !bossTargetId &&
+      roomId !== currentRoomId &&
       room.boss &&
-      !defeatedRooms.includes(node.room) &&
-      node.firstSide
+      !defeatedRooms.includes(roomId)
     ) {
-      bossHit = {
-        side: node.firstSide,
-        targetRoomId: node.room,
-        targetBossName: room.bossName ?? room.name,
-        kind: "boss",
-      };
-      // Early exit — boss is always the primary target, no need to
-      // keep searching once we've found one.
-      break;
+      bossTargetId = roomId;
+      break; // sai imediato: boss vence sobre bench, não precisa continuar
     }
 
-    // Bench fallback — closest bench that isn't the room the player
-    // is standing in. Keeps looking after the first hit only until
-    // we've either exhausted the queue or found a boss.
+    // Bench fallback — mais próximo bench diferente da sala atual.
     if (
-      !benchHit &&
-      node.room !== currentRoomId &&
-      room.bench &&
-      node.firstSide
+      !benchTargetId &&
+      roomId !== currentRoomId &&
+      room.bench
     ) {
-      benchHit = {
-        side: node.firstSide,
-        targetRoomId: node.room,
-        targetBossName: room.name,
-        kind: "bench",
-      };
+      benchTargetId = roomId;
     }
 
     for (const gate of room.gates) {
@@ -1722,22 +1729,45 @@ function findObjective(
         (gate.pro === true && !isPro);
       if (sealed) continue;
       visited.add(gate.to);
-      queue.push({
-        room: gate.to,
-        // The first gate we cross fixes the direction for the whole
-        // path. Downstream expansions inherit it.
-        firstSide: node.firstSide ?? gate.side,
-      });
+      parent.set(gate.to, roomId);
+      // Se estamos saindo da sala atual, esse é o "primeiro portão" — a
+      // direção que a bússola aponta. Se estamos mais fundo, herdamos do
+      // pai, garantindo que toda cadeia derivada da mesma primeira saída
+      // registre a mesma direção.
+      firstGateSide.set(
+        gate.to,
+        roomId === currentRoomId ? gate.side : firstGateSide.get(roomId)!,
+      );
+      queue.push(gate.to);
     }
   }
 
-  // Primary: a real boss to fight. Fallback: a bench to rest at
-  // (which is always a useful place to head toward). Only both
-  // null means the room graph is a single isolated cell, which
-  // should never happen with the current world layout — but the
-  // extra safety of returning null there means we degrade to the
-  // map glyph instead of throwing.
-  return bossHit ?? benchHit;
+  const targetId = bossTargetId ?? benchTargetId;
+  if (!targetId) return null;
+
+  const target = ROOMS[targetId];
+  const side = firstGateSide.get(targetId);
+  if (!side) return null;
+
+  // Reconstrói o caminho, subindo do alvo até a sala atual.
+  const reversed: string[] = [targetId];
+  let cursor: string | undefined = targetId;
+  while (cursor && cursor !== currentRoomId) {
+    const p = parent.get(cursor);
+    if (!p) break;
+    reversed.push(p);
+    cursor = p;
+  }
+  const path = reversed.reverse();
+
+  const kind: "boss" | "bench" = bossTargetId ? "boss" : "bench";
+  return {
+    side,
+    targetRoomId: targetId,
+    targetBossName: kind === "boss" ? (target.bossName ?? target.name) : target.name,
+    kind,
+    path,
+  };
 }
 
 /**
@@ -2048,13 +2078,37 @@ const GAP = 18;
 function WorldMap({
   hud,
   target,
+  path,
 }: {
   hud: HudSnapshot;
   /** Room id that the compass points to. Rendered with a gold outline. */
   target: string | null;
+  /**
+   * Caminho BFS completo (da sala atual até o alvo, inclusive as duas
+   * pontas). Usado pra iluminar a trilha da quest — as salas do caminho
+   * ficam com um tom dourado quente, e os conectores entre elas ficam
+   * dourados sólidos em vez do branco 18% padrão. Quando o jogador já
+   * viu como se chega, o cinza de rua vira estrada iluminada.
+   */
+  path: string[] | null;
 }) {
   const width = MAP_EXTENT.cols * CELL + (MAP_EXTENT.cols - 1) * GAP;
   const height = MAP_EXTENT.rows * CELL + (MAP_EXTENT.rows - 1) * GAP;
+
+  // Set de salas no caminho pra lookup O(1) por célula, e set de pares
+  // ordenados pra saber quais conectores fazem parte da trilha.
+  const pathRoomSet = useMemo(() => new Set(path ?? []), [path]);
+  const pathEdgeSet = useMemo(() => {
+    if (!path || path.length < 2) return new Set<string>();
+    const set = new Set<string>();
+    for (let i = 0; i < path.length - 1; i++) {
+      // Chave simétrica: [a,b] e [b,a] geram a mesma. Isso combina com
+      // como os conectores são chaveados abaixo (sort + join).
+      const key = [path[i], path[i + 1]].sort().join("|");
+      set.add(key);
+    }
+    return set;
+  }, [path]);
 
   // Pulse animation for the "you are here" marker and the target boss.
   // A single Animated.Value drives both interpolations — cheaper than two
@@ -2106,6 +2160,8 @@ function WorldMap({
       w: number;
       h: number;
       sealed: boolean;
+      /** True quando este conector é parte da trilha da quest atual. */
+      onPath: boolean;
     }[] = [];
     const seen = new Set<string>();
     const bossCount = hud.bossesDefeated;
@@ -2114,7 +2170,8 @@ function WorldMap({
       for (const gate of room.gates) {
         const other = ROOMS[gate.to];
         if (!other) continue;
-        const key = [id, gate.to].sort().join("|") + `|${gate.id}`;
+        const pairKey = [id, gate.to].sort().join("|");
+        const key = pairKey + `|${gate.id}`;
         if (seen.has(key)) continue;
         seen.add(key);
         if (!hud.discovered.includes(id) || !hud.discovered.includes(gate.to))
@@ -2123,6 +2180,11 @@ function WorldMap({
         const sealed =
           (gate.requires !== undefined && bossCount < gate.requires) ||
           (gate.pro === true);
+
+        // Um conector faz parte da trilha só se ele NÃO está selado (uma
+        // trilha selada não é uma trilha). Portas seladas continuam com
+        // o visual de tracejado; o dourado é reservado pra caminho real.
+        const onPath = !sealed && pathEdgeSet.has(pairKey);
 
         const ax = room.map.col * (CELL + GAP);
         const ay = room.map.row * (CELL + GAP);
@@ -2137,6 +2199,7 @@ function WorldMap({
             w: Math.abs(bx - ax) - CELL,
             h: 4,
             sealed,
+            onPath,
           });
         } else if (room.map.col === other.map.col) {
           out.push({
@@ -2146,6 +2209,7 @@ function WorldMap({
             w: 4,
             h: Math.abs(by - ay) - CELL,
             sealed,
+            onPath,
           });
         } else {
           // L-shape for diagonal room pairs. Two segments meeting at the
@@ -2165,6 +2229,7 @@ function WorldMap({
             w: 4,
             h: Math.abs(vEnd - vStart),
             sealed,
+            onPath,
           });
           const hStart = acx;
           const hEnd = bRight ? bx : bx + CELL;
@@ -2175,35 +2240,50 @@ function WorldMap({
             w: Math.abs(hEnd - hStart),
             h: 4,
             sealed,
+            onPath,
           });
         }
       }
     }
     return out;
-  }, [hud.discovered, hud.bossesDefeated]);
+  }, [hud.discovered, hud.bossesDefeated, pathEdgeSet]);
 
   return (
     <View style={{ width, height }}>
-      {connectors.map((c) => (
-        <View
-          key={c.key}
-          style={{
-            position: "absolute",
-            left: c.left,
-            top: c.top,
-            width: Math.max(4, c.w),
-            height: Math.max(4, c.h),
-            backgroundColor: c.sealed
-              ? "transparent"
-              : "rgba(255,255,255,0.18)",
-            borderRadius: 2,
-            borderStyle: c.sealed ? "dashed" : "solid",
-            borderColor: c.sealed ? "rgba(255,255,255,0.28)" : "transparent",
-            borderTopWidth: c.sealed && c.w >= c.h ? 2 : 0,
-            borderLeftWidth: c.sealed && c.h > c.w ? 2 : 0,
-          }}
-        />
-      ))}
+      {connectors.map((c) => {
+        // Três estados visuais:
+        //  - selado: tracejado branco 28% (só uma pista de que existe)
+        //  - onPath: dourado sólido opaco (a trilha da quest)
+        //  - normal: branco 18% (uma rua qualquer)
+        //
+        // Conectores da quest ficam um pouco mais grossos que os normais
+        // — 5px em vez de 4px — pra puxar o olho antes mesmo de o
+        // jogador registrar a cor.
+        const isPath = c.onPath;
+        const thickness = isPath ? 5 : 4;
+        return (
+          <View
+            key={c.key}
+            style={{
+              position: "absolute",
+              left: c.left - (isPath ? 0.5 : 0),
+              top: c.top - (isPath ? 0.5 : 0),
+              width: Math.max(thickness, c.w),
+              height: Math.max(thickness, c.h),
+              backgroundColor: c.sealed
+                ? "transparent"
+                : isPath
+                  ? hex(PALETTE.gold)
+                  : "rgba(255,255,255,0.18)",
+              borderRadius: 2,
+              borderStyle: c.sealed ? "dashed" : "solid",
+              borderColor: c.sealed ? "rgba(255,255,255,0.28)" : "transparent",
+              borderTopWidth: c.sealed && c.w >= c.h ? 2 : 0,
+              borderLeftWidth: c.sealed && c.h > c.w ? 2 : 0,
+            }}
+          />
+        );
+      })}
 
       {ROOM_IDS.map((id) => {
         const room = ROOMS[id];
@@ -2211,21 +2291,27 @@ function WorldMap({
         const here = hud.roomId === id;
         const cleared = hud.defeatedRooms.includes(id);
         const isTarget = target === id;
+        // Sala "no meio" do caminho: nem é a atual, nem é o alvo, mas o
+        // BFS passou por ela pra chegar no alvo. Vai receber uma borda
+        // dourada mais fraca, deixando a hierarquia visual clara:
+        //   você (branco 100%) > alvo (dourado 100%) > trilha (dourado 44%) > resto
+        const onPath = !!pathRoomSet.has(id) && !here && !isTarget;
         const tint = BIOMES[room.biome].mapTint;
 
-        // Border priority: current room wins over target wins over
-        // discovered wins over undiscovered. A cell that is both current
-        // AND target (edge case: you just teleported to the target)
-        // shows as current — you don't need the "next" hint when you're
-        // already there.
+        // Border priority: current room > target > on-path > discovered
+        // > undiscovered. A cell that is both current AND target (edge
+        // case: you just teleported to the target) shows as current —
+        // you don't need the "next" hint when you're already there.
         const borderColor = here
           ? "#FFFFFF"
           : isTarget
             ? hex(PALETTE.gold)
-            : found
-              ? `${tint}66`
-              : "rgba(255,255,255,0.08)";
-        const borderWidth = here || isTarget ? 2 : 1;
+            : onPath
+              ? `${hex(PALETTE.gold)}88`
+              : found
+                ? `${tint}66`
+                : "rgba(255,255,255,0.08)";
+        const borderWidth = here || isTarget ? 2 : onPath ? 2 : 1;
 
         const cellStyle = {
           position: "absolute" as const,
@@ -2238,7 +2324,16 @@ function WorldMap({
           alignItems: "center" as const,
           justifyContent: "center" as const,
           padding: 4,
-          backgroundColor: found ? `${tint}22` : "rgba(255,255,255,0.04)",
+          // Salas no caminho ficam com um véu dourado leve por cima do
+          // tint do bioma. `hex(PALETTE.gold)` + "18" (10% opacity) é o
+          // ponto onde a mudança é visível mas não sobrepõe totalmente a
+          // cor do bioma — dá pra ler "estrada dourada" e "esta é uma
+          // sala de spire" ao mesmo tempo.
+          backgroundColor: onPath
+            ? `${hex(PALETTE.gold)}18`
+            : found
+              ? `${tint}22`
+              : "rgba(255,255,255,0.04)",
           borderWidth,
           borderColor,
         };
@@ -3944,6 +4039,15 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 2,
     borderColor: hex(PALETTE.gold),
+  },
+  // Uma barra dourada mais grossa que a do bench — o bench é uma âncora
+  // pontual num room; o path é uma estrada contínua entre eles. Mais
+  // comprida (18px) e mais grossa (5px) que a barra do bench (14x3).
+  legendPathLine: {
+    width: 18,
+    height: 5,
+    borderRadius: 2,
+    backgroundColor: hex(PALETTE.gold),
   },
 
   // -------- Loader --------
