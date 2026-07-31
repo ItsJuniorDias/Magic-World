@@ -71,8 +71,8 @@ export const PLAYER = {
   knockbackX: 11,
   knockbackY: 9,
 
-  maxHearts: 3,
-  startHearts: 3,
+  maxHearts: 4,
+  startHearts: 4,
 
   /** Muzzle offset from the body centre, along the aim vector. */
   muzzleDistance: 0.95,
@@ -451,8 +451,9 @@ export const BOSS = {
   deathTime: 2.2,
   /** Reward for a kill, on top of the spec score. */
   heartsOnKill: 1,
-  /** Minions a boss may keep alive at once. Protects the frame budget. */
-  maxMinions: 6,
+  /** Minions a boss may keep alive at once. Protects the frame budget and
+   *  keeps boss fights readable — 6 minions plus a boss was fireworks. */
+  maxMinions: 4,
 } as const;
 
 /** Gorge Mother — the giant slime. Owns the floor. */

@@ -17,27 +17,36 @@ import type { BossKind, MinionKind } from "../config";
  *
  * THE SHAPE OF THE MAP
  *
- *                        [spire_climb]──[nightwing_perch ★2]
- *                              │
- *   [thorn_hollow ★5]      [spire_hall]
- *          │                   │
- *     [thornwood]          (up)│
- *          │                   │
- *     [thorn_gate]─────────────┤
- *          │                   │
- *  [gorge_lair ★1]        [CROSSROADS]───(high ledge, needs 6)───[storm_ascent]──[storm_throne ★7]
- *          │                   │
- *   [fungal_deep]              │(down)
- *          │                   │
- *  [fungal_hollow]────────[cistern_fall]
- *          │                   │
- *          └───(left)          │
- *                        [cistern_choir]──[lumen_sanctum ★4]
- *   [CROSSROADS]───(right)──[emberway]──[ember_forge]──[cinder_hall ★3]
- *                                            │(down)
- *                                       [void_stair]
+ * The grid was reworked so every gate connection is either horizontal or
+ * vertical between adjacent cells (the one exception is the sealed storm
+ * shortcut, which is drawn as a dashed diagonal to read as a hidden path).
+ * The doc used to describe a wildly different topology from what the code
+ * actually wired up — that's the "map doesn't make sense" bug.
+ *
+ * col:    0          1          2          3          4          5           6
+ *
+ * row 0                                    spire ─── nightwing
+ *                                          climb    perch ★2
  *                                            │
- *                                      [void_vault ★6]
+ *                                            │
+ * row 1  thorn ─── thorn ─── thorn        spire     storm ─── storm
+ *        hollow ★5 wood      gate         hall      ascent    throne ★7
+ *                              │            │         ⋱
+ *                              │            │          ⋱ (sealed, needs 6)
+ * row 2  gorge ── fungal ─── fungal ─── CROSSROADS ─── emberway ── ember ── cinder
+ *        ★1       deep       hollow                                forge    hall ★3
+ *                                          │                        │
+ *                                          │                        │
+ * row 3                                  cistern                  void
+ *                                        fall                     stair
+ *                                          │                        │
+ * row 4                                  cistern ── lumen         void
+ *                                        choir     sanctum ★4     vault ★6
+ *
+ * The vertical spine is col 3: spire ↑ crossroads ↓ cistern.
+ * The horizontal spine is row 2: fungal ← crossroads → ember.
+ * Thorn hangs off fungal (pro), void hangs off ember (pro), lumen hangs off
+ * cistern (pro), storm hangs off crossroads (sealed by six sigils).
  *
  * FREE VS MEMBER
  *
@@ -57,6 +66,9 @@ import type { BossKind, MinionKind } from "../config";
  *   - `floorGaps` punch holes in the floor. A bottom gate needs one.
  *   - Gate `at` is the CENTRE of the opening: y for left/right, x for
  *     top/bottom.
+ *   - Spawn counts were cut ~45% in the v3.2 pass. Empty rooms feel dead
+ *     and packed rooms punish exploration; three-to-four enemies per
+ *     transit room is the sweet spot for the current player kit.
  */
 
 // ---------------------------------------------------------------------------
@@ -450,7 +462,7 @@ export const ROOMS: Record<string, Room> = {
         sealLabel: "Sealed by six sigils",
       },
     ],
-    spawns: [at("slime", -18), at("slime", 18), at("bat", 6, 9)],
+    spawns: [at("slime", -18), at("bat", 6, 9)],
     bench: { x: 0 },
     map: { col: 3, row: 2 },
   },
@@ -492,12 +504,9 @@ export const ROOMS: Record<string, Room> = {
       },
     ],
     spawns: [
-      at("slime", -36),
-      at("slime", -24),
-      at("bat", -12, 9.5),
-      at("slime", 12),
-      at("wisp", 26, 7.5),
-      at("bat", 38, 10),
+      at("slime", -30),
+      at("bat", -8, 9),
+      at("wisp", 30, 8),
     ],
     map: { col: 2, row: 2 },
   },
@@ -524,14 +533,10 @@ export const ROOMS: Record<string, Room> = {
       { id: "w", side: "left", at: 2.2, size: 5.6, to: "gorge_lair", toGate: "e" },
     ],
     spawns: [
-      at("slime", -44),
-      at("wisp", -34, 8),
-      at("slime", -20),
-      at("bat", -4, 11),
-      at("golem", 12),
-      at("slime", 26),
-      at("bat", 40, 10),
-      at("wisp", 50, 9),
+      at("slime", -40),
+      at("wisp", -14, 8),
+      at("golem", 14),
+      at("bat", 42, 10),
     ],
     bench: { x: 52 },
     map: { col: 1, row: 2 },
@@ -582,7 +587,7 @@ export const ROOMS: Record<string, Room> = {
       { id: "s", side: "bottom", at: -8, size: 5.8, to: "fungal_hollow", toGate: "n" },
       { id: "w", side: "left", at: 2.2, size: 5.0, to: "thornwood", toGate: "e" },
     ],
-    spawns: [at("wisp", -28, 8), at("slime", -14), at("golem", 4), at("bat", 20, 10), at("slime", 34)],
+    spawns: [at("wisp", -28, 8), at("golem", 4), at("slime", 34)],
     map: { col: 2, row: 1 },
   },
 
@@ -609,12 +614,9 @@ export const ROOMS: Record<string, Room> = {
     ],
     spawns: [
       at("golem", -46),
-      at("wisp", -36, 9),
       at("bat", -22, 12),
-      at("slime", -10),
-      at("golem", 8),
       at("wisp", 24, 9),
-      at("bat", 44, 11),
+      at("golem", 44),
     ],
     bench: { x: 56 },
     map: { col: 1, row: 1 },
@@ -665,7 +667,7 @@ export const ROOMS: Record<string, Room> = {
       { id: "s", side: "bottom", at: 6, size: 6.2, to: "crossroads", toGate: "n" },
       { id: "n", side: "top", at: 0, size: 7.0, to: "spire_climb", toGate: "s" },
     ],
-    spawns: [at("bat", -24, 11), at("bat", 8, 14), at("wisp", -4, 10), at("slime", 30)],
+    spawns: [at("bat", -24, 11), at("wisp", -4, 10)],
     map: { col: 3, row: 1 },
   },
 
@@ -696,15 +698,12 @@ export const ROOMS: Record<string, Room> = {
     ],
     spawns: [
       at("bat", -14, 8),
-      at("bat", 12, 18),
       at("wisp", -8, 24),
       at("bat", 6, 32),
-      at("wisp", -6, 40),
-      at("bat", 10, 48),
-      at("bat", -10, 52),
+      at("bat", -10, 48),
     ],
     bench: { x: -24 },
-    map: { col: 4, row: 0 },
+    map: { col: 3, row: 0 },
   },
 
   nightwing_perch: {
@@ -723,7 +722,7 @@ export const ROOMS: Record<string, Room> = {
     boss: "nightwing",
     bossName: "Nightwing",
     bossTitle: "Matriarch of the Roost",
-    map: { col: 5, row: 0 },
+    map: { col: 4, row: 0 },
   },
 
   // =========================================================================
@@ -753,12 +752,9 @@ export const ROOMS: Record<string, Room> = {
       { id: "e", side: "right", at: 2.2, size: 5.0, to: "ember_forge", toGate: "w" },
     ],
     spawns: [
-      at("slime", -44),
-      at("bat", -30, 11),
-      at("golem", -14),
-      at("wisp", 4, 9),
-      at("slime", 20),
-      at("bat", 34, 12),
+      at("slime", -40),
+      at("bat", -14, 11),
+      at("wisp", 24, 9),
     ],
     map: { col: 4, row: 2 },
   },
@@ -796,12 +792,9 @@ export const ROOMS: Record<string, Room> = {
     ],
     spawns: [
       at("golem", -40),
-      at("wisp", -30, 9),
-      at("slime", -18),
-      at("bat", -4, 12),
+      at("wisp", -14, 9),
       at("golem", 14),
-      at("wisp", 32, 10),
-      at("slime", 46),
+      at("bat", 44, 12),
     ],
     bench: { x: 50 },
     map: { col: 5, row: 2 },
@@ -851,9 +844,7 @@ export const ROOMS: Record<string, Room> = {
     spawns: [
       at("wisp", -20, 30),
       at("bat", -6, 24),
-      at("wisp", 10, 16),
       at("golem", 18),
-      at("bat", -12, 8),
     ],
     bench: { x: 26 },
     map: { col: 5, row: 3 },
@@ -915,11 +906,8 @@ export const ROOMS: Record<string, Room> = {
     ],
     spawns: [
       at("bat", -14, 40),
-      at("wisp", 10, 32),
-      at("bat", -8, 24),
       at("wisp", 6, 15),
       at("slime", -20),
-      at("slime", 18),
     ],
     map: { col: 3, row: 3 },
   },
@@ -956,10 +944,7 @@ export const ROOMS: Record<string, Room> = {
     ],
     spawns: [
       at("wisp", -40, 9),
-      at("bat", -28, 12),
-      at("slime", -14),
       at("golem", 6),
-      at("wisp", 22, 10),
       at("bat", 40, 13),
     ],
     bench: { x: 48 },
@@ -1009,13 +994,11 @@ export const ROOMS: Record<string, Room> = {
     ],
     spawns: [
       at("golem", -26),
-      at("wisp", -14, 10),
       at("bat", 0, 16),
-      at("golem", 14),
       at("wisp", 28, 11),
     ],
     bench: { x: -36 },
-    map: { col: 4, row: 3 },
+    map: { col: 4, row: 1 },
   },
 
   storm_throne: {
@@ -1034,7 +1017,7 @@ export const ROOMS: Record<string, Room> = {
     boss: "dragon",
     bossName: "The Storm Dragon",
     bossTitle: "First and Last of the Sky",
-    map: { col: 6, row: 3 },
+    map: { col: 5, row: 1 },
   },
 };
 

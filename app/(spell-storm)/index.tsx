@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BlurView } from "expo-blur";
+import { setAudioModeAsync } from "expo-audio";
 import { GLView } from "expo-gl";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
@@ -42,6 +43,10 @@ import {
   type SoundId,
   type SpellStorm,
 } from "@/game/spell-storm";
+import {
+  createMusicController,
+  type MusicController,
+} from "@/game/spell-storm/audio/procedural";
 import { applyStick } from "@/game/spell-storm/engine/input";
 import {
   useGLGame,
@@ -488,6 +493,71 @@ export default function SpellStormScreen() {
     }, 100);
     return () => clearInterval(id);
   }, []);
+
+  // ---- Music -------------------------------------------------------------
+  //
+  // The whole soundtrack is generated at runtime — no mp3s in the bundle.
+  // See game/spell-storm/audio/procedural.ts for the DSP; from here we
+  // only care about the controller's small imperative surface:
+  //
+  //   setBiome(id)     switch to a biome's loop (cached after first visit)
+  //   setPaused(bool)  freeze / resume the current loop
+  //   dispose()        release native players on unmount
+  //
+  // We tie setBiome to `hud.roomId` (which biome the room lives in) and
+  // setPaused to the combined "should the game be running" predicate:
+  // paused when the map overlay is open, when the phone is in portrait,
+  // or when we're between phases (loading / dead). Same predicate the
+  // sim uses, so audio and gameplay pause together.
+  const musicRef = useRef<MusicController | null>(null);
+  useEffect(() => {
+    // playsInSilentMode is the #1 reason background music is silent on a
+    // real iPhone with the ringer switch off — without this the whole
+    // procedural score plays into the void. mixWithOthers so we don't
+    // duck whatever the player is listening to before opening the game;
+    // Spell Storm's music is a mood layer, not a message.
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      interruptionMode: "mixWithOthers",
+      shouldPlayInBackground: false,
+      allowsRecording: false,
+      shouldRouteThroughEarpiece: false,
+    }).catch((e) =>
+      // eslint-disable-next-line no-console
+      console.warn("[spell-storm] setAudioModeAsync failed", e),
+    );
+
+    const controller = createMusicController();
+    musicRef.current = controller;
+    return () => {
+      controller.dispose();
+      musicRef.current = null;
+    };
+  }, []);
+
+  // Biome sync: whenever the room changes, poke the controller at the
+  // biome id. The controller de-dupes so this is a no-op if we're already
+  // on the right biome (which happens when the room changes within a
+  // biome — Fungal Hollow → Fungal Deep stays on the same loop).
+  useEffect(() => {
+    const controller = musicRef.current;
+    if (!controller) return;
+    const room = ROOMS[hud.roomId];
+    if (!room) return;
+    void controller.setBiome(room.biome);
+  }, [hud.roomId]);
+
+  // Paused sync. This deliberately excludes `!ready` from the pause
+  // predicate — we WANT the music to start as soon as the biome loads,
+  // even if the loader is still up. It gives the loader a soundtrack.
+  const musicPaused =
+    mapOpen ||
+    !inLandscape ||
+    hud.phase === "loading" ||
+    hud.phase === "dead";
+  useEffect(() => {
+    musicRef.current?.setPaused(musicPaused);
+  }, [musicPaused]);
 
   // ---- Touch controls ----------------------------------------------------
   const [stickOrigin, setStickOrigin] = useState<{
@@ -1048,24 +1118,41 @@ function WorldMap({ hud }: { hud: HudSnapshot }) {
   const height = MAP_EXTENT.rows * CELL + (MAP_EXTENT.rows - 1) * GAP;
 
   const connectors = useMemo(() => {
+    // A connector is a straight rectangle. For horizontal or vertical gate
+    // pairs, one segment does the job. For the one diagonal pair we still
+    // have — crossroads → storm_ascent — we emit an L-shape: a vertical
+    // stub up from the origin's column, meeting a horizontal run across the
+    // destination's row.
+    //
+    // `sealed` is set when the gate is either pro-locked or boss-locked and
+    // the player hasn't unlocked it yet. Sealed connectors render dashed so
+    // the map reads "there is more this way, you can't get through yet"
+    // rather than "there is a door here". Once the seal is broken the
+    // connector snaps back to solid on the next map open.
     const out: {
       key: string;
       left: number;
       top: number;
       w: number;
       h: number;
+      sealed: boolean;
     }[] = [];
     const seen = new Set<string>();
+    const bossCount = hud.bossesDefeated;
     for (const id of ROOM_IDS) {
       const room = ROOMS[id];
       for (const gate of room.gates) {
         const other = ROOMS[gate.to];
         if (!other) continue;
-        const key = [id, gate.to].sort().join("|");
+        const key = [id, gate.to].sort().join("|") + `|${gate.id}`;
         if (seen.has(key)) continue;
         seen.add(key);
         if (!hud.discovered.includes(id) || !hud.discovered.includes(gate.to))
           continue;
+
+        const sealed =
+          (gate.requires !== undefined && bossCount < gate.requires) ||
+          (gate.pro === true);
 
         const ax = room.map.col * (CELL + GAP);
         const ay = room.map.row * (CELL + GAP);
@@ -1079,6 +1166,7 @@ function WorldMap({ hud }: { hud: HudSnapshot }) {
             top: ay + CELL / 2 - 2,
             w: Math.abs(bx - ax) - CELL,
             h: 4,
+            sealed,
           });
         } else if (room.map.col === other.map.col) {
           out.push({
@@ -1087,12 +1175,53 @@ function WorldMap({ hud }: { hud: HudSnapshot }) {
             top: Math.min(ay, by) + CELL,
             w: 4,
             h: Math.abs(by - ay) - CELL,
+            sealed,
+          });
+        } else {
+          // L-shape for diagonal room pairs. Two segments meeting at the
+          // origin column / destination row corner:
+          //
+          //   1. VERTICAL stub from the origin cell (top or bottom edge,
+          //      depending on which way B lies) up/down to the row of B,
+          //      staying in A's column.
+          //   2. HORIZONTAL run at B's row, from A's column across to B's
+          //      cell edge.
+          //
+          // The corner sits at (ax + CELL/2, by + CELL/2) — B's row line,
+          // A's column line. This puts the elbow on the map grid rather
+          // than free-floating, which reads as an intentional path.
+          const acx = ax + CELL / 2;
+          const bcy = by + CELL / 2;
+          const bDown = by > ay;
+          const bRight = bx > ax;
+
+          // Vertical stub.
+          const vStart = bDown ? ay + CELL : ay;
+          const vEnd = bcy;
+          out.push({
+            key: `${key}-v`,
+            left: acx - 2,
+            top: Math.min(vStart, vEnd),
+            w: 4,
+            h: Math.abs(vEnd - vStart),
+            sealed,
+          });
+          // Horizontal run.
+          const hStart = acx;
+          const hEnd = bRight ? bx : bx + CELL;
+          out.push({
+            key: `${key}-h`,
+            left: Math.min(hStart, hEnd),
+            top: bcy - 2,
+            w: Math.abs(hEnd - hStart),
+            h: 4,
+            sealed,
           });
         }
       }
     }
     return out;
-  }, [hud.discovered]);
+  }, [hud.discovered, hud.bossesDefeated]);
 
   return (
     <View style={{ width, height }}>
@@ -1105,8 +1234,19 @@ function WorldMap({ hud }: { hud: HudSnapshot }) {
             top: c.top,
             width: Math.max(4, c.w),
             height: Math.max(4, c.h),
-            backgroundColor: "rgba(255,255,255,0.18)",
+            backgroundColor: c.sealed
+              ? "transparent"
+              : "rgba(255,255,255,0.18)",
             borderRadius: 2,
+            // A sealed connector wants a dashed outline rather than a solid
+            // fill. In RN, `borderStyle: 'dashed'` only draws when there's
+            // a border on the axis of drawing, so we set a border on the
+            // longer axis (a wall on a horizontal segment reads as dashes;
+            // same for vertical).
+            borderStyle: c.sealed ? "dashed" : "solid",
+            borderColor: c.sealed ? "rgba(255,255,255,0.28)" : "transparent",
+            borderTopWidth: c.sealed && c.w >= c.h ? 2 : 0,
+            borderLeftWidth: c.sealed && c.h > c.w ? 2 : 0,
           }}
         />
       ))}
