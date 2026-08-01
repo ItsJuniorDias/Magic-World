@@ -45,10 +45,10 @@ const FEATURED_REVIEW: { quote: string; author: string } | null = null;
 
 // Value props: chaves i18n em vez de labels hardcoded. O texto vem
 // de `paywall.valueProps.<key>` na hora do render.
-const VALUE_PROPS: Array<{
+const VALUE_PROPS: {
   icon: string;
   key: "screenFree" | "newAudiobooks" | "forLittleListeners" | "adFree";
-}> = [
+}[] = [
   { icon: "🌙", key: "screenFree" },
   { icon: "📚", key: "newAudiobooks" },
   { icon: "👶", key: "forLittleListeners" },
@@ -412,9 +412,7 @@ export default function SubscribeScreen() {
         </View>
 
         {/* Trial timeline (only if RC package actually has a free trial) */}
-        {trialDays ? (
-          <TrialTimeline trialDays={trialDays} tokens={t} />
-        ) : null}
+        {trialDays ? <TrialTimeline trialDays={trialDays} tokens={t} /> : null}
 
         {/* Plans */}
         {loading ? (
@@ -521,9 +519,7 @@ export default function SubscribeScreen() {
                 color={t.color.textSecondary}
                 style={{ textDecorationLine: "underline" }}
               >
-                {restoring
-                  ? tr("paywall.restoring")
-                  : tr("paywall.restore")}
+                {restoring ? tr("paywall.restoring") : tr("paywall.restore")}
               </Text>
             </TouchableOpacity>
             <Dot tokens={t} />
@@ -639,9 +635,7 @@ function PlanCard({
                 : tr("paywall.billedYearly")}
           </Text>
         </View>
-        <View
-          style={{ alignItems: "flex-end", marginLeft: tokens.spacing.sm }}
-        >
+        <View style={{ alignItems: "flex-end", marginLeft: tokens.spacing.sm }}>
           <Text
             variant="heading"
             size="xxl"
@@ -701,8 +695,7 @@ function TrialTimeline({
           key={s.day}
           style={{
             flexDirection: "row",
-            marginBottom:
-              i === steps.length - 1 ? 0 : tokens.spacing.md,
+            marginBottom: i === steps.length - 1 ? 0 : tokens.spacing.md,
           }}
         >
           <View

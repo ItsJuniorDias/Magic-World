@@ -25,7 +25,7 @@ import Purchases, { type CustomerInfo } from "react-native-purchases";
  * and overwrite. The listener keeps it correct for the rest of the session.
  */
 
-const ENTITLEMENT_ID = "pro";
+const ENTITLEMENT_ID = "Magic World Pro";
 const CACHE_KEY = "@user_is_pro";
 
 /** Public SDK key, safe to ship — same value already in `app/(app)/index.tsx`. */
@@ -86,6 +86,9 @@ export function useProStatus(): ProStatus {
     try {
       await ensurePurchasesConfigured();
       const info = await Purchases.getCustomerInfo();
+
+      console.log(info, "info from getCustomerInfo");
+
       const active = readEntitlement(info);
       await cacheProStatus(active);
       if (mounted.current) {
