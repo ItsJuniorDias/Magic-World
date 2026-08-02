@@ -20,6 +20,14 @@ import { FontAwesome6 } from "@expo/vector-icons";
 
 import { franc } from "franc-min";
 
+import {
+  getFontFamilyForText,
+  getWritingDirection,
+  isRTLText,
+  resolveSpeechLanguage,
+  splitIntoSentences,
+} from "@/helpers/textDirection";
+
 import { Container, ContainerStorie } from "./styles";
 import { useLocalSearchParams } from "expo-router/build/hooks";
 import { NextChapterButton } from "@/components/(next-chapter-button)";
@@ -326,12 +334,46 @@ export default function StorieScreen() {
   );
 
   /* =========================
-     SENTENCES
+     SENTENCES + DIRECTION
   ========================== */
-  const sentences = useMemo(() => {
-    if (!translatedText.storie) return [];
-    return translatedText.storie.split(/(?<=[.!?])\s+/).filter(Boolean);
-  }, [translatedText.storie]);
+  // Split multi-idioma: respeita `.!?` (latino), `؟؛` (árabe),
+  // `।॥` (hindi) e `。！？` (CJK). Ver `helpers/textDirection`.
+  const sentences = useMemo(
+    () => splitIntoSentences(translatedText.storie as string | undefined),
+    [translatedText.storie],
+  );
+
+  // Direção do texto derivada do conteúdo, não do locale da UI.
+  // Isso importa porque o app UI pode estar em inglês enquanto o
+  // usuário traduziu a história pro árabe — o corpo da história
+  // precisa ser RTL mesmo assim.
+  const storyDirection = useMemo(
+    () => getWritingDirection(translatedText.storie as string | undefined),
+    [translatedText.storie],
+  );
+  const isRTLStory = storyDirection === "rtl";
+
+  // Fonte: `ComicRelief` não tem glifos árabes/CJK/devanagari.
+  // Passamos `undefined` pra cair no system font quando o
+  // conteúdo é não-latino. iOS/Android já têm cobertura Unicode
+  // ampla no system font.
+  const storyFontFamily = useMemo(
+    () =>
+      getFontFamilyForText(
+        translatedText.storie as string | undefined,
+        "ComicReliefRegular",
+      ),
+    [translatedText.storie],
+  );
+
+  const titleFontFamily = useMemo(
+    () =>
+      getFontFamilyForText(
+        translatedText.title as string | undefined,
+        "ComicReliefBold",
+      ),
+    [translatedText.title],
+  );
 
   // Recupera progresso ao montar ou iniciar autoplay
   useEffect(() => {
@@ -430,15 +472,21 @@ export default function StorieScreen() {
   /* =========================
      CONTEXT MENU
   ========================== */
+  // Labels ficam em inglês por convenção — o menu é "traduzir a
+  // história PARA outro idioma", então o usuário lê o alvo em EN
+  // independente do idioma da UI (padrão Netflix, Duolingo, etc).
+  // Arabic incluído aqui pra destravar o mercado MENA (Iraque,
+  // Egito, Arábia Saudita, Marrocos, UAE, etc).
   const languageLabels = [
     "English",
+    "Arabic",
     "Spanish",
     "Portuguese",
     "French",
     "Chinese",
     "Hindi",
   ];
-  const languageCodes = ["en", "es", "pt", "fr", "zh", "hi"];
+  const languageCodes = ["en", "ar", "es", "pt", "fr", "zh", "hi"];
 
   const renderContextMenuTrigger = () => {
     return (
@@ -479,16 +527,11 @@ export default function StorieScreen() {
     await TrackPlayer.setRepeatMode(RepeatMode.Track);
     await TrackPlayer.play();
 
+    // `franc` devolve ISO 639-3 (eng, spa, arb, hin…). O helper
+    // cobre todos os 7 idiomas do i18n + fallback pra en-US quando
+    // a detecção falha (texto muito curto, misto de idiomas, etc).
     const langCode = franc(translatedText.storie as string);
-    const language =
-      {
-        eng: "en-US",
-        spa: "es-ES",
-        por: "pt-BR",
-        fra: "fr-FR",
-        cmn: "zh-CN",
-        hin: "hi-IN",
-      }[langCode] ?? "en-US";
+    const language = resolveSpeechLanguage(langCode);
 
     // Determina o índice inicial: se resume é true, usa o último salvo/ref
     let index = resume ? lastSentenceIndexRef.current : 0;
@@ -779,6 +822,11 @@ Return ONLY a JSON array with this exact shape (all keys quoted):
               color={Colors.dark.text}
               title={translatedText.title}
               numberOfLines={2}
+              style={{
+                writingDirection: isRTLStory ? "rtl" : "ltr",
+                textAlign: isRTLStory ? "right" : "left",
+                fontFamily: titleFontFamily,
+              }}
             />
           )}
         </Animated.View>
@@ -828,6 +876,23 @@ Return ONLY a JSON array with this exact shape (all keys quoted):
                 {sentences.map((sentence, index) => {
                   const isActive = index === activeSentenceIndex;
 
+                  // Direção pode variar por sentença — a IA de
+                  // tradução geralmente devolve tudo num idioma só,
+                  // mas o helper cobre o caso de mistura (ex: nome
+                  // próprio em latino no meio de texto árabe).
+                  const rtl = isRTLText(sentence);
+
+                  const textStyle = {
+                    writingDirection: rtl ? ("rtl" as const) : ("ltr" as const),
+                    textAlign: rtl ? ("right" as const) : ("left" as const),
+                    // System font quando o script não é latino
+                    // (`getFontFamilyForText` devolve undefined).
+                    fontFamily: getFontFamilyForText(
+                      sentence,
+                      "ComicReliefRegular",
+                    ),
+                  };
+
                   return (
                     <View
                       key={index}
@@ -852,6 +917,7 @@ Return ONLY a JSON array with this exact shape (all keys quoted):
                             fontSize={16}
                             color={Colors.dark.text}
                             title={sentence}
+                            style={textStyle}
                           />
                         </LinearGradient>
                       ) : (
@@ -860,6 +926,7 @@ Return ONLY a JSON array with this exact shape (all keys quoted):
                           fontSize={16}
                           color={Colors.dark.text}
                           title={sentence}
+                          style={textStyle}
                         />
                       )}
                     </View>
