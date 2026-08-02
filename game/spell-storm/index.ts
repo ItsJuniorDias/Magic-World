@@ -194,6 +194,16 @@ export interface SpellStorm extends GameHandle {
    */
   restartGame(): void;
   /**
+   * Zeroes out the persisted save WITHOUT touching the sim. Useful from
+   * the "ready" overlay's Start Over link, where the player wants to
+   * clear their progress but stay on the start screen (so the primary
+   * button flips from "Continue" to "Begin" and stats disappear).
+   * Calling this after `start()` puts you in a weird spot — the player
+   * is mid-run in a room the wiped save doesn't remember — so use
+   * `restartGame()` in that case instead.
+   */
+  wipeProgress(): void;
+  /**
    * Leaves the VictoryOverlay behind and drops the player back into the
    * (now pacified) world. Every boss room is peaceful, every gate is
    * open — it's a free-roam epilogue for players who want to walk the
@@ -1481,9 +1491,9 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     },
 
     restartGame() {
-      // Zero out the persisted progress. Mutate in place so the closures
-      // above (which capture `progress` by reference) keep pointing at
-      // the same object rather than at an orphaned one.
+      // Zero the save first. `resetProgress` is inlined here rather than
+      // extracted because it's only used in two places and both live
+      // within the return object.
       const fresh = createDefaultProgress();
       progress.bosses = fresh.bosses;
       progress.discovered = fresh.discovered;
@@ -1516,6 +1526,25 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
       recoil = 0;
       benchTimer = 0;
       enterRoom(START_ROOM, null);
+      publishHud();
+    },
+
+    wipeProgress() {
+      // Save-only wipe. Leaves the sim in whatever phase it was in —
+      // typically "ready", because that's where the Start Over link
+      // lives. Mutating in place so the closures above keep pointing
+      // at the same object.
+      const fresh = createDefaultProgress();
+      progress.bosses = fresh.bosses;
+      progress.discovered = fresh.discovered;
+      progress.bench = fresh.bench;
+      progress.benchX = fresh.benchX;
+      progress.essence = fresh.essence;
+      progress.bonusMaxHearts = fresh.bonusMaxHearts;
+      progress.watchedCutscenes = fresh.watchedCutscenes;
+      progress.metNpcs = fresh.metNpcs;
+      progress.benchesRested = fresh.benchesRested;
+      options.onProgress?.(progress);
       publishHud();
     },
 

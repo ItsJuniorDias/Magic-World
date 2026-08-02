@@ -838,6 +838,20 @@ export default function SpellStormScreen() {
     setHud({ ...game.hud });
   }, []);
 
+  // Called by the "Start over" link on the ready overlay. Only wipes the
+  // save — the sim stays in "ready", so the player then taps "Begin" on
+  // a fresh slate. Distinct from handleRestart (which is the Victory
+  // Overlay's exit and drops the player straight into Crossroads).
+  const handleStartOver = useCallback(() => {
+    const game = gameRef.current;
+    if (!game) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(
+      () => {},
+    );
+    game.wipeProgress();
+    setHud({ ...game.hud });
+  }, []);
+
   // ---- Travel ------------------------------------------------------------
   //
   // Bench-to-bench teleport. Rejection is silent from the game's side —
@@ -1351,6 +1365,22 @@ export default function SpellStormScreen() {
           stats={
             (progressRef.current?.bosses.length ?? 0) > 0
               ? `${progressRef.current?.bosses.length}/7 sigils · ${progressRef.current?.discovered.length} rooms found`
+              : undefined
+          }
+          // Only surface the wipe option when there IS progress to wipe —
+          // otherwise it's a dangerous button that does nothing useful and
+          // clutters the fresh-save start screen. The threshold matches
+          // the "Continue" label above.
+          tertiaryLabel={
+            (progressRef.current?.bosses.length ?? 0) > 0 ||
+            (progressRef.current?.discovered.length ?? 0) > 1
+              ? "Start over"
+              : undefined
+          }
+          onTertiary={
+            (progressRef.current?.bosses.length ?? 0) > 0 ||
+            (progressRef.current?.discovered.length ?? 0) > 1
+              ? handleStartOver
               : undefined
           }
         />
@@ -3743,6 +3773,16 @@ interface OverlayProps {
   secondaryLabel: string;
   onSecondary: () => void;
   stats?: string;
+  /**
+   * Optional third action, styled as a subdued link below the secondary
+   * button. Reserved for destructive flows like "wipe save and start
+   * over", so it sits at the bottom of the visual weight ladder — the
+   * player has to scan past both the primary continue and the safe exit
+   * before they get to the button that erases their progress. Handles
+   * its own two-tap confirm so a stray touch never wipes the save.
+   */
+  tertiaryLabel?: string;
+  onTertiary?: () => void;
 }
 
 function Overlay({
@@ -3753,7 +3793,37 @@ function Overlay({
   secondaryLabel,
   onSecondary,
   stats,
+  tertiaryLabel,
+  onTertiary,
 }: OverlayProps) {
+  const [confirmingTertiary, setConfirmingTertiary] = useState(false);
+  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleTertiaryPress = useCallback(() => {
+    if (!onTertiary) return;
+    if (confirmingTertiary) {
+      if (confirmTimerRef.current) {
+        clearTimeout(confirmTimerRef.current);
+        confirmTimerRef.current = null;
+      }
+      setConfirmingTertiary(false);
+      onTertiary();
+      return;
+    }
+    setConfirmingTertiary(true);
+    if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    confirmTimerRef.current = setTimeout(() => {
+      setConfirmingTertiary(false);
+      confirmTimerRef.current = null;
+    }, 3000);
+  }, [confirmingTertiary, onTertiary]);
+
+  useEffect(() => {
+    return () => {
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    };
+  }, []);
+
   return (
     <View style={styles.overlay}>
       <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
@@ -3802,6 +3872,23 @@ function Overlay({
             {secondaryLabel}
           </Text>
         </Pressable>
+
+        {tertiaryLabel && onTertiary && (
+          <Pressable onPress={handleTertiaryPress} style={styles.tertiary}>
+            <Text
+              variant="label"
+              size="sm"
+              color={
+                confirmingTertiary
+                  ? hex(PALETTE.gold)
+                  : "rgba(255,255,255,0.42)"
+              }
+              style={styles.tertiaryLabel}
+            >
+              {confirmingTertiary ? "Tap to confirm" : tertiaryLabel}
+            </Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );
@@ -4102,6 +4189,14 @@ const styles = StyleSheet.create({
     backgroundColor: hex(PALETTE.gold),
   },
   secondary: { marginTop: 18, padding: 10 },
+  // Tertiary is a link, not a button — smaller, dimmer, further down. It
+  // upgrades to gold in the confirming state so the change is legible
+  // without reading the label.
+  tertiary: { marginTop: 6, padding: 8 },
+  tertiaryLabel: {
+    letterSpacing: 2,
+    textAlign: "center",
+  },
   // Victory panel
   victoryEyebrow: {
     textAlign: "center",
