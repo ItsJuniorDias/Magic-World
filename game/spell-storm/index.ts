@@ -41,6 +41,7 @@ import { type DialogueLine } from "./systems/dialogue";
 import {
   BOSS_CUTSCENES,
   BOSS_DEFEAT_LINES,
+  EPILOGUE_SCRIPT,
   NPC_SCRIPTS,
   pickNpcScript,
 } from "./world/dialogueScripts";
@@ -183,6 +184,22 @@ export interface SpellStorm extends GameHandle {
    * mid-shop). No side effects on failure.
    */
   travelToBench(roomId: string): boolean;
+  /**
+   * Wipes the save and starts a fresh run from the Crossroads. Called
+   * from the VictoryOverlay's "Jogar novamente" button; also callable
+   * from a settings menu if one is ever added. Destructive — the caller
+   * is responsible for confirmation UI. Persists the reset immediately
+   * through `onProgress`, so a hard app kill mid-restart doesn't leave
+   * a half-wiped save.
+   */
+  restartGame(): void;
+  /**
+   * Leaves the VictoryOverlay behind and drops the player back into the
+   * (now pacified) world. Every boss room is peaceful, every gate is
+   * open — it's a free-roam epilogue for players who want to walk the
+   * map they cleared. No-op outside the "victory" phase.
+   */
+  continueExploring(): void;
 }
 
 export function createDefaultProgress(): Progress {
@@ -321,6 +338,7 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     combo: 1,
     weapon: "bolt",
     weaponTimer: 0,
+    elapsedSeconds: 0,
     roomId: START_ROOM,
     roomName: getRoom(START_ROOM).name,
     roomTitle: 0,
@@ -565,10 +583,13 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
   }
 
   /**
-   * Post-kill line the boss speaks as it dissolves. Runs concurrently
-   * with the bossDefeated phase; when the dialogue closes we don't
-   * change phase (that's the death timer's job), so this is more of
-   * an "extra line" than a full state transition.
+   * Post-kill line the boss speaks as it dissolves. For the first six
+   * bosses this runs concurrently with the bossDefeated phase — the
+   * overlay paints on top of the running dissolve timers and the sim
+   * keeps rolling. For the Storm Dragon it is the opening of the
+   * finale, so we hard-pause into "cutscene" instead: the player reads
+   * the line at their own pace, closes it, and closeDialogue routes
+   * that close into the epilogue rather than back into "playing".
    */
   function openBossDefeatLine(kind: BossKind): void {
     const script = BOSS_DEFEAT_LINES[kind];
@@ -581,8 +602,33 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
       pendingBoss: null,
       npcId: null,
     };
-    // Don't change phase — bossDefeated is already running and driving
-    // the sim's own timers. The overlay just paints on top.
+    // Storm Dragon: freeze the sim on the defeat line so the epilogue
+    // can chain off it cleanly. Every other boss: the bossDefeated
+    // timer keeps ticking underneath and the overlay just paints on top.
+    if (kind === "dragon") {
+      state.phase = "cutscene";
+    }
+  }
+
+  /**
+   * Opens the game's single epilogue script. Chained off the Storm
+   * Dragon's defeat line, not spawned directly by any external event —
+   * closeDialogue() is what calls this when it sees the dragon's defeat
+   * script close. Pauses the sim through "cutscene" for as long as the
+   * player is reading; when the epilogue script runs out, closeDialogue
+   * routes into "victory", which the React layer paints the
+   * VictoryOverlay off.
+   */
+  function openEpilogue(): void {
+    state.dialogue = {
+      kind: "epilogue",
+      scriptId: EPILOGUE_SCRIPT.id,
+      lines: EPILOGUE_SCRIPT.lines,
+      index: 0,
+      pendingBoss: null,
+      npcId: null,
+    };
+    state.phase = "cutscene";
   }
 
   /**
@@ -603,7 +649,13 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
         state.phase = "playing";
         break;
       case "bossDefeat":
-        // No phase change — bossDefeated timer owns the exit.
+        // Storm Dragon's defeat line chains into the epilogue — the
+        // overlay closes and the next tap reveals Selûne. Every other
+        // boss just clears; the bossDefeated timer under the overlay
+        // owns the exit back to "playing".
+        if (d.scriptId === BOSS_DEFEAT_LINES.dragon.id) {
+          openEpilogue();
+        }
         break;
       case "epilogue":
         state.phase = "victory";
@@ -1225,6 +1277,9 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
     hud.combo = state.combo;
     hud.weapon = player.weapon;
     hud.weaponTimer = player.weaponTimer;
+    // Session clock. Reset by start() and restartGame(); read by the
+    // VictoryOverlay to render a "run took Xh Ym" stat.
+    hud.elapsedSeconds = state.elapsed;
 
     hud.roomId = room.id;
     hud.roomName = room.name;
@@ -1422,6 +1477,55 @@ export function createSpellStorm(ctx: GameContext, options: SpellStormOptions): 
       started = true;
       // Resume at the last bench. A brand-new save has bench = crossroads.
       enterRoom(progress.bench || START_ROOM, null);
+      publishHud();
+    },
+
+    restartGame() {
+      // Zero out the persisted progress. Mutate in place so the closures
+      // above (which capture `progress` by reference) keep pointing at
+      // the same object rather than at an orphaned one.
+      const fresh = createDefaultProgress();
+      progress.bosses = fresh.bosses;
+      progress.discovered = fresh.discovered;
+      progress.bench = fresh.bench;
+      progress.benchX = fresh.benchX;
+      progress.essence = fresh.essence;
+      progress.bonusMaxHearts = fresh.bonusMaxHearts;
+      progress.watchedCutscenes = fresh.watchedCutscenes;
+      progress.metNpcs = fresh.metNpcs;
+      progress.benchesRested = fresh.benchesRested;
+      options.onProgress?.(progress);
+
+      // Reset every transient. This is `start()` minus the
+      // resume-at-last-bench step: we want to land at the actual
+      // Crossroads, not at the bench of a save that no longer exists.
+      resetPlayer(player, { maxHearts: PLAYER.maxHearts });
+      state.score = 0;
+      state.combo = 1;
+      state.comboTimer = 0;
+      state.hitstop = 0;
+      state.elapsed = 0;
+      state.fade = 0;
+      state.fadeDir = 0;
+      state.pendingGate = null;
+      state.blockedGate = null;
+      state.pendingBoss = null;
+      state.shopPurchased = {};
+      state.dialogue = null;
+      castFlash = 0;
+      recoil = 0;
+      benchTimer = 0;
+      enterRoom(START_ROOM, null);
+      publishHud();
+    },
+
+    continueExploring() {
+      // Only meaningful once the epilogue has resolved into "victory".
+      // Anywhere else this is a no-op — the React overlay shouldn't
+      // call it, but the runtime guard is here so a misbehaving UI
+      // can't drop the sim into an inconsistent state.
+      if (state.phase !== "victory") return;
+      state.phase = "playing";
       publishHud();
     },
 

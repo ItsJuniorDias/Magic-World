@@ -708,3 +708,52 @@ export function pickNpcScript(npcId: string, bossesDefeated: number): DialogueSc
   if (bossesDefeated >= 2) return set.mid;
   return set.early;
 }
+
+// ---------------------------------------------------------------------------
+// Epilogue — plays once, after the Storm Dragon's defeat line closes.
+//
+// Selûne, freed from the seal that had bound her inside the Storm Dragon,
+// speaks to the apprentice for the first time in sixty days. The scene is
+// deliberately short — the fight was the climax, this is the exhale — and
+// intentionally open at the end. Whatever wakes on the other side of the
+// broken seal is left for the next game, or for the player's own head.
+//
+// The dialogue kind is "epilogue", which closeDialogue() routes into the
+// "victory" phase — the React layer paints the VictoryOverlay off that.
+// ---------------------------------------------------------------------------
+
+export const EPILOGUE_SCRIPT: DialogueScript = {
+  id: "epilogue",
+  lines: [
+    {
+      speaker: "narrator",
+      name: "",
+      body: "The light drifts down. It settles beside you, small and steady, like something remembered.",
+    },
+    {
+      speaker: "npc",
+      name: "Selûne",
+      body: "Apprentice.",
+    },
+    {
+      speaker: "mage",
+      name: "Mage",
+      body: "Master. I—",
+    },
+    {
+      speaker: "npc",
+      name: "Selûne",
+      body: "Shh. You did what I could not.",
+    },
+    {
+      speaker: "npc",
+      name: "Selûne",
+      body: "The seal held long enough. Whatever wakes now, we face together.",
+    },
+    {
+      speaker: "narrator",
+      name: "",
+      body: "The Storm Throne is quiet. The sky, for the first time in sixty days, is a colour with no name yet.",
+    },
+  ],
+};

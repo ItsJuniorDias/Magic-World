@@ -301,6 +301,7 @@ export default function SpellStormScreen() {
     combo: 1,
     weapon: "bolt",
     weaponTimer: 0,
+    elapsedSeconds: 0,
     roomId: "crossroads",
     roomName: "",
     roomTitle: 0,
@@ -805,6 +806,35 @@ export default function SpellStormScreen() {
     if (!game) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     game.talkToNpc();
+    setHud({ ...game.hud });
+  }, []);
+
+  // ---- Victory -----------------------------------------------------------
+  //
+  // Two imperative surfaces, both thin wrappers. Restart is destructive;
+  // the confirmation lives in the overlay itself (two-tap gesture on the
+  // primary button) rather than a Modal.alert, so the flow stays inside
+  // the paper-theatre look instead of breaking out to native chrome.
+  //
+  // AsyncStorage is written by handleProgress through the game's
+  // onProgress callback, so we don't have to touch it here — restartGame
+  // calls onProgress with the fresh save synchronously, which triggers
+  // the AsyncStorage.setItem write on the next tick.
+  const handleRestart = useCallback(() => {
+    const game = gameRef.current;
+    if (!game) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+      () => {},
+    );
+    game.restartGame();
+    setHud({ ...game.hud });
+  }, []);
+
+  const handleContinueExploring = useCallback(() => {
+    const game = gameRef.current;
+    if (!game) return;
+    Haptics.selectionAsync().catch(() => {});
+    game.continueExploring();
     setHud({ ...game.hud });
   }, []);
 
@@ -1395,6 +1425,22 @@ export default function SpellStormScreen() {
           onBuy={handleShopBuy}
           onEnter={handleShopEnter}
           insets={insets}
+        />
+      )}
+
+      {/* ---------------- Victory ----------------
+        Painted once the epilogue script closes and the game flips into
+        the "victory" phase. Two exits — Restart wipes the save and
+        starts over, Continue drops the player back into the (now
+        pacified) map for a free-roam epilogue. The restart is
+        destructive so the primary button is a two-tap confirm; see the
+        component itself for the flow.
+      */}
+      {ready && hud.phase === "victory" && (
+        <VictoryOverlay
+          hud={hud}
+          onRestart={handleRestart}
+          onContinue={handleContinueExploring}
         />
       )}
 
@@ -3540,6 +3586,155 @@ function ShopOverlay({
 
 // ---------------------------------------------------------------------------
 
+interface VictoryOverlayProps {
+  hud: HudSnapshot;
+  onRestart: () => void;
+  onContinue: () => void;
+}
+
+/**
+ * Painted once the epilogue script closes and the phase reaches
+ * "victory". Same visual grammar as the start overlay — blurred quad,
+ * flat panel, gold accents — but with a stat strip celebrating the run
+ * and a two-tap confirm on the destructive Restart button so a stray
+ * touch doesn't wipe the save. The confirm state times out after three
+ * seconds so a player who tapped by accident doesn't have to deal with
+ * a persistent "are you sure" that gets in the way of the exit they
+ * actually wanted.
+ */
+function VictoryOverlay({ hud, onRestart, onContinue }: VictoryOverlayProps) {
+  const [confirming, setConfirming] = useState(false);
+  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleRestartPress = useCallback(() => {
+    if (confirming) {
+      if (confirmTimerRef.current) {
+        clearTimeout(confirmTimerRef.current);
+        confirmTimerRef.current = null;
+      }
+      setConfirming(false);
+      onRestart();
+      return;
+    }
+    setConfirming(true);
+    if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    confirmTimerRef.current = setTimeout(() => {
+      setConfirming(false);
+      confirmTimerRef.current = null;
+    }, 3000);
+  }, [confirming, onRestart]);
+
+  useEffect(() => {
+    return () => {
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    };
+  }, []);
+
+  const timeStr = formatVictoryDuration(hud.elapsedSeconds);
+
+  return (
+    <View style={styles.overlay}>
+      <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: "rgba(10,5,24,0.72)" },
+        ]}
+      />
+      <View style={styles.panel}>
+        <Text
+          variant="label"
+          size="sm"
+          color={hex(PALETTE.gold)}
+          style={styles.victoryEyebrow}
+        >
+          — THE STORM LIFTS —
+        </Text>
+        <Text
+          variant="display"
+          size="display"
+          color="#FFFFFF"
+          style={styles.overlayTitle}
+        >
+          The seal breaks
+        </Text>
+        <Text
+          variant="body"
+          size="md"
+          color="rgba(255,255,255,0.76)"
+          style={styles.victoryLine}
+        >
+          Selûne is free. Above the throne, a single warm light remains — the
+          first colour the sky has worn in sixty days.
+        </Text>
+
+        <View style={styles.victoryStatsRow}>
+          <VictoryStat
+            label="SIGILS"
+            value={`${hud.bossesDefeated}/${hud.totalBosses}`}
+          />
+          <VictoryStat label="ROOMS" value={`${hud.discovered.length}`} />
+          <VictoryStat label="ESSENCE" value={hud.score.toLocaleString()} />
+          <VictoryStat label="TIME" value={timeStr} />
+        </View>
+
+        <Pressable
+          onPress={handleRestartPress}
+          style={[
+            styles.primary,
+            confirming && styles.primaryConfirming,
+          ]}
+        >
+          <Text variant="heading" size="md" color="#04121A">
+            {confirming ? "Tap to confirm" : "Play again"}
+          </Text>
+        </Pressable>
+
+        <Pressable onPress={onContinue} style={styles.secondary}>
+          <Text variant="body" size="sm" color="rgba(255,255,255,0.6)">
+            Continue exploring
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function VictoryStat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.victoryStatCard}>
+      <Text
+        variant="label"
+        size="sm"
+        color="rgba(255,255,255,0.5)"
+        style={styles.victoryStatLabel}
+      >
+        {label}
+      </Text>
+      <Text
+        variant="heading"
+        size="md"
+        color={hex(PALETTE.gold)}
+        style={styles.victoryStatValue}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function formatVictoryDuration(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+// ---------------------------------------------------------------------------
+
 interface OverlayProps {
   title: string;
   subtitle: string;
@@ -3901,7 +4096,50 @@ const styles = StyleSheet.create({
     borderCurve: "continuous",
     backgroundColor: hex(PALETTE.arcane),
   },
+  // Restart button in its "tap again" state. Warmer tint so the user
+  // reads the state change without needing to parse the label.
+  primaryConfirming: {
+    backgroundColor: hex(PALETTE.gold),
+  },
   secondary: { marginTop: 18, padding: 10 },
+  // Victory panel
+  victoryEyebrow: {
+    textAlign: "center",
+    letterSpacing: 3,
+    marginBottom: 12,
+    opacity: 0.9,
+  },
+  victoryLine: {
+    textAlign: "center",
+    fontStyle: "italic",
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  victoryStatsRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 28,
+  },
+  victoryStatCard: {
+    minWidth: 92,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderCurve: "continuous",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+  },
+  victoryStatLabel: {
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  victoryStatValue: {
+    letterSpacing: -0.3,
+  },
 
   mapOverlay: { ...StyleSheet.absoluteFillObject },
   mapHeader: {

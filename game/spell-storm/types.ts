@@ -351,6 +351,13 @@ export interface HudSnapshot {
   combo: number;
   weapon: WeaponId;
   weaponTimer: number;
+  /**
+   * Seconds since the current run started. Resets to zero on start() and
+   * on restartGame(). Used by the victory screen as a "how long did this
+   * run take" stat; not shown during normal play. Tracks the live session
+   * only, not lifetime playtime across saves.
+   */
+  elapsedSeconds: number;
 
   /** Current room, for the title card and the map. */
   roomId: string;
