@@ -61,9 +61,9 @@ const CONTENT: Record<string, LocalizedContent> = {
     title: "Un nouveau chapitre t'attend ✨",
     body: "Un nouvel audiolivre est prêt. Appuie pour ouvrir Magic World.",
   },
-  zh: {
-    title: "新篇章等待着你 ✨",
-    body: "有一本新有声书。点击打开 Magic World。",
+  de: {
+    title: "Ein neues Kapitel wartet auf dich ✨",
+    body: "Ein neues Hörbuch ist da. Tippe, um Magic World zu öffnen.",
   },
   hi: {
     title: "नया अध्याय आपका इंतज़ार कर रहा है ✨",

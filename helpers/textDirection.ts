@@ -69,26 +69,34 @@ export function getWritingDirection(
  * e Android tem cobertura ampla:
  *   - iOS árabe: Geeza Pro / .Arabic
  *   - Android árabe: Noto Sans Arabic
- *   - iOS chinês: PingFang SC
- *   - Android chinês: Noto Sans CJK
  *   - iOS devanagari: Kohinoor Devanagari
  *   - Android devanagari: Noto Sans Devanagari
+ *   - iOS CJK: PingFang / Hiragino
+ *   - Android CJK: Noto Sans CJK
  *
  * Motivo: se você forçar `fontFamily: 'ComicRelief'` num glifo
  * fora do subset (0x0020–0x00FF basicamente), o RN renderiza um
  * "tofu" (□) ou aplica fallback silencioso que quebra o baseline
  * e o line-height. Melhor ceder o controle pro sistema.
+ *
+ * Nota: latin estendido (ä, ö, ü, ß, á, é, ñ, ç, etc.) fica dentro
+ * do subset que a ComicRelief cobre — inglês, alemão, espanhol,
+ * português e francês renderizam com a fonte custom sem problema.
+ *
+ * CJK e hangul ficam aqui como safety net: mesmo que o app não
+ * ofereça esses idiomas na UI, texto externo (colado, traduzido
+ * fora do fluxo esperado) renderiza corretamente sem tofu.
  */
 const NON_LATIN_SCRIPTS = [
   // Árabe + hebraico + siriaco + thaana (todos os RTL)
   RTL_CHARS,
   // Devanagari (hindi)
   /[\u0900-\u097F]/,
-  // CJK Unified Ideographs
+  // CJK Unified Ideographs — safety net
   /[\u4E00-\u9FFF\u3400-\u4DBF]/,
-  // Hangul (coreano) — não temos locale, mas por precaução
+  // Hangul (coreano) — safety net
   /[\uAC00-\uD7AF]/,
-  // Hiragana + Katakana (japonês)
+  // Hiragana + Katakana (japonês) — safety net
   /[\u3040-\u30FF]/,
 ];
 
@@ -145,18 +153,21 @@ const SENTENCE_TERMINATORS_LOOKBEHIND =
 
 /**
  * Split de texto em sentenças respeitando pontuação de árabe,
- * hindi e chinês além do latino. Sempre devolve pelo menos um
+ * hindi e CJK além do latino. Sempre devolve pelo menos um
  * elemento (o texto todo) se não houver terminador.
+ *
+ * Pontuação CJK fica coberta como safety net — mesmo sem CJK na
+ * UI, texto colado ou traduzido externamente é tokenizado bem.
  *
  * @example
  *   splitIntoSentences("Hello. How are you?")
  *   // ["Hello.", "How are you?"]
  *
+ *   splitIntoSentences("Hallo. Wie geht es dir?")
+ *   // ["Hallo.", "Wie geht es dir?"]
+ *
  *   splitIntoSentences("مرحبا. كيف حالك؟")
  *   // ["مرحبا.", "كيف حالك؟"]
- *
- *   splitIntoSentences("你好。你好吗？")
- *   // ["你好。", "你好吗？"]
  */
 export function splitIntoSentences(text: string | null | undefined): string[] {
   if (!text) return [];
@@ -188,7 +199,7 @@ const FRANC_TO_BCP47: Record<string, string> = {
   spa: "es-ES",
   por: "pt-BR",
   fra: "fr-FR",
-  cmn: "zh-CN",
+  deu: "de-DE",
   hin: "hi-IN",
   // Árabe: `franc-min` usa `arb` (Modern Standard Arabic) como
   // default, mas alguns modelos devolvem `ara` (macrolang).
@@ -208,7 +219,7 @@ const SHORT_TO_BCP47: Record<string, string> = {
   es: "es-ES",
   pt: "pt-BR",
   fr: "fr-FR",
-  zh: "zh-CN",
+  de: "de-DE",
   hi: "hi-IN",
   ar: "ar-SA",
 };

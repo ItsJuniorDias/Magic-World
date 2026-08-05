@@ -9,7 +9,7 @@
  * revisão manual — não reorganizar por alfabético.
  */
 
-export type LocaleCode = "en" | "es" | "pt" | "fr" | "zh" | "hi" | "ar";
+export type LocaleCode = "en" | "es" | "pt" | "fr" | "de" | "hi" | "ar";
 
 export type LocaleMeta = {
   code: LocaleCode;

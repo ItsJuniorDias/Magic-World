@@ -483,10 +483,10 @@ export default function StorieScreen() {
     "Spanish",
     "Portuguese",
     "French",
-    "Chinese",
+    "German",
     "Hindi",
   ];
-  const languageCodes = ["en", "ar", "es", "pt", "fr", "zh", "hi"];
+  const languageCodes = ["en", "ar", "es", "pt", "fr", "de", "hi"];
 
   const renderContextMenuTrigger = () => {
     return (

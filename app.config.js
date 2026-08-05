@@ -28,11 +28,11 @@ export default {
         CFBundleLocalizations: [
           "en",
           "ar",
+          "de",
           "es",
           "fr",
           "hi",
           "pt",
-          "zh-Hans",
         ],
         CFBundleDevelopmentRegion: "en",
       },

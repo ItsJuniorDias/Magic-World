@@ -62,7 +62,7 @@ Collection: `push_tokens/{deviceId}`
   token: string          // ExponentPushToken[xxxxxxx]
   deviceId: string       // Android ID ou iOS IdentifierForVendor
   platform: "ios" | "android"
-  locale: "en" | "pt" | "es" | "fr" | "zh" | "hi" | "ar"
+  locale: "en" | "pt" | "es" | "fr" | "de" | "hi" | "ar"
   entitlement: boolean   // é assinante RC ou não
   appVersion: string
   updatedAt: Timestamp

@@ -102,7 +102,7 @@ Alternativa considerada e rejeitada: dispatch de fontes por script no `expo-font
 Ganhos:
 1. Cobre `؟` (question mark árabe U+061F) que estava faltando
 2. Cobre `।` (danda hindi U+0964) — bônus de robustez pra hindi
-3. Cobre `。！？` (CJK) — bônus pra chinês
+3. Cobre `。！？` (CJK) — bônus de robustez pra scripts CJK
 4. Centraliza a lógica pra reuso em outras telas se aparecer texto do Firestore em qualquer idioma
 
 Perda: nenhuma. O comportamento pra `.!?` (latino) é idêntico ao anterior.

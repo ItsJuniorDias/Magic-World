@@ -31,7 +31,7 @@ import en from "./locales/en";
 import es from "./locales/es";
 import pt from "./locales/pt";
 import fr from "./locales/fr";
-import zh from "./locales/zh";
+import de from "./locales/de";
 import hi from "./locales/hi";
 import ar from "./locales/ar";
 import type { LocaleCode, LocaleMeta, TranslationTree } from "./types";
@@ -49,7 +49,7 @@ const CATALOG: Record<LocaleCode, TranslationTree> = {
   es,
   pt,
   fr,
-  zh,
+  de,
   hi,
   ar,
 };
@@ -73,6 +73,13 @@ export const LOCALES: LocaleMeta[] = [
     englishName: "Arabic",
     flag: "🇸🇦",
     direction: "rtl",
+  },
+  {
+    code: "de",
+    nativeName: "Deutsch",
+    englishName: "German",
+    flag: "🇩🇪",
+    direction: "ltr",
   },
   {
     code: "es",
@@ -102,13 +109,6 @@ export const LOCALES: LocaleMeta[] = [
     flag: "🇧🇷",
     direction: "ltr",
   },
-  {
-    code: "zh",
-    nativeName: "中文",
-    englishName: "Chinese",
-    flag: "🇨🇳",
-    direction: "ltr",
-  },
 ];
 
 const SUPPORTED: LocaleCode[] = LOCALES.map((l) => l.code);
@@ -124,7 +124,7 @@ const STORAGE_KEY = "@magic_world_locale";
  * Mapa de fallback pra variantes regionais que a gente não
  * suporta explicitamente. Ex.: `pt-BR`, `pt-PT` → `pt`.
  *
- * `expo-localization` devolve tags BCP-47 tipo "pt-BR", "zh-Hans",
+ * `expo-localization` devolve tags BCP-47 tipo "pt-BR", "de-AT",
  * "es-419". A gente pega só o prefixo primário.
  */
 function normalizeToSupported(tag: string | null | undefined): LocaleCode {
