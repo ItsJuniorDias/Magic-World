@@ -256,6 +256,12 @@ export const useLocaleStore = create<LocaleState>((set, get) => ({
   direction: "ltr",
 
   async setLocale(code) {
+    // Early return se o code é o mesmo — evita `set()` desnecessário
+    // que dispararia re-render em toda árvore que assina `useT()`.
+    // Callers já checam isso hoje, mas defender aqui é barato e
+    // protege contra callers futuros que esquecerem.
+    if (get().locale === code) return;
+
     const meta = metaFor(code);
     set({
       locale: code,

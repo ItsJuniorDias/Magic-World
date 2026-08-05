@@ -36,20 +36,41 @@ export default function LanguageSelector({ visible, onClose }: Props) {
   const { t: tr, locale, setLocale } = useT();
   const pushRegistered = useNotificationsStore((s) => s.registered);
 
-  const handleSelect = async (code: LocaleCode) => {
+  const handleSelect = (code: LocaleCode) => {
     if (code === locale) {
       onClose();
       return;
     }
-    await setLocale(code);
-    // Se o usuário registrou push antes, sincroniza o novo locale
-    // no Firestore. O hook `useNotifications` reagenda os lembretes
-    // locais automaticamente ao detectar mudança de idioma.
-    if (pushRegistered) {
-      // Fire-and-forget: não queremos bloquear o fechamento do modal.
-      updatePushLocale(code).catch(() => {});
-    }
+
+    // ORDEM CRÍTICA: fechar o modal ANTES de disparar `setLocale`.
+    //
+    // Por quê: o `app/(tabs)/_layout.tsx` renderiza `<NativeTabs key={locale}>`
+    // pra forçar remount das labels (SwiftUI/Material só lê props no
+    // mount inicial). Quando `setLocale` muda o store, o TabLayout
+    // re-renderiza com `key` novo → React desmonta a árvore inteira
+    // das tabs → arrasta este LanguageSelector junto (ele é filho de
+    // `profile.tsx`).
+    //
+    // Se disparássemos `setLocale` primeiro, o modal seria desmontado
+    // no meio do handler async, deixando o app travado até o próximo
+    // cold start.
+    //
+    // Solução: fecha o modal, espera a animação de slide (~250ms) +
+    // buffer, e SÓ ENTÃO troca o locale. Nesse ponto o modal já saiu
+    // da árvore e o remount das tabs pega uma stack limpa.
     onClose();
+
+    setTimeout(() => {
+      setLocale(code).catch(() => {});
+
+      // Se o usuário registrou push antes, sincroniza o novo locale
+      // no Firestore. O hook `useNotifications` reagenda os lembretes
+      // locais automaticamente ao detectar mudança de idioma.
+      if (pushRegistered) {
+        // Fire-and-forget: não queremos bloquear.
+        updatePushLocale(code).catch(() => {});
+      }
+    }, 300);
   };
 
   const renderItem = ({ item }: { item: LocaleMeta }) => {
