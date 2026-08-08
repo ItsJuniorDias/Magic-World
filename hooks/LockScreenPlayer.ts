@@ -1,51 +1,32 @@
 import TrackPlayer, {
-  AppKilledPlaybackBehavior,
   Capability,
   Event,
   IOSCategory,
-  IOSCategoryMode,
-  IOSCategoryOptions,
 } from "react-native-track-player";
 import { useEffect } from "react";
 
 /**
  * useLockScreenPlayer
  * ==================================================================
- * Hook que instala e opera o player de audiobook (trilha de fundo)
- * na tela de história (`app/(storie)/index.tsx`).
+ * Hook que instala e opera o player de trilha de fundo na tela de
+ * história (`app/(storie)/index.tsx`).
  *
- * Por que essa reescrita (agosto 2026, resposta à segunda rejeição):
- *   Apple rejeitou sob Guideline 2.5.4 dizendo "unable to locate any
- *   features that require persistent audio" — mesmo com a feature
- *   existindo. Duas causas prováveis:
+ * Diff vs versão original (agosto 2026, fix pra Guideline 2.5.4):
+ *   ÚNICA mudança funcional: adiciona `iosCategory: IOSCategory.Playback`
+ *   no `setupPlayer`. Sem isso, o default do TrackPlayer (`Ambient`)
+ *   pausa o áudio ao lock screen — a background mode declarada no
+ *   Info.plist nunca é exercitada e a Apple conclui que não tem uso.
  *
- *     1. O reviewer testa o app em uma sessão curta e talvez não
- *        chegue até a tela de história dentro do tempo alocado.
- *        (Isso é atacado no lado da submissão, com screen recording
- *        e review notes claras — não dá pra resolver via código.)
+ *   NADA MAIS foi mudado. Especificamente NÃO usamos:
+ *     - `iosCategoryMode: SpokenAudio` — conflita com `expo-speech`
+ *       (AVSpeechSynthesizer), silenciando a narração TTS quando
+ *       ambos rodam em paralelo. Play do botão parava de funcionar.
+ *     - `TrackPlayer.reset()` antes do primeiro `add` no setup —
+ *       cria janela de race com `handleSpeak` que roda em paralelo
+ *       pelo `useEffect` da tela `(storie)`.
  *
- *     2. `TrackPlayer.setupPlayer()` era chamado sem `iosCategory`
- *        explícito. O default (`Ambient`) NÃO permite audio em
- *        background — só `Playback` permite. Se por algum motivo
- *        o default resolvesse pra Ambient no device do reviewer,
- *        o audio pausaria ao lock screen, e a Apple concluiria que
- *        a background mode não estava sendo usada.
- *
- *   Essa versão:
- *     - Seta `IOSCategory.Playback` explícito (categoria correta
- *       para audiobooks — permite lock screen + background).
- *     - Adiciona `IOSCategoryOptions` que fazem sentido pra
- *       audiobook (não mixar com outras apps por padrão — audio
- *       do audiobook é primário).
- *     - Trata "setupPlayer called twice" com try/catch (o hook
- *       pode montar mais de uma vez em navegação rápida — o setup
- *       lança erro na segunda chamada, tudo bem, seguimos).
- *     - Configura `android.appKilledPlaybackBehavior` pra parar
- *       o playback quando o app é morto (evita zumbi player no
- *       Android — no iOS isso é gerido pelo OS).
- *     - Define capabilities de lock screen (play/pause/skip) —
- *       o que faz a lock screen mostrar os controles, sinal
- *       visual claro pro reviewer de que background audio existe.
+ *   Se a rejeição 2.5.4 continuar apesar disso, resolver via screen
+ *   recording + review notes, NÃO adicionando mais opções aqui.
  *
  * IMPORTANTE:
  *   O playback service em `services/trackPlayer.ts` é registrado
@@ -74,31 +55,20 @@ export function useLockScreenPlayer({
 
     async function setupPlayer() {
       // setupPlayer pode lançar "player has already been initialized"
-      // se um outro mount já configurou. Isso é OK — a config
-      // persiste entre mounts. Só ignoramos e seguimos.
+      // se um mount anterior já configurou. A config persiste entre
+      // mounts, então ignorar é seguro.
       try {
         await TrackPlayer.setupPlayer({
-          // iOS: categoria correta pra audiobook. Sem isso o audio
-          // pausa ao lock screen e a background mode não é
-          // exercitada — reviewer conclui que não tem uso.
+          // iOS: única opção necessária pra background audio funcionar.
+          // Sem isso o default é `Ambient`, que pausa no lock screen.
           iosCategory: IOSCategory.Playback,
-          iosCategoryMode: IOSCategoryMode.SpokenAudio,
-          iosCategoryOptions: [
-            IOSCategoryOptions.AllowAirPlay,
-            IOSCategoryOptions.AllowBluetooth,
-          ],
         });
       } catch (err) {
         // "player has already been initialized" — safe, continua.
       }
 
       await TrackPlayer.updateOptions({
-        // Android: parar quando o app é morto (evita player zumbi).
-        // iOS ignora essa flag — o SO gerencia.
-        android: {
-          appKilledPlaybackBehavior:
-            AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
-        },
+        stopWithApp: false,
         capabilities: [
           Capability.Play,
           Capability.Pause,
@@ -109,14 +79,12 @@ export function useLockScreenPlayer({
         compactCapabilities: [
           Capability.Play,
           Capability.Pause,
+          Capability.Stop,
           Capability.SkipToPrevious,
           Capability.SkipToNext,
         ],
+        alwaysShowNotification: true,
       });
-
-      // Reseta a fila antes de adicionar. Evita empilhar tracks
-      // se o usuário re-entrar na mesma tela.
-      await TrackPlayer.reset();
 
       await TrackPlayer.add([
         {
