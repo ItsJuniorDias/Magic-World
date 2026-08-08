@@ -365,6 +365,14 @@ const pt: TranslationTree = {
     title: "Idioma",
     subtitle: "Mude o idioma usado em todo o app.",
   },
+  parentalGate: {
+    title: "Peça a um adulto",
+    subtitle:
+      "Esta parte é para adultos. Responda a pergunta para continuar.",
+    question: "Quanto é {{a}} × {{b}}?",
+    placeholder: "Resposta",
+    wrongAnswer: "Resposta incorreta. Tente esta nova conta.",
+  },
   notifications: {
     sectionTitle: "Notificações",
     bedtimeLabel: "Lembrete de leitura",

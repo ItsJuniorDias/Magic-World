@@ -391,6 +391,14 @@ const hi: TranslationTree = {
     title: "भाषा",
     subtitle: "पूरे ऐप की भाषा बदलें।",
   },
+  parentalGate: {
+    title: "किसी बड़े से पूछें",
+    subtitle:
+      "यह हिस्सा माता-पिता के लिए है। जारी रखने के लिए सवाल हल करें।",
+    question: "{{a}} × {{b}} कितना होता है?",
+    placeholder: "उत्तर",
+    wrongAnswer: "यह सही नहीं है। यह नया सवाल आज़माएँ।",
+  },
   notifications: {
     sectionTitle: "सूचनाएँ",
     bedtimeLabel: "पढ़ाई का रिमाइंडर",

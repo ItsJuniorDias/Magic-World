@@ -288,6 +288,18 @@ export type TranslationTree = {
     title: string;
     subtitle: string;
   };
+  parentalGate: {
+    /** Título do modal — "Peça a um adulto". */
+    title: string;
+    /** Subtítulo — "Essa ação precisa de um adulto". */
+    subtitle: string;
+    /** Pergunta com interpolação: {{a}} × {{b}}. */
+    question: string;
+    /** Placeholder do input numérico. */
+    placeholder: string;
+    /** Mensagem quando erra — regenera problema. */
+    wrongAnswer: string;
+  };
   notifications: {
     /** Título da seção no Profile. */
     sectionTitle: string;

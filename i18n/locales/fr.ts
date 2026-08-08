@@ -370,6 +370,14 @@ const fr: TranslationTree = {
     title: "Langue",
     subtitle: "Change la langue utilisée dans toute l'app.",
   },
+  parentalGate: {
+    title: "Demande à un adulte",
+    subtitle:
+      "Cette partie est réservée aux adultes. Réponds à la question pour continuer.",
+    question: "Combien font {{a}} × {{b}} ?",
+    placeholder: "Réponse",
+    wrongAnswer: "Ce n'est pas correct. Essaie cette nouvelle.",
+  },
   notifications: {
     sectionTitle: "Notifications",
     bedtimeLabel: "Rappel du soir",

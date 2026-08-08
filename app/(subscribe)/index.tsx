@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -18,6 +18,7 @@ import * as Linking from "expo-linking";
 
 import Text from "@/components/ui/Text";
 import Button from "@/components/ui/Button";
+import ParentalGate from "@/components/ParentalGate";
 import { useThemedTokens } from "@/hooks/use-tokens";
 import { SubscribeContainer } from "./styles";
 import { logEvent } from "@/services/analyticsHelper";
@@ -115,6 +116,37 @@ export default function SubscribeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [purchasing, setPurchasing] = useState(false);
   const [restoring, setRestoring] = useState(false);
+
+  // Parental gate (Guideline 1.3 — Kids Category). Antes de executar
+  // qualquer ação que envolva commerce (purchase, restore) ou link
+  // externo (privacy, terms), a ação fica guardada em `pendingRef`
+  // e o gate é aberto. Se o adulto acerta a multiplicação, a ação
+  // pendente roda; se cancela, é descartada.
+  const [gateOpen, setGateOpen] = useState(false);
+  const pendingRef = useRef<(() => void | Promise<void>) | null>(null);
+
+  const runBehindGate = useCallback((action: () => void | Promise<void>) => {
+    pendingRef.current = action;
+    setGateOpen(true);
+  }, []);
+
+  const handleGateSuccess = useCallback(() => {
+    const action = pendingRef.current;
+    pendingRef.current = null;
+    setGateOpen(false);
+    // Fire-and-forget: se a action for async, deixa correr sem await
+    // (o próprio handler já gerencia loading state).
+    if (action) {
+      Promise.resolve(action()).catch(() => {
+        // erros já são tratados dentro dos handlers individuais
+      });
+    }
+  }, []);
+
+  const handleGateCancel = useCallback(() => {
+    pendingRef.current = null;
+    setGateOpen(false);
+  }, []);
 
   const trialDays = useMemo(() => parseTrialDays(selected), [selected]);
   const savings = useMemo(
@@ -494,7 +526,7 @@ export default function SubscribeScreen() {
             size="lg"
             fullWidth
             loading={purchasing}
-            onPress={handlePurchase}
+            onPress={() => runBehindGate(handlePurchase)}
           />
           <Text
             variant="caption"
@@ -513,7 +545,10 @@ export default function SubscribeScreen() {
               flexWrap: "wrap",
             }}
           >
-            <TouchableOpacity onPress={handleRestore} disabled={restoring}>
+            <TouchableOpacity
+              onPress={() => runBehindGate(handleRestore)}
+              disabled={restoring}
+            >
               <Text
                 variant="caption"
                 color={t.color.textSecondary}
@@ -523,7 +558,9 @@ export default function SubscribeScreen() {
               </Text>
             </TouchableOpacity>
             <Dot tokens={t} />
-            <TouchableOpacity onPress={() => openLegalLink("privacy")}>
+            <TouchableOpacity
+              onPress={() => runBehindGate(() => openLegalLink("privacy"))}
+            >
               <Text
                 variant="caption"
                 color={t.color.textSecondary}
@@ -533,7 +570,9 @@ export default function SubscribeScreen() {
               </Text>
             </TouchableOpacity>
             <Dot tokens={t} />
-            <TouchableOpacity onPress={() => openLegalLink("terms")}>
+            <TouchableOpacity
+              onPress={() => runBehindGate(() => openLegalLink("terms"))}
+            >
               <Text
                 variant="caption"
                 color={t.color.textSecondary}
@@ -545,6 +584,14 @@ export default function SubscribeScreen() {
           </View>
         </View>
       )}
+
+      {/* Parental gate — Guideline 1.3 (Kids Category). Fica montado
+          sempre; abre via `runBehindGate(action)`. */}
+      <ParentalGate
+        visible={gateOpen}
+        onSuccess={handleGateSuccess}
+        onCancel={handleGateCancel}
+      />
     </View>
   );
 }

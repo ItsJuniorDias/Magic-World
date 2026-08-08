@@ -387,6 +387,14 @@ const de: TranslationTree = {
     title: "Sprache",
     subtitle: "Ändere die Sprache, die in der ganzen App verwendet wird.",
   },
+  parentalGate: {
+    title: "Frag einen Erwachsenen",
+    subtitle:
+      "Dieser Teil ist für Erwachsene. Bitte löse die Aufgabe, um fortzufahren.",
+    question: "Wie viel ist {{a}} × {{b}}?",
+    placeholder: "Antwort",
+    wrongAnswer: "Das ist nicht richtig. Versuche diese neue Aufgabe.",
+  },
   notifications: {
     sectionTitle: "Benachrichtigungen",
     bedtimeLabel: "Erinnerung vor dem Schlafengehen",

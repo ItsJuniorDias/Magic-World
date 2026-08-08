@@ -354,6 +354,13 @@ const en: TranslationTree = {
     title: "Language",
     subtitle: "Change the language used throughout the app.",
   },
+  parentalGate: {
+    title: "Ask a grown-up",
+    subtitle: "This part is for parents. Please solve the question to continue.",
+    question: "How much is {{a}} × {{b}}?",
+    placeholder: "Answer",
+    wrongAnswer: "That's not right. Try this new one.",
+  },
   notifications: {
     sectionTitle: "Notifications",
     bedtimeLabel: "Bedtime reminder",

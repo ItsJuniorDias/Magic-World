@@ -384,6 +384,13 @@ const ar: TranslationTree = {
     title: "اللغة",
     subtitle: "غيّر اللغة المستخدمة في التطبيق بأكمله.",
   },
+  parentalGate: {
+    title: "اسأل شخصًا بالغًا",
+    subtitle: "هذا الجزء مخصص للبالغين. من فضلك أجب عن السؤال للمتابعة.",
+    question: "كم يساوي {{a}} × {{b}}؟",
+    placeholder: "الإجابة",
+    wrongAnswer: "الإجابة غير صحيحة. جرّب هذا السؤال الجديد.",
+  },
   notifications: {
     sectionTitle: "الإشعارات",
     bedtimeLabel: "تذكير القراءة",

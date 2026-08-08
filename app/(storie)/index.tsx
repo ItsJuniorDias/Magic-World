@@ -47,6 +47,7 @@ import TrackPlayer, {
 } from "react-native-track-player";
 
 import { useLockScreenPlayer } from "@/hooks/LockScreenPlayer";
+import { useAppReview } from "@/hooks/useAppReview";
 
 import { BACKGROUND_TRACKS } from "@/constants/backgroundTracks";
 import { useStoriesStore } from "@/store/useStoriesStore";
@@ -129,6 +130,11 @@ export default function StorieScreen() {
 
   const [isSavingProgress, setIsSavingProgress] = useState(false);
   const [showMenuSheet, setShowMenuSheet] = useState(false);
+
+  // Review prompt gate — noteEngagement é o único caminho legítimo
+  // pra disparar o prompt (Apple Guideline 5.6.3). Chamamos abaixo
+  // no momento em que o capítulo terminou — evento de sucesso claro.
+  const { noteEngagement } = useAppReview();
 
   useEffect(() => {
     if (!isFocused) return;
@@ -712,6 +718,10 @@ Return ONLY a JSON array with this exact shape (all keys quoted):
           }
 
           setShowFinishModal(true);
+
+          // Marca engagement — o hook decide se dispara o prompt
+          // ou não com base em thresholds de tempo + eventos.
+          noteEngagement();
 
           if (Number(currentIndex) === 2) {
             const finalProfile = await calculateProfile();

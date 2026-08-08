@@ -126,7 +126,12 @@ export default function HomeScreen() {
   const router = useRouter();
   const { t } = useT();
   const [generatedStory, setGeneratedStory] = useState<any>(null);
-  const { requestReviewOnce } = useAppReview();
+  // Só registra o first-launch stamp aqui. O prompt de review em si
+  // é disparado por `noteEngagement()` em pontos de sucesso reais
+  // (fim de capítulo, boss derrotado, etc), com gates de tempo +
+  // eventos. Necessário pra passar Guideline 5.6.3 — App Store
+  // rejeita se o prompt aparece cedo demais.
+  const { initReviewClock } = useAppReview();
 
   const likedIds = useLikedStore((s) => s.likedIds);
   const toggleLike = useLikedStore((s) => s.toggleLike);
@@ -251,9 +256,10 @@ Structure:
   useEffect(() => {
     const load = async () => {
       try {
-        setTimeout(() => {
-          requestReviewOnce();
-        }, 30000);
+        // Registra timestamp de primeiro launch (idempotente). O
+        // prompt de review não é disparado daqui — é gateado por
+        // engagement real (ver useAppReview).
+        initReviewClock();
 
         // Seed manual de novas histórias (dev-only):
         // 1. Descomenta as duas linhas abaixo
