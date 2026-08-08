@@ -1156,15 +1156,6 @@ Return ONLY a JSON object with this exact shape:
               handleTranslateAll(languageCodes[index]);
             },
           },
-          {
-            title: tr("storieMenu.ambientSound"),
-            options: BACKGROUND_TRACKS.map((track) => track.title),
-            selectedIndex: musicIndex,
-            onSelect: async (index) => {
-              setMusicIndex(index);
-              await TrackPlayer.stop();
-            },
-          },
         ]}
       />
     </>
