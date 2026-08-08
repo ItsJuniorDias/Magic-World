@@ -124,7 +124,18 @@ export default function OnboardingScreen() {
             label={tr("onboarding.getStarted")}
             size="lg"
             fullWidth
-            onPress={() => router.push("/(profile-adventure)")}
+            onPress={async () => {
+              // Marca fim do onboarding — pré-requisito pro prompt
+              // de review (ver hooks/useAppReview.ts). Sem essa
+              // flag, `noteEngagement()` faz early-return mesmo
+              // que todos os outros thresholds batam.
+              try {
+                await AsyncStorage.setItem("@onboarding_completed", "true");
+              } catch {
+                // se falhar, o gate simplesmente não abre — safe.
+              }
+              router.push("/(profile-adventure)");
+            }}
             style={{ marginTop: t.spacing.lg }}
           />
         </Content>

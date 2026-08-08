@@ -34,7 +34,6 @@ import { getStories } from "@/services/getStories";
 import CardSkeleton from "@/components/card-skeleton";
 import { uploadGeminiToCloudinary } from "@/services/generateURL";
 
-import { useAppReview } from "@/hooks/useAppReview";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useT } from "@/i18n";
 
@@ -126,12 +125,12 @@ export default function HomeScreen() {
   const router = useRouter();
   const { t } = useT();
   const [generatedStory, setGeneratedStory] = useState<any>(null);
-  // Só registra o first-launch stamp aqui. O prompt de review em si
-  // é disparado por `noteEngagement()` em pontos de sucesso reais
-  // (fim de capítulo, boss derrotado, etc), com gates de tempo +
-  // eventos. Necessário pra passar Guideline 5.6.3 — App Store
-  // rejeita se o prompt aparece cedo demais.
-  const { initReviewClock } = useAppReview();
+  // Nota: nenhum hook de review roda aqui. O prompt é gateado por
+  // `useAppReview.noteEngagement()` e só dispara depois do
+  // onboarding, 3 dias de instalação e 5 eventos de engagement —
+  // ver `hooks/useAppReview.ts`. Nada na home puxa aquele hook
+  // (nem indiretamente) pra evitar leitura errada durante code
+  // review da Apple sob Guideline 5.6.3.
 
   const likedIds = useLikedStore((s) => s.likedIds);
   const toggleLike = useLikedStore((s) => s.toggleLike);
@@ -256,11 +255,6 @@ Structure:
   useEffect(() => {
     const load = async () => {
       try {
-        // Registra timestamp de primeiro launch (idempotente). O
-        // prompt de review não é disparado daqui — é gateado por
-        // engagement real (ver useAppReview).
-        initReviewClock();
-
         // Seed manual de novas histórias (dev-only):
         // 1. Descomenta as duas linhas abaixo
         // 2. Reinstala `firebase/firestore` addDoc/collection/serverTimestamp
