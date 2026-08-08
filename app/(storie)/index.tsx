@@ -69,6 +69,11 @@ const HEADER_HEIGHT = 420;
 const MIN_HEADER_HEIGHT = 160;
 const SCREEN_HEIGHT = Dimensions.get("window").height;
 
+// [MW-DEBUG] build tag — se este log NÃO aparecer no console ao
+// carregar o app, o bundle antigo ainda está em cache. Rode
+// `bun run start --clear` e recarregue.
+console.log("[MW-DEBUG-BUILD-TAG] storie-index r5 loaded");
+
 export default function StorieScreen() {
   const isFocused = useIsFocused();
   const { t: tr } = useT();
@@ -246,6 +251,7 @@ export default function StorieScreen() {
   ========================== */
 
   const pauseAllAudio = useCallback(async () => {
+    console.log("[MW-DEBUG] pauseAllAudio:called (incrementa speakSessionRef)");
     speakSessionRef.current += 1;
     Speech.stop();
     await pause();
@@ -261,6 +267,11 @@ export default function StorieScreen() {
       Event.RemotePrevious,
     ],
     async (event) => {
+      // [MW-DEBUG] Rastreia qual evento do TrackPlayer disparou —
+      // suspeita: RemotePlay/RemotePause dispara quando o app chama
+      // play() local, causando session_mismatch em speakNext.
+      console.log("[MW-DEBUG] TrackPlayerEvent", { type: event.type });
+
       // Com RepeatMode.Track, este evento raramente dispara, mas deixamos como fallback
       if (event.type === Event.PlaybackQueueEnded) {
         await TrackPlayer.seekTo(0);
@@ -383,6 +394,10 @@ export default function StorieScreen() {
 
   // Recupera progresso ao montar ou iniciar autoplay
   useEffect(() => {
+    console.log("[MW-DEBUG] useEffect[autoPlay,currentIndex] fired", {
+      autoPlay,
+      currentIndex,
+    });
     const initReading = async () => {
       // Tenta recuperar progresso
       const progress = await getReadingProgress(Number(currentIndex));
@@ -400,6 +415,7 @@ export default function StorieScreen() {
         }, 500);
 
         if (autoPlay === "true") {
+          console.log("[MW-DEBUG] initReading:autoplay resume=true in 800ms");
           setTimeout(() => {
             handleSpeak(true); // Passa true para retomar
           }, 800);
@@ -407,6 +423,7 @@ export default function StorieScreen() {
       } else {
         // Se não houver progresso, começa do início
         if (autoPlay === "true") {
+          console.log("[MW-DEBUG] initReading:autoplay resume=false in 800ms");
           setTimeout(() => {
             handleSpeak();
           }, 800);
@@ -512,8 +529,16 @@ export default function StorieScreen() {
      SPEECH + TRACKPLAYER
   ========================== */
   const handleSpeak = async (resume = false) => {
+    // [MW-DEBUG] Entrada — REMOVE BEFORE RELEASE
+    console.log("[MW-DEBUG] handleSpeak:enter", {
+      resume,
+      isPlay,
+      sentencesLength: sentences.length,
+    });
+
     // Se já está tocando, pausa tudo
     if (isPlay && !resume) {
+      console.log("[MW-DEBUG] handleSpeak:early_return isPlay=true, no resume");
       speakSessionRef.current += 1;
       Speech.stop();
       await TrackPlayer.pause();
@@ -522,22 +547,51 @@ export default function StorieScreen() {
       return;
     }
 
-    if (!sentences.length) return;
+    if (!sentences.length) {
+      console.log(
+        "[MW-DEBUG] handleSpeak:early_return sentences.length=0 — texto vazio ou não split",
+      );
+      return;
+    }
 
+    const beforeInc = speakSessionRef.current;
     speakSessionRef.current += 1;
     const sessionId = speakSessionRef.current;
+    console.log("[MW-DEBUG] handleSpeak:session_bumped", {
+      from: beforeInc,
+      to: sessionId,
+    });
 
     setIsPlay(true);
 
     // Garante que o TrackPlayer toque em Loop
-    await TrackPlayer.setRepeatMode(RepeatMode.Track);
-    await TrackPlayer.play();
+    try {
+      console.log("[MW-DEBUG] handleSpeak:calling TrackPlayer.setRepeatMode");
+      await TrackPlayer.setRepeatMode(RepeatMode.Track);
+      console.log("[MW-DEBUG] handleSpeak:calling TrackPlayer.play()");
+      await TrackPlayer.play();
+      const state = await TrackPlayer.getState();
+      const queue = await TrackPlayer.getQueue();
+      console.log("[MW-DEBUG] handleSpeak:TrackPlayer.play OK", {
+        state,
+        queueLen: queue.length,
+      });
+    } catch (e: any) {
+      console.log("[MW-DEBUG] handleSpeak:TrackPlayer.play THREW", {
+        msg: e?.message ?? String(e),
+        code: e?.code,
+      });
+    }
 
     // `franc` devolve ISO 639-3 (eng, spa, arb, hin…). O helper
     // cobre todos os 7 idiomas do i18n + fallback pra en-US quando
     // a detecção falha (texto muito curto, misto de idiomas, etc).
     const langCode = franc(translatedText.storie as string);
     const language = resolveSpeechLanguage(langCode);
+    console.log("[MW-DEBUG] handleSpeak:language_resolved", {
+      langCode,
+      language,
+    });
 
     // Determina o índice inicial: se resume é true, usa o último salvo/ref
     let index = resume ? lastSentenceIndexRef.current : 0;
@@ -548,9 +602,16 @@ export default function StorieScreen() {
     setActiveSentenceIndex(index);
 
     const speakNext = () => {
-      if (speakSessionRef.current !== sessionId) return;
+      if (speakSessionRef.current !== sessionId) {
+        console.log(
+          "[MW-DEBUG] speakNext:session_mismatch — outra sessão tomou o turno",
+          { current: speakSessionRef.current, sessionId },
+        );
+        return;
+      }
 
       if (index >= sentences.length) {
+        console.log("[MW-DEBUG] speakNext:end_of_story");
         // Fim da história
         // Não pausamos a música imediatamente se o user quiser ficar ouvindo,
         // mas o comportamento padrão é finalizar a leitura.
@@ -567,12 +628,21 @@ export default function StorieScreen() {
       // 🔹 Salva progresso a cada sentença iniciada
       saveReadingProgress(Number(currentIndex), index, currentScrollY.current);
 
+      console.log("[MW-DEBUG] speakNext:calling Speech.speak", {
+        index,
+        preview: sentences[index]?.slice(0, 40),
+      });
+
       Speech.speak(sentences[index], {
         volume: 1.0,
         language,
         rate: 0.9,
         pitch: 1.0,
+        onStart: () => {
+          console.log("[MW-DEBUG] Speech.onStart", { index });
+        },
         onDone: () => {
+          console.log("[MW-DEBUG] Speech.onDone", { index });
           if (speakSessionRef.current !== sessionId) return;
 
           index += 1;
@@ -587,6 +657,7 @@ export default function StorieScreen() {
           }
         },
         onStopped: () => {
+          console.log("[MW-DEBUG] Speech.onStopped", { index });
           // Callback disparado quando Speech.stop() é chamado manualmente.
           if (speakSessionRef.current !== sessionId) return;
 
@@ -600,6 +671,12 @@ export default function StorieScreen() {
             index,
             currentScrollY.current,
           );
+        },
+        onError: (err: any) => {
+          console.log("[MW-DEBUG] Speech.onError", {
+            index,
+            err: err?.message ?? String(err),
+          });
         },
       });
     };
@@ -623,10 +700,21 @@ export default function StorieScreen() {
   }, [activeSentenceIndex, isPlay]);
 
   const handlePlayPress = async () => {
+    // [MW-DEBUG] Entrada — REMOVE BEFORE RELEASE
+    console.log("[MW-DEBUG] handlePlayPress:enter", {
+      isPlay,
+      lastSentenceIndex: lastSentenceIndexRef.current,
+      sentencesLength: sentences.length,
+      storieLength: (translatedText.storie as string | undefined)?.length ?? 0,
+    });
+
     // Verifica se já existe progresso para retomar ou começa do zero
     const hasSeen = await AsyncStorage.getItem("@guided_reading_seen");
 
     if (!hasSeen) {
+      console.log(
+        "[MW-DEBUG] handlePlayPress:showing_guided_modal (first tap)",
+      );
       await AsyncStorage.setItem("@guided_reading_seen", "true");
       setShowGuidedModal(true);
       return;
@@ -634,13 +722,18 @@ export default function StorieScreen() {
 
     // Se estiver pausado e tivermos um indice salvo > 0, retomamos (resume=true)
     if (!isPlay && lastSentenceIndexRef.current > 0) {
+      console.log("[MW-DEBUG] handlePlayPress:calling_handleSpeak resume=true");
       handleSpeak(true);
     } else {
+      console.log(
+        "[MW-DEBUG] handlePlayPress:calling_handleSpeak resume=false",
+      );
       handleSpeak(false);
     }
   };
 
   const stopAllAudio = async () => {
+    console.log("[MW-DEBUG] stopAllAudio:called (incrementa speakSessionRef)");
     speakSessionRef.current += 1;
     Speech.stop();
     await TrackPlayer.pause();
@@ -649,12 +742,26 @@ export default function StorieScreen() {
   };
 
   useFocusEffect(
+    // Dep vazia é INTENCIONAL. O cleanup só deve rodar quando a tela
+    // realmente perde foco (navegação pra fora), não a cada re-render.
+    // Antes esta dep era `[stop]` — e como `stop` vinha de useLockScreenPlayer
+    // sem useCallback, mudava a referência a cada render, fazendo o
+    // useFocusEffect disparar cleanup+mount entre cada await do handleSpeak.
+    // Cada cleanup chamava stopAllAudio, que incrementava speakSessionRef,
+    // que derrubava a sessão em curso via session_mismatch — Play parava
+    // silenciosamente. Fix: (1) estabilizar stop com useCallback (já feito
+    // em hooks/LockScreenPlayer.ts) + (2) dep [] aqui.
+
     useCallback(() => {
+      console.log("[MW-DEBUG] useFocusEffect:mount (tela ganhou foco)");
       return () => {
+        console.log(
+          "[MW-DEBUG] useFocusEffect:cleanup (tela perdeu foco) — chamando stopAllAudio",
+        );
         stopAllAudio();
         stop();
       };
-    }, [stop]),
+    }, []),
   );
 
   const handleFinishReading = useCallback(
