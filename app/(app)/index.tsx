@@ -11,6 +11,7 @@ import { useThemedTokens } from "@/hooks/use-tokens";
 import { useLikedStore } from "@/store/useLikedStore";
 import { useAdventureProfileStore } from "@/store/useAdventureProfileStore";
 import { useT } from "@/i18n";
+import { track } from "@/services/analytics";
 
 import background_header from "../../assets/images/background-header.png";
 import { Container, Content, Gradient, GradientImage } from "./styles";
@@ -75,6 +76,11 @@ export default function OnboardingScreen() {
 
     // Nota: chave RevenueCat pública por design, ok manter hardcoded
     Purchases.configure({ apiKey: "appl_UcIhNLORZZgNuPFDjVUoqawwHfK" });
+
+    // Analytics: mark that the onboarding screen was seen. Not the same
+    // as `app_open` — this fires only on the FIRST launch (or after a
+    // cache wipe), so it doubles as the funnel top.
+    track("onboarding_view");
   }, []);
 
   return (
@@ -134,6 +140,7 @@ export default function OnboardingScreen() {
               } catch {
                 // se falhar, o gate simplesmente não abre — safe.
               }
+              track("onboarding_cta_pressed", { cta: "get_started" });
               router.push("/(profile-adventure)");
             }}
             style={{ marginTop: t.spacing.lg }}

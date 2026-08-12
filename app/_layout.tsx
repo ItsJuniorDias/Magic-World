@@ -16,6 +16,8 @@ import trackPlayerService from "../services/trackPlayer";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useLocaleStore } from "@/i18n";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useProStatus } from "@/hooks/useProStatus";
+import { initAnalytics, track, setAnalyticsContext } from "@/services/analytics";
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -34,6 +36,43 @@ TrackPlayer.registerPlaybackService(() => trackPlayerService);
  */
 function AppBootstrap({ children }: { children: React.ReactNode }) {
   useNotifications();
+
+  // Analytics bootstrap.
+  //
+  // Runs exactly once per cold start. `initAnalytics` is idempotent so
+  // a StrictMode double-mount in dev doesn't create two sessions. The
+  // `app_open` event fires immediately after — this is the anchor for
+  // every session in the funnel and drives the "active users" chart.
+  //
+  // We seed the locale from the store so events carry a stable `locale`
+  // field from turn one; subsequent locale changes patch context via
+  // `setAnalyticsContext`.
+  const locale = useLocaleStore((s) => s.locale);
+  useEffect(() => {
+    (async () => {
+      await initAnalytics({ locale });
+      track("app_open");
+    })();
+    // Runs once — the locale effect below keeps context in sync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // Keep analytics context in sync when the user switches language
+    // mid-session. Cheap and safe to call on every locale change.
+    setAnalyticsContext({ locale });
+  }, [locale]);
+
+  // Keep is_pro on analytics events accurate for the whole session.
+  // useProStatus already subscribes to RevenueCat's customerInfo updates,
+  // so this reacts to renewal / lapse / restore automatically — every
+  // event fired after the change carries the correct is_pro value.
+  const { isPro, loading: proLoading } = useProStatus();
+  useEffect(() => {
+    if (proLoading) return; // don't clobber with a stale default
+    setAnalyticsContext({ isPro });
+  }, [isPro, proLoading]);
+
   return <>{children}</>;
 }
 

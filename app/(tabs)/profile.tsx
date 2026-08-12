@@ -27,6 +27,7 @@ import LanguageSelector from "@/components/LanguageSelector";
 import { useT, useLocaleStore } from "@/i18n";
 import { useNotificationsStore } from "@/store/useNotificationsStore";
 import { registerForPushNotificationsAsync } from "@/services/notifications";
+import { track } from "@/services/analytics";
 
 const { width } = Dimensions.get("window");
 
@@ -363,6 +364,11 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (!isFocused) return;
 
+    // Analytics: fire once per focus. Profile is a low-frequency screen
+    // so refires on tab switches are ok — they signal engaged users who
+    // care about progress/achievements.
+    track("profile_view");
+
     const loadData = async () => {
       setLoading(true);
 
@@ -467,6 +473,11 @@ export default function ProfileScreen() {
     kind: "bedtime" | "streak",
     value: boolean,
   ) => {
+    // Analytics: fire the intent regardless of whether the permission
+    // flow succeeds. Denials matter as a signal too — high toggle-on
+    // + low permission grant means the OS prompt copy is confusing.
+    track("notification_toggled", { kind, enabled: value });
+
     // Turn off: caminho simples.
     if (!value) {
       if (kind === "bedtime") await setBedtimeEnabled(false);

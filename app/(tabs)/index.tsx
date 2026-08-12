@@ -36,6 +36,7 @@ import { uploadGeminiToCloudinary } from "@/services/generateURL";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useT } from "@/i18n";
+import { track } from "@/services/analytics";
 
 // Texto via OpenRouter (services/ai). Imagem continua com
 // Gemini direto porque é chamada só pelo seed manual da home
@@ -269,6 +270,11 @@ Structure:
     load();
 
     loadLikedStories();
+
+    // Analytics: home is the primary hub, so home_view is a strong signal
+    // for engagement and for measuring "returning user" cohorts. Fires on
+    // mount rather than focus so we don't double-count tab switches.
+    track("home_view");
   }, []);
 
   // ✅ CORREÇÃO: renderItem agora é um CALLBACK estável
@@ -298,10 +304,27 @@ Structure:
           }
 
           const hasPro = await AsyncStorage.getItem("@user_is_pro");
+          const isProContent = item.isPro === true;
+          const isProUser = hasPro === "true";
 
-          if (item.isPro === true && hasPro !== "true") {
+          if (isProContent && !isProUser) {
+            // Content is locked and user hasn't paid → paywall.
+            // We track BOTH the intent (which story) and the reason
+            // (paywall_from_home) so the funnel dashboard can attribute
+            // paywall views to their upstream trigger.
+            track("story_open_locked", {
+              story_id: item.id,
+              story_title: item.title,
+              source: variant === "category" ? "category" : "home",
+            });
             router.push("/(subscribe)");
           } else {
+            track("story_open", {
+              story_id: item.id,
+              story_title: item.title,
+              is_pro_content: isProContent,
+              source: variant === "category" ? "category" : "home",
+            });
             router.push({
               pathname: item.chapter[0].navigate,
               params: {

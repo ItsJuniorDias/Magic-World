@@ -61,6 +61,7 @@ import {
   AdventureProfileType,
   useAdventureProfileStore,
 } from "@/store/useAdventureProfileStore";
+import { track } from "@/services/analytics";
 
 /* =========================
    CONSTANTS
@@ -147,6 +148,23 @@ export default function StorieScreen() {
     initProgress().then(() => {});
   }, [isFocused, deviceId, initProgress]);
 
+  // Analytics: chapter_view fires once per (storyId, chapterIndex) pair.
+  // Not gated by focus — we want the FIRST time this route mounts to
+  // be the impression, not every time the user tabs back into it. That
+  // matches how the funnel treats story_open (single event per intent).
+  useEffect(() => {
+    if (!storyId) return;
+    track("chapter_view", {
+      story_id: String(storyId),
+      story_title: String(title ?? ""),
+      chapter_index: Number(currentIndex),
+    });
+    // Runs whenever we land on a new chapter (currentIndex changes via
+    // router.replace during handleNextChapter). Deliberately excludes
+    // `title`/`storyId` from re-firing when only styling props change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storyId, currentIndex]);
+
   // Hook do player
   const { pause, play, stop } = useLockScreenPlayer({
     title: String(title),
@@ -203,6 +221,15 @@ export default function StorieScreen() {
     const isPro = await AsyncStorage.getItem("@user_is_pro");
 
     if (isPro !== "true") {
+      // Analytics: this is the exact moment a free user tries to read on
+      // and can't. Strong signal for paywall placement — pair with
+      // `paywall_view` in the dashboard to see how many of these convert.
+      track("chapter_next_locked", {
+        story_id: String(storyId),
+        story_title: String(title ?? ""),
+        chapter_index: Number(currentIndex),
+        blocked_target_index: forcedIndex ?? nextIndex,
+      });
       await pauseAllAudio();
       return;
     } else {
@@ -775,6 +802,17 @@ export default function StorieScreen() {
           setIsSavingProgress(true);
 
           await addChapter(deviceId, String(storyId), Number(currentIndex));
+
+          // Analytics: chapter_finished is THE engagement event — pair it
+          // with `chapter_view` in the dashboard to get read-through rate
+          // per story. `force=true` is the branch that fires after the
+          // user hit the end-of-chapter modal, so this is a real read
+          // (not a swipe-away).
+          track("chapter_finished", {
+            story_id: String(storyId),
+            story_title: String(title ?? ""),
+            chapter_index: Number(currentIndex),
+          });
 
           const profileArray = [
             "brave",

@@ -22,6 +22,7 @@ import { useLikedStore } from "@/store/useLikedStore";
 import { useStoriesStore } from "@/store/useStoriesStore";
 import { getLikedStories } from "@/services/liked";
 import { useT } from "@/i18n";
+import { track } from "@/services/analytics";
 
 if (
   Platform.OS === "android" &&
@@ -121,11 +122,26 @@ export default function FavoriteScreen() {
       userKeyRef.current = key;
     };
     loadUserKey();
+
+    // Analytics: the favorites tab doubles as a retention signal — users
+    // who curate a library come back more. Fire once per mount rather
+    // than every focus so re-tabs don't inflate.
+    track("favorite_view");
   }, [loadLikedStories]);
 
   const handleToggleLike = useCallback(
     (item: any) => {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+
+      // At this point the item IS in the favorites list (that's the only
+      // list this screen renders), so tapping the heart always means
+      // REMOVE. `favorite_removed` is the funnel-friendly name; adds are
+      // tracked from the home card (see (tabs)/index.tsx if we ever add
+      // it there — currently home only opens the story, not toggles).
+      track("favorite_removed", {
+        story_id: item.id,
+        source: "favorite_tab",
+      });
 
       toggleLike({
         chapter: item.chapter,
@@ -145,18 +161,23 @@ export default function FavoriteScreen() {
     async (storyId: string) => {
       if (!stories.length) return;
 
-      const isPro = stories.find((s) => s.id === storyId)?.isPro;
+      const fullStory = stories.find((s) => s.id === storyId);
+      const isProContent = !!fullStory?.isPro;
 
-      if (isPro) {
+      if (isProContent) {
         const isUserPro = await AsyncStorage.getItem("@user_is_pro");
 
         if (isUserPro !== "true") {
+          track("story_open_locked", {
+            story_id: storyId,
+            story_title: fullStory?.title,
+            source: "favorite",
+          });
           router.push("/(subscribe)");
           return;
         }
       }
 
-      const fullStory = stories.find((s) => s.id === storyId);
       if (!fullStory?.chapter?.length) return;
 
       try {
@@ -164,6 +185,13 @@ export default function FavoriteScreen() {
           views: increment(1) as any,
         });
       } catch {}
+
+      track("story_open", {
+        story_id: storyId,
+        story_title: fullStory.title,
+        is_pro_content: isProContent,
+        source: "favorite",
+      });
 
       const firstChapter = fullStory.chapter[0];
       router.push({

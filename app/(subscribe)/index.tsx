@@ -22,6 +22,7 @@ import ParentalGate from "@/components/ParentalGate";
 import { useThemedTokens } from "@/hooks/use-tokens";
 import { SubscribeContainer } from "./styles";
 import { logEvent } from "@/services/analyticsHelper";
+import { track, setAnalyticsContext } from "@/services/analytics";
 import { useT } from "@/i18n";
 
 const ENTITLEMENT_ID = "Magic World Pro";
@@ -173,7 +174,7 @@ export default function SubscribeScreen() {
         a && m && a.product.price < m.product.price * 12 ? a : (m ?? a ?? null);
       setSelected(defaultPick);
 
-      await logEvent("paywall_viewed", {
+      await logEvent("paywall_view", {
         source: "subscribe_screen",
         has_monthly: !!m,
         has_annual: !!a,
@@ -216,10 +217,12 @@ export default function SubscribeScreen() {
       setPurchasing(true);
       const plan = selected.packageType === "MONTHLY" ? "monthly" : "annual";
 
-      await logEvent("purchase_started", {
+      await logEvent("checkout_initiated", {
         source: "subscribe_screen",
         plan,
-        package: selected.identifier,
+        product_id: selected.identifier,
+        value: selected.product?.price ?? null,
+        currency: selected.product?.currencyCode ?? null,
         trial_days: trialDays,
       });
 
@@ -227,11 +230,32 @@ export default function SubscribeScreen() {
       const isActive = await syncProStatus(purchase.customerInfo);
 
       if (isActive) {
-        await logEvent("purchase_successful", {
+        // Propagate pro status to future events for the rest of the session.
+        setAnalyticsContext({ isPro: true });
+
+        // Split the success into the two canonical funnel events:
+        //   • start_trial  → user is on the free-trial window (no money moved)
+        //   • subscribe    → paid conversion (money moved, or trial converted)
+        //
+        // `trialDays > 0` here means Apple accepted the intro offer on THIS
+        // purchase. Fresh trial start. If there's no trial period on the
+        // package OR the customer already burned their intro offer on a
+        // prior device, we get a direct paid subscribe.
+        const commonParams = {
           source: "subscribe_screen",
           plan,
-          package: selected.identifier,
-        });
+          product_id: selected.identifier,
+          value: selected.product?.price ?? null,
+          currency: selected.product?.currencyCode ?? null,
+        };
+        if (trialDays && trialDays > 0) {
+          await logEvent("start_trial", {
+            ...commonParams,
+            trial_days: trialDays,
+          });
+        } else {
+          await logEvent("subscribe", commonParams);
+        }
         Alert.alert(tr("paywall.welcomeTitle"), tr("paywall.welcomeBody"));
         router.back();
       }
@@ -259,6 +283,8 @@ export default function SubscribeScreen() {
       setRestoring(true);
       const info = await Purchases.restorePurchases();
       const isActive = await syncProStatus(info);
+      // Keep analytics context in sync with whatever the restore told us.
+      setAnalyticsContext({ isPro: isActive });
       await logEvent("purchase_restored", {
         source: "subscribe_screen",
         active: isActive,

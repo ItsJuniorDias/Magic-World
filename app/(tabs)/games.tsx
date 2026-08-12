@@ -1,3 +1,4 @@
+import React, { useEffect } from "react";
 import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -7,6 +8,7 @@ import Text from "@/components/ui/Text";
 import { useThemedTokens } from "@/hooks/use-tokens";
 import { tokens } from "@/constants/tokens";
 import { useT } from "@/i18n";
+import { track } from "@/services/analytics";
 
 type Game = {
   id: string;
@@ -63,6 +65,13 @@ export default function GamesHub() {
   const t = useThemedTokens();
   const { t: tr } = useT();
   const isDark = t.scheme === "dark";
+
+  // Analytics: fire once per mount. React Native's NativeTabs re-mounts
+  // the tab content on switch so this doubles as a "tab switched to
+  // games" signal for retention analysis.
+  useEffect(() => {
+    track("games_hub_view");
+  }, []);
 
   return (
     <>
@@ -121,7 +130,13 @@ export default function GamesHub() {
                   borderColor: withAlpha(game.accent, 0.45),
                 },
               ]}
-              onPress={() => router.push(game.route as any)}
+              onPress={() => {
+                track("game_open", {
+                  game_id: game.id,
+                  featured: !!game.featured,
+                });
+                router.push(game.route as any);
+              }}
               activeOpacity={0.75}
             >
               <View

@@ -25,6 +25,7 @@ import { LOCALES, useT } from "@/i18n";
 import type { LocaleCode, LocaleMeta } from "@/i18n";
 import { updatePushLocale } from "@/services/notifications";
 import { useNotificationsStore } from "@/store/useNotificationsStore";
+import { track } from "@/services/analytics";
 
 type Props = {
   visible: boolean;
@@ -41,6 +42,11 @@ export default function LanguageSelector({ visible, onClose }: Props) {
       onClose();
       return;
     }
+
+    // Analytics: fire the intent BEFORE the modal close + setTimeout dance
+    // below. If we waited for setLocale, a fast interaction (close app
+    // mid-transition) would lose the event.
+    track("language_changed", { from: locale, to: code });
 
     // ORDEM CRÍTICA: fechar o modal ANTES de disparar `setLocale`.
     //
