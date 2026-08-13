@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
+import * as WebBrowser from "expo-web-browser";
 
 import Text from "@/components/ui/Text";
 import { useThemedTokens } from "@/hooks/use-tokens";
@@ -16,7 +17,15 @@ type Game = {
   i18nKey: "spellStorm" | "spaceRunner" | "quizMaster" | "memoryMatch" | "knightQuest";
   emoji: string;
   accent: string;
-  route: string;
+  /** Internal expo-router route (in-app screens). */
+  route?: string;
+  /**
+   * External URL opened in the in-app browser (WebBrowser.openBrowserAsync).
+   * Use this for HTML5 mini-games hosted outside the RN bundle — cheaper
+   * than shipping a native GL renderer, faster on mid-range devices, and
+   * you can update the game without an App Store release.
+   */
+  externalUrl?: string;
   /** Featured entries get a taller card and a badge. */
   featured?: boolean;
   /** Chave i18n do badge dentro de `games.badges` — ex.: "new" */
@@ -31,7 +40,10 @@ const GAMES_META: Game[] = [
     i18nKey: "knightQuest",
     emoji: "⚔️",
     accent: tokens.palette.amber500,
-    route: "/(knight-quest)",
+    // Zelda-like built with three.js — hosted externally, opened in the
+    // in-app browser. See KNIGHT-QUEST-WEB.md for deployment + swap the
+    // URL below with your own hosting (Vercel, Netlify, Cloudflare Pages).
+    externalUrl: "https://knight-quest.magicworld.app",
     featured: true,
     badgeKey: "new",
   },
@@ -139,12 +151,28 @@ export default function GamesHub() {
                   borderColor: withAlpha(game.accent, 0.45),
                 },
               ]}
-              onPress={() => {
+              onPress={async () => {
                 track("game_open", {
                   game_id: game.id,
                   featured: !!game.featured,
                 });
-                router.push(game.route as any);
+                if (game.externalUrl) {
+                  // Hosted HTML5 game — open in the in-app browser as a
+                  // page sheet so a swipe-down dismiss returns to the tab
+                  // without unmounting it. Same presentation Alexandre uses
+                  // in the subscribe flow.
+                  try {
+                    await WebBrowser.openBrowserAsync(game.externalUrl, {
+                      presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+                      controlsColor: game.accent,
+                      toolbarColor: "#151024",
+                    });
+                  } catch (err) {
+                    console.warn("[games] failed to open external game", err);
+                  }
+                } else if (game.route) {
+                  router.push(game.route as any);
+                }
               }}
               activeOpacity={0.75}
             >
