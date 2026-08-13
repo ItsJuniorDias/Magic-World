@@ -69,9 +69,23 @@ export async function createKnightQuest(
   // ---- scene chrome ------------------------------------------------------
   scene.background = new THREE.Color(COLORS.bg);
   scene.fog = new THREE.Fog(COLORS.fog, 32, 90);
-  const ambient = new THREE.AmbientLight(COLORS.ambient, 0.55);
+
+  // Ambient — brighter than the web build because we're not casting shadows
+  // on RN (see config.ts note). Everything gets a solid base color so the
+  // scene reads well even where the directional light doesn't reach.
+  const ambient = new THREE.AmbientLight(0xffffff, 0.85);
   scene.add(ambient);
-  const sun = new THREE.DirectionalLight(COLORS.sun, 0.9);
+
+  // Hemisphere fill — a "sky above, ground below" natural fill that costs
+  // nothing and gives Lambert materials a subtle color gradient across
+  // surfaces. Warm sky, cool ground grounds the outdoor village nicely.
+  const hemi = new THREE.HemisphereLight(0xfff4e0, 0x3a2a5a, 0.6);
+  hemi.position.set(0, 50, 0);
+  scene.add(hemi);
+
+  // Directional "sun" for shape and depth. No shadows on RN — the shadow
+  // map path swaps FBOs which expo-gl cannot present correctly.
+  const sun = new THREE.DirectionalLight(COLORS.sun, 0.75);
   sun.position.set(30, 60, 20);
   if (RENDER.shadows) {
     sun.castShadow = true;

@@ -51,7 +51,7 @@ export const ROOMS: RoomDef[] = [
     map: [
       "TTTTDTTTT",
       "T.HgH.f.T",
-      "Tg.....gT",
+      "Tg..P..gT",
       "T,,,C,,,T",
       "T.M.L.M.T",
       "T.HgUgH.T",

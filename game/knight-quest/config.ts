@@ -24,7 +24,18 @@ export const RENDER = {
   roomSlideTime: 0.55,
   /** Convert glTF PBR materials to cheap Lambert (huge mobile win, flat cute look). */
   useLambert: true,
-  shadows: true,
+  // ---- SHADOWS: disabled by default ---------------------------------------
+  //
+  // Web build renders shadows fine. React Native / expo-gl does NOT: when
+  // three.js turns shadowMap on it creates depth render targets and swaps
+  // FBOs during the render. When it restores, it binds FBO 0 — but expo-gl's
+  // presentable framebuffer is not guaranteed to be FBO 0, so the scene
+  // renders into a buffer nobody ever presents. The result is exactly what
+  // "the HUD shows but the 3D is a black background" looks like.
+  //
+  // On the web build (index.html standalone) turn this back on; on
+  // Magic World / expo, leave it false.
+  shadows: false,
   shadowMapSize: 1024,
   maxPixelRatio: 2,
 } as const;

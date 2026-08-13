@@ -89,6 +89,9 @@ export function useKnightQuestGame({
     renderer.setPixelRatio(1);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setClearColor(0x151024, 1);
+    // Shadow map deliberately not enabled on RN — the render-target swap it
+    // requires breaks expo-gl's framebuffer presentation and results in a
+    // black scene with a working HUD. See config.ts for the long version.
     if (RENDER.shadows) {
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
