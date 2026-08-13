@@ -75,18 +75,15 @@ async function resolveUri(key: AssetKey): Promise<string> {
 
 /**
  * Loads every asset in ASSET_MODULES. Progress is reported per file so the
- * loading screen has something to animate. Weapons (.gltf + .bin + .png)
- * are loaded together as one group so partial states never render.
+ * loading screen has something to animate.
  */
 export async function loadAll(
   onProgress: (done: number, total: number, label: string) => void,
 ): Promise<void> {
   const loader = new GLTFLoader();
-
-  // Every .glb key is a self-contained load.
-  const glbKeys: AssetKey[] = Object.keys(ASSET_MODULES).filter((k) =>
-    !k.startsWith("weapon_") && k !== "skeleton_texture" && !k.endsWith("_bin"),
-  ) as AssetKey[];
+  const keys = Object.keys(ASSET_MODULES) as AssetKey[];
+  // Weapons are loaded by preloadWeapons() into their own cache; skip them here.
+  const glbKeys = keys.filter((k) => !k.startsWith("weapon_"));
 
   let done = 0;
   const total = glbKeys.length;
@@ -109,47 +106,26 @@ export async function loadAll(
 
 // ---------------------------- weapons ---------------------------------------
 //
-// The three skeleton weapons live as .gltf + .bin + .png triples. GLTFLoader
-// needs the .bin and texture to be reachable via relative URIs from the .gltf.
-// We prefetch all three, then read the .gltf as text, rewrite the URIs to
-// absolute file paths, and parse with `loader.parse` so the resolver hits
-// the local URIs directly.
+// Skeleton weapons ship as three self-contained .glb files with the shared
+// skeleton_texture atlas embedded in each. Same loading path as everything
+// else; the only difference is they land in weaponCache so attachWeapon()
+// can clone them onto a hand bone.
 
 const weaponCache = new Map<"blade" | "axe" | "staff", THREE.Group>();
 
 export async function preloadWeapons(): Promise<void> {
   const loader = new GLTFLoader();
-  const items: [
-    "blade" | "axe" | "staff",
-    AssetKey,
-    AssetKey,
-  ][] = [
-    ["blade", "weapon_blade", "weapon_blade_bin"],
-    ["axe", "weapon_axe", "weapon_axe_bin"],
-    ["staff", "weapon_staff", "weapon_staff_bin"],
+  const items: ["blade" | "axe" | "staff", AssetKey][] = [
+    ["blade", "weapon_blade"],
+    ["axe", "weapon_axe"],
+    ["staff", "weapon_staff"],
   ];
-  const texUri = await resolveUri("skeleton_texture");
-  for (const [key, gltfKey, binKey] of items) {
-    const gltfUri = await resolveUri(gltfKey);
-    const binUri = await resolveUri(binKey);
+  for (const [key, assetKey] of items) {
     try {
-      const text = await (await fetch(gltfUri)).text();
-      const patched = text
-        .replace(/"Skeleton_[^"]+\.bin"/g, `"${binUri}"`)
-        .replace(/"skeleton_texture\.png"/g, `"${texUri}"`);
-      // parse with an empty base path — every URI in the JSON is now absolute
-      await new Promise<void>((resolve, reject) => {
-        loader.parse(
-          patched,
-          "",
-          (gltf) => {
-            convertMaterials(gltf.scene);
-            weaponCache.set(key, gltf.scene as THREE.Group);
-            resolve();
-          },
-          (err) => reject(err),
-        );
-      });
+      const uri = await resolveUri(assetKey);
+      const gltf = await loader.loadAsync(uri);
+      convertMaterials(gltf.scene);
+      weaponCache.set(key, gltf.scene as THREE.Group);
     } catch (err) {
       console.warn(`[knight-quest] failed to preload weapon ${key}`, err);
     }

@@ -15,15 +15,11 @@ export const ASSET_MODULES: Record<string, number> = {
   skeleton_mage: require("@/assets/game/knight-quest/characters/Skeleton_Mage.glb"),
   skeleton_warrior: require("@/assets/game/knight-quest/characters/Skeleton_Warrior.glb"),
 
-  // Weapons live as .gltf + .bin + .png (three files each). Only the .gltf
-  // needs a manifest entry — the loader follows relative URIs from there.
-  weapon_blade: require("@/assets/game/knight-quest/characters/Skeleton_Blade.gltf"),
-  weapon_blade_bin: require("@/assets/game/knight-quest/characters/Skeleton_Blade.bin"),
-  weapon_axe: require("@/assets/game/knight-quest/characters/Skeleton_Axe.gltf"),
-  weapon_axe_bin: require("@/assets/game/knight-quest/characters/Skeleton_Axe.bin"),
-  weapon_staff: require("@/assets/game/knight-quest/characters/Skeleton_Staff.gltf"),
-  weapon_staff_bin: require("@/assets/game/knight-quest/characters/Skeleton_Staff.bin"),
-  skeleton_texture: require("@/assets/game/knight-quest/characters/skeleton_texture.png"),
+  // Weapons — self-contained GLBs with the skeleton texture embedded in
+  // each. No .bin or .png sidecars anymore.
+  weapon_blade: require("@/assets/game/knight-quest/characters/Skeleton_Blade.glb"),
+  weapon_axe: require("@/assets/game/knight-quest/characters/Skeleton_Axe.glb"),
+  weapon_staff: require("@/assets/game/knight-quest/characters/Skeleton_Staff.glb"),
 
   // -------------------- dungeon (KayKit remastered) ------------------------
   floor_large: require("@/assets/game/knight-quest/dungeon/floor_tile_large.glb"),
