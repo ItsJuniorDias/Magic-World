@@ -88,7 +88,9 @@ export function useKnightQuestGame({
     renderer.setSize(bufferW, bufferH, false);
     renderer.setPixelRatio(1);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.setClearColor(0x151024, 1);
+    // Sky-blue clear color — matches scene.background so the very first frame
+    // before we've drawn anything isn't a jarring dark flash.
+    renderer.setClearColor(0xbfe4ff, 1);
     // Shadow map deliberately not enabled on RN — the render-target swap it
     // requires breaks expo-gl's framebuffer presentation and results in a
     // black scene with a working HUD. See config.ts for the long version.

@@ -96,9 +96,12 @@ export class EnemySystem {
     const room = roomMgr.current;
     for (const e of this.enemies) {
       if (e.dead) continue;
+      // PERF: skip inactive-room enemies BEFORE the mixer update. Running
+      // animation mixers for every skeleton in every room chews CPU even
+      // though those enemies never render (their room group is invisible).
+      if (e.roomKey !== room.key) continue;
       e.stateTime += dt;
       e.anim.mixer.update(dt);
-      if (e.roomKey !== room.key) continue; // dormant in other rooms
 
       const cfg = ENEMIES[e.kind];
       const toPlayer = new THREE.Vector3().subVectors(player.pos, e.pos);

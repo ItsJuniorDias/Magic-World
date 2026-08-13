@@ -6,6 +6,11 @@ import type { RoomRuntime } from "../types";
 // Camera — 3/4 top-down, follows the player but never shows past the walls
 // of the current room. Crossing a door glides the view to the next room
 // (the classic Zelda room-slide) while gameplay is frozen by rooms.ts.
+//
+// Takes an existing PerspectiveCamera and drives it directly. Callers pass
+// in the same camera they use for renderer.render(), so no matrix copying
+// is needed — position/quaternion updates land on the exact object three.js
+// will read from.
 // ---------------------------------------------------------------------------
 
 export class CameraRig {
@@ -16,8 +21,14 @@ export class CameraRig {
   private slideTo = new THREE.Vector3();
   private slideT = -1; // <0 = not sliding
 
-  constructor(aspect: number) {
-    this.camera = new THREE.PerspectiveCamera(RENDER.camFov, aspect, 0.5, 220);
+  constructor(camera: THREE.PerspectiveCamera) {
+    this.camera = camera;
+    this.camera.fov = RENDER.camFov;
+    this.camera.near = 0.5;
+    // Far plane matches fog end distance (~110). Beyond that everything
+    // faded to fog color anyway; culling geometry sooner is cheaper.
+    this.camera.far = 120;
+    this.camera.updateProjectionMatrix();
   }
 
   private clampToRoom(p: THREE.Vector3, room: RoomRuntime, out: THREE.Vector3): void {

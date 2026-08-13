@@ -239,16 +239,18 @@ function addGrassGround(group: THREE.Group, def: RoomDef, tx: number, tz: number
   group.add(floor);
 
   // scatter decorative grass/flower on regular grass tiles
+  // PERF: capped at 1 decoration per tile (was 3). The village has ~63
+  // tiles; 3-per-tile was ~180 extra meshes JUST for grass decor.
   if (!dirt) {
-    const n = Math.floor(hash(tx, tz, def.gx, 5) * 3);
-    for (let i = 0; i < n; i++) {
-      const decor = spawn(pickBy(GRASS_DECOR, tx * 31 + tz * 7 + i));
+    const roll = hash(tx, tz, def.gx, 5);
+    if (roll < 0.35) {
+      const decor = spawn(pickBy(GRASS_DECOR, tx * 31 + tz * 7));
       decor.position.set(
-        c.x + (hash(tx, tz, i, 20) - 0.5) * 2.6,
+        c.x + (hash(tx, tz, 0, 20) - 0.5) * 2.6,
         0.01,
-        c.z + (hash(tx, tz, i, 21) - 0.5) * 2.6,
+        c.z + (hash(tx, tz, 0, 21) - 0.5) * 2.6,
       );
-      decor.rotation.y = hash(tx, tz, i, 22) * Math.PI * 2;
+      decor.rotation.y = hash(tx, tz, 0, 22) * Math.PI * 2;
       decor.scale.multiplyScalar(1.5);
       group.add(decor);
     }
@@ -629,30 +631,29 @@ export function buildWorld(scene: THREE.Scene): BuiltWorld {
     rooms.set(def.key, runtime);
   }
 
-  // Scatter a decorative forest of extra trees + bushes around the village
-  // exterior for a nicer skyline horizon.
+  // Scatter a modest decorative forest of extra trees around the village
+  // exterior. PERF: capped at 15 trees (was 55) and parented under the
+  // village room's group so the visibility filter hides them along with
+  // the village when the player is deep in the dungeon.
   const village = rooms.get("0,4");
   if (village) {
-    const forest = new THREE.Group();
-    scene.add(forest);
-    for (let i = 0; i < 55; i++) {
-      const ring = 1.7 + Math.random() * 2.4;
+    for (let i = 0; i < 15; i++) {
+      const ring = 1.7 + Math.random() * 1.6;
       const ang = Math.random() * Math.PI * 2;
       const cx = village.origin.x + (ROOM_W * TILE) / 2 + Math.cos(ang) * ROOM_W * TILE * ring * 0.5;
       const cz = village.origin.z + (ROOM_H * TILE) / 2 + Math.sin(ang) * ROOM_H * TILE * ring * 0.5;
-      addTree(forest, cx, cz, i * 97, false);
-      if (i % 3 === 0) addBush(forest, cx + 3, cz - 2, i * 11);
+      addTree(village.group, cx, cz, i * 97, false);
     }
-    // clouds high above the village
-    for (let i = 0; i < 6; i++) {
+    // A few clouds high above (visual anchor, cheap 2-triangle billboards).
+    for (let i = 0; i < 3; i++) {
       const cloud = spawn(i % 2 === 0 ? "poly_cloud_a" : "poly_cloud_b");
       cloud.position.set(
         village.origin.x + Math.random() * ROOM_W * TILE,
-        22 + Math.random() * 6,
+        22 + Math.random() * 4,
         village.origin.z + Math.random() * ROOM_H * TILE,
       );
       cloud.scale.multiplyScalar(1.4);
-      forest.add(cloud);
+      village.group.add(cloud);
     }
   }
 

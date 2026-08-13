@@ -44,7 +44,7 @@ const GLASS_TINT = "rgba(12,8,24,0.42)";
 const GOLD = "#ffd166";
 const HEART_RED = "#ff3b5c";
 const DANGER = "#dd4422";
-const HUD_POLL_MS = 100; // 10Hz
+const HUD_POLL_MS = 200; // 5Hz — halves React re-render pressure vs 10Hz
 
 // ============================ Glass helpers =================================
 

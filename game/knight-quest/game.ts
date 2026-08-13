@@ -65,10 +65,18 @@ export async function createKnightQuest(
   onLoadProgress: (done: number, total: number, label: string) => void,
 ): Promise<KnightQuestGame> {
   const { scene, camera, renderer, pixelWidth, pixelHeight } = ctx;
+  void pixelWidth; void pixelHeight;
 
   // ---- scene chrome ------------------------------------------------------
-  scene.background = new THREE.Color(COLORS.bg);
-  scene.fog = new THREE.Fog(COLORS.fog, 32, 90);
+  //
+  // Sky-blue background so the outdoor village reads as an actual outdoor
+  // scene, not a dungeon. The web build uses dark purple (COLORS.bg) because
+  // it was dungeon-only; the RN build ships with the village overworld as
+  // the intro, so a friendly sky suits it better. Fog is a hair darker so
+  // the horizon has visible depth.
+  const skyBlue = 0xbfe4ff;
+  scene.background = new THREE.Color(skyBlue);
+  scene.fog = new THREE.Fog(skyBlue, 40, 110);
 
   // Ambient — brighter than the web build because we're not casting shadows
   // on RN (see config.ts note). Everything gets a solid base color so the
@@ -106,6 +114,7 @@ export async function createKnightQuest(
 
   // ---- build world -------------------------------------------------------
   const world = buildWorld(scene);
+
   const player = createPlayer(scene, world.playerStart);
   const input = createInputState();
 
@@ -156,6 +165,25 @@ export async function createKnightQuest(
       if (def) hud.roomName = def.name;
       if (!hud.visitedRooms.includes(key)) hud.visitedRooms = [...hud.visitedRooms, key];
       if (key === BOSS_ROOM_KEY && bossRef?.boss?.state === "waiting") bossRef.wake();
+
+      // PERF: hide rooms the player can't see. The scene has ~1200 meshes
+      // total (village + 7 dungeon rooms + all pre-spawned enemies). Even
+      // with frustum culling three.js walks every Object3D per frame. Setting
+      // group.visible = false skips the whole subtree, dropping the walk to
+      // ~200 objects. We show current + immediate neighbors so the room
+      // transition slide has content to lerp toward.
+      const cur = world.rooms.get(key);
+      if (cur) {
+        for (const [k, r] of world.rooms) {
+          if (k === key) {
+            r.group.visible = true;
+            continue;
+          }
+          const dx = r.gx - cur.gx;
+          const dy = r.gy - cur.gy;
+          r.group.visible = Math.abs(dx) + Math.abs(dy) === 1;
+        }
+      }
     },
   };
 
@@ -170,6 +198,16 @@ export async function createKnightQuest(
 
   const roomMgr = new RoomManager(world.rooms, START_ROOM_KEY, events);
 
+  // Initial visibility pass — mirror onRoomChanged so the first frame
+  // renders only the village + its neighbors.
+  const startRoom = world.rooms.get(START_ROOM_KEY)!;
+  for (const [k, r] of world.rooms) {
+    if (k === START_ROOM_KEY) { r.group.visible = true; continue; }
+    const dx = r.gx - startRoom.gx;
+    const dy = r.gy - startRoom.gy;
+    r.group.visible = Math.abs(dx) + Math.abs(dy) === 1;
+  }
+
   // boss lives dormant in the throne room, waking when player enters
   boss.spawn(world.bossSpawn);
 
@@ -182,19 +220,10 @@ export async function createKnightQuest(
 
   // ---- camera rig --------------------------------------------------------
   //
-  // useKnightQuestGame handed us a PerspectiveCamera it built with the
-  // right aspect. Our internal CameraRig owns the transform math. Each
-  // frame we copy the rig's position/orientation onto the passed camera
-  // so `renderer.render(scene, camera)` uses ours.
-  const cam = new CameraRig(pixelWidth / pixelHeight);
+  // The rig drives the SAME PerspectiveCamera useKnightQuestGame handed us
+  // in ctx.camera — no copy step, no drift between two camera objects.
+  const cam = new CameraRig(camera);
   cam.snap(player.pos, roomMgr.current);
-  copyCamera();
-  function copyCamera(): void {
-    camera.position.copy(cam.camera.position);
-    camera.quaternion.copy(cam.camera.quaternion);
-    camera.projectionMatrix.copy(cam.camera.projectionMatrix);
-    camera.projectionMatrixInverse.copy(cam.camera.projectionMatrixInverse);
-  }
 
   startMusic();
 
@@ -239,14 +268,15 @@ export async function createKnightQuest(
       cam.update(dt, player.pos, roomMgr.current);
     }
 
-    copyCamera();
-    renderer.render(scene, camera);
+    try {
+      renderer.render(scene, camera);
+    } catch (err) {
+      console.error("[knight-quest] render error", err);
+    }
   }
 
   function resize(w: number, h: number): void {
     cam.resize(w / h);
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
     renderer.setSize(w, h, false);
   }
 
