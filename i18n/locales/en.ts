@@ -99,6 +99,10 @@ const en: TranslationTree = {
       hot: "Hot",
     },
     items: {
+      knightQuest: {
+        title: "Knight Quest",
+        description: "Explore a village, brave the dungeon, defeat the Skeleton Warrior.",
+      },
       spellStorm: {
         title: "Spell Storm",
         description: "Cast, dodge and survive ten waves to face the dragon.",

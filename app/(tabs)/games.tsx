@@ -13,7 +13,7 @@ import { track } from "@/services/analytics";
 type Game = {
   id: string;
   /** Chave i18n do título dentro de `games.items` — ex.: "spellStorm" */
-  i18nKey: "spellStorm" | "spaceRunner" | "quizMaster" | "memoryMatch";
+  i18nKey: "spellStorm" | "spaceRunner" | "quizMaster" | "memoryMatch" | "knightQuest";
   emoji: string;
   accent: string;
   route: string;
@@ -26,6 +26,15 @@ type Game = {
 // Meta estática dos jogos. Texto puro (título, descrição, badge)
 // vem de i18n via `useT()` — não é hardcoded aqui.
 const GAMES_META: Game[] = [
+  {
+    id: "knight-quest",
+    i18nKey: "knightQuest",
+    emoji: "⚔️",
+    accent: tokens.palette.amber500,
+    route: "/(knight-quest)",
+    featured: true,
+    badgeKey: "new",
+  },
   {
     id: "spell-storm",
     i18nKey: "spellStorm",

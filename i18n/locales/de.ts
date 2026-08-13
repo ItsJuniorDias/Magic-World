@@ -105,6 +105,10 @@ const de: TranslationTree = {
       hot: "Hot",
     },
     items: {
+      knightQuest: {
+        title: "Ritterquest",
+        description: "Erkunde das Dorf, wage dich in den Kerker und besiege den Skelett-Krieger.",
+      },
       spellStorm: {
         title: "Zaubersturm",
         description:

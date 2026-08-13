@@ -102,6 +102,10 @@ const es: TranslationTree = {
       hot: "Popular",
     },
     items: {
+      knightQuest: {
+        title: "Misión del Caballero",
+        description: "Explora la aldea, atraviesa la mazmorra y derrota al Guerrero Esqueleto.",
+      },
       spellStorm: {
         title: "Tormenta de Hechizos",
         description:

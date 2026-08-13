@@ -107,6 +107,10 @@ const hi: TranslationTree = {
       hot: "हॉट",
     },
     items: {
+      knightQuest: {
+        title: "नाइट क्वेस्ट",
+        description: "गाँव का पता लगाएं, कालकोठरी का सामना करें और स्केलेटन वॉरियर को हराएं।",
+      },
       spellStorm: {
         title: "मंत्र तूफ़ान",
         description:

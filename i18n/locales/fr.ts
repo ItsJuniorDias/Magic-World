@@ -104,6 +104,10 @@ const fr: TranslationTree = {
       hot: "En vogue",
     },
     items: {
+      knightQuest: {
+        title: "Quête du Chevalier",
+        description: "Explorez le village, bravez le donjon et vainquez le Guerrier Squelette.",
+      },
       spellStorm: {
         title: "Tempête de Sorts",
         description:

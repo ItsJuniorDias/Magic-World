@@ -117,6 +117,7 @@ export type TranslationTree = {
       hot: string;
     };
     items: {
+      knightQuest: { title: string; description: string };
       spellStorm: { title: string; description: string };
       spaceRunner: { title: string; description: string };
       quizMaster: { title: string; description: string };

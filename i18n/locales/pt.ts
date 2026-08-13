@@ -103,6 +103,10 @@ const pt: TranslationTree = {
       hot: "Bombando",
     },
     items: {
+      knightQuest: {
+        title: "Cavaleiro em Missão",
+        description: "Explore a vila, enfrente a masmorra e derrote o Guerreiro Esqueleto.",
+      },
       spellStorm: {
         title: "Tempestade de Feitiços",
         description:

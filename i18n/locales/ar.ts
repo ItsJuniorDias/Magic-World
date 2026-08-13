@@ -105,6 +105,10 @@ const ar: TranslationTree = {
       hot: "الأكثر رواجًا",
     },
     items: {
+      knightQuest: {
+        title: "مغامرة الفارس",
+        description: "استكشف القرية، واجه الزنزانة، واهزم محارب الهيكل العظمي.",
+      },
       spellStorm: {
         title: "عاصفة التعاويذ",
         description:
