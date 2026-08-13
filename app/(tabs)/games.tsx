@@ -14,7 +14,12 @@ import { track } from "@/services/analytics";
 type Game = {
   id: string;
   /** Chave i18n do título dentro de `games.items` — ex.: "spellStorm" */
-  i18nKey: "spellStorm" | "spaceRunner" | "quizMaster" | "memoryMatch" | "knightQuest";
+  i18nKey:
+    | "spellStorm"
+    | "spaceRunner"
+    | "quizMaster"
+    | "memoryMatch"
+    | "knightQuest";
   emoji: string;
   accent: string;
   /** Internal expo-router route (in-app screens). */
@@ -39,11 +44,11 @@ const GAMES_META: Game[] = [
     id: "knight-quest",
     i18nKey: "knightQuest",
     emoji: "⚔️",
-    accent: tokens.palette.amber500,
+    accent: tokens.palette.purple600,
     // Zelda-like built with three.js — hosted externally, opened in the
     // in-app browser. See KNIGHT-QUEST-WEB.md for deployment + swap the
     // URL below with your own hosting (Vercel, Netlify, Cloudflare Pages).
-    externalUrl: "https://knight-quest.magicworld.app",
+    externalUrl: "https://knight-quest-ten.vercel.app/",
     featured: true,
     badgeKey: "new",
   },
@@ -163,7 +168,8 @@ export default function GamesHub() {
                   // in the subscribe flow.
                   try {
                     await WebBrowser.openBrowserAsync(game.externalUrl, {
-                      presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+                      presentationStyle:
+                        WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
                       controlsColor: game.accent,
                       toolbarColor: "#151024",
                     });
