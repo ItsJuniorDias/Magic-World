@@ -276,6 +276,12 @@ export type TranslationTree = {
     restoreFailedBody: string;
     couldntOpenLinkTitle: string;
     couldntOpenLinkBody: string;
+    /**
+     * "Maybe later" dismiss link on the forced-gate paywall variant
+     * (`app/(paywall-onboarding)`). Not shown on the user-initiated
+     * subscribe screen — that one already has an obvious ✕.
+     */
+    maybeLater: string;
   };
   legal: {
     privacyPolicyTitle: string;

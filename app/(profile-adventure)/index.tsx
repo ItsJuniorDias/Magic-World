@@ -12,10 +12,18 @@ import { StatusBar } from "expo-status-bar";
 import Text from "@/components/text";
 import { Colors } from "@/constants/theme";
 import { useT } from "@/i18n";
+import { useProStatus } from "@/hooks/useProStatus";
 
 export default function AdventureProfileIntro() {
   const router = useRouter();
   const { t } = useT();
+
+  // Pro status é lido aqui pra decidir o destino do CTA. Não bloqueia
+  // o render: se `loading === true` quando o usuário toca, tratamos
+  // como "not pro" — vale mais mostrar paywall pra um pagante em race
+  // condition (que pode fazer restore em 1 clique) do que deixar um
+  // não-pagante furar o gate.
+  const { isPro } = useProStatus();
 
   // Texto
   const textOpacity = useRef(new Animated.Value(0)).current;
@@ -75,8 +83,25 @@ export default function AdventureProfileIntro() {
     }).start();
   };
 
+  /**
+   * Post-onboarding gate:
+   *   - Assinante ativo → vai direto pras tabs (sem paywall na cara).
+   *   - Não-assinante   → paywall obrigatória. `router.replace` (não
+   *     push) pra impedir swipe-back voltando pro intro do perfil.
+   *
+   * O paywall usa `source: "post_onboarding"` no analytics, o que
+   * separa esse funil do paywall abertoManualmente por locked story
+   * ou botão de upgrade na home.
+   */
   const handleContinue = () => {
-    router.replace("/(tabs)");
+    if (isPro) {
+      router.replace("/(tabs)");
+    } else {
+      router.replace({
+        pathname: "/(paywall-onboarding)",
+        params: { source: "post_onboarding" },
+      });
+    }
   };
 
   return (

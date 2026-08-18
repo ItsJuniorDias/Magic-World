@@ -379,6 +379,7 @@ const de: TranslationTree = {
     couldntOpenLinkTitle: "Link konnte nicht geöffnet werden",
     couldntOpenLinkBody:
       "Bitte prüfe deine Verbindung und versuch es nochmal.",
+    maybeLater: "Vielleicht später",
   },
   legal: {
     privacyPolicyTitle: "Datenschutzerklärung",

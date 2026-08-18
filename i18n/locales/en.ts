@@ -346,6 +346,7 @@ const en: TranslationTree = {
     restoreFailedBody: "Please try again in a moment.",
     couldntOpenLinkTitle: "Couldn't open link",
     couldntOpenLinkBody: "Please check your connection and try again.",
+    maybeLater: "Maybe later",
   },
   legal: {
     privacyPolicyTitle: "Privacy Policy",

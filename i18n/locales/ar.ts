@@ -375,6 +375,7 @@ const ar: TranslationTree = {
     couldntOpenLinkTitle: "تعذّر فتح الرابط",
     couldntOpenLinkBody:
       "تحقق من اتصالك وحاول مجددًا.",
+    maybeLater: "ربما لاحقًا",
   },
   legal: {
     privacyPolicyTitle: "سياسة الخصوصية",

@@ -383,6 +383,7 @@ const hi: TranslationTree = {
     couldntOpenLinkTitle: "लिंक नहीं खुला",
     couldntOpenLinkBody:
       "कनेक्शन जाँचकर फिर कोशिश करें।",
+    maybeLater: "शायद बाद में",
   },
   legal: {
     privacyPolicyTitle: "गोपनीयता नीति",

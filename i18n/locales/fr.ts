@@ -362,6 +362,7 @@ const fr: TranslationTree = {
     restoreFailedBody: "Réessaie dans un instant.",
     couldntOpenLinkTitle: "Impossible d'ouvrir le lien",
     couldntOpenLinkBody: "Vérifie ta connexion et réessaie.",
+    maybeLater: "Plus tard",
   },
   legal: {
     privacyPolicyTitle: "Politique de confidentialité",

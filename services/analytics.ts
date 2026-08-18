@@ -157,6 +157,14 @@ export type CanonicalEvent =
   | "subscribe"
   | "purchase_cancelled"
   | "purchase_restored"
+  // Fires from `AppBootstrap` (app/_layout.tsx) when the cold-start
+  // gate is about to `router.replace` the user into the paywall. This
+  // is the top of a NEW funnel step that sits BEFORE `paywall_view`
+  // (which fires from inside the screen after RC offerings load).
+  // Two events, not one, because the redirect can succeed and the
+  // offerings fetch can still fail — the split lets us measure that
+  // drop separately from user dismissals.
+  | "paywall_gate_shown"
   // Settings
   | "language_changed"
   | "notification_toggled";

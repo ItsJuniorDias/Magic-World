@@ -357,6 +357,7 @@ const pt: TranslationTree = {
     couldntOpenLinkTitle: "Não deu pra abrir o link",
     couldntOpenLinkBody:
       "Confira sua conexão e tenta de novo.",
+    maybeLater: "Talvez depois",
   },
   legal: {
     privacyPolicyTitle: "Política de Privacidade",

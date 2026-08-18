@@ -76,6 +76,7 @@ The engine enriches every event with `user_id`, `session_id`, `platform`, `app_v
 ### Paywall funnel (canonical — the backend dashboard queries these by name)
 | Event                     | Where | Params |
 | ------------------------- | ----- | ------ |
+| `paywall_gate_shown`      | `AppBootstrap` cold-start gate, before `router.replace` | `source` |
 | `paywall_view`            | `loadOfferings` | `source, has_monthly, has_annual, default_selection` |
 | `paywall_plan_selected`   | Plan card `onPress` | `source, plan, package` |
 | `checkout_initiated`      | Subscribe button tap | `source, plan, product_id, value, currency, trial_days` |
@@ -85,6 +86,14 @@ The engine enriches every event with `user_id`, `session_id`, `platform`, `app_v
 | `purchase_restored`       | Restore button | `source, active` |
 | `paywall_dismissed`       | Close button | `source` |
 | `paywall_link_opened`     | Terms / Privacy | `source, link` |
+
+**`source` values** — the paywall UI (`components/PaywallScreen`) backs three routes; every event above carries a `source` field so the funnel can split them:
+
+- `"subscribe_screen"`   — user-initiated from Home / Favorite / locked story (`app/(subscribe)`)
+- `"post_onboarding"`    — forced gate right after `(profile-adventure)` (`app/(paywall-onboarding)?source=post_onboarding`)
+- `"cold_start_gate"`    — recurring gate on every cold start until the user subscribes (`app/(paywall-onboarding)?source=cold_start_gate`, fired from `AppBootstrap`)
+
+**Why `paywall_gate_shown` is separate from `paywall_view`:** the gate event fires the moment `AppBootstrap` decides to route the user to the paywall — before RC offerings have loaded. `paywall_view` fires INSIDE the paywall after `getOfferings()` returns. The split lets us measure "offering fetch failure" as a distinct funnel drop from "user dismissed" or "user converted". Expected ratio in a healthy build: `paywall_gate_shown ≈ paywall_view` with a ~2–5% delta from offline / network failures.
 
 **Why the split between `start_trial` and `subscribe` matters:** the funnel dashboard on the backend computes trial → paid conversion using these two events specifically. If both trial starts and paid conversions land under a single `purchase_successful` (the old GA4 name), we lose the ability to see how many trials actually converted vs cancelled during the trial window.
 
